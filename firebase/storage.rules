@@ -1,0 +1,19 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Songs and covers: authenticated users can read; only admin can write
+    match /songs/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if false; // Admin SDK only
+    }
+    match /covers/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if false; // Admin SDK only
+    }
+    // Profile pictures: user can read/write their own
+    match /profiles/{userId}/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
