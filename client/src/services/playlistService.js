@@ -48,3 +48,7 @@ export async function addSongToPlaylist(playlistId, songId) {
 export async function removeSongFromPlaylist(playlistId, songId) {
   await updateDoc(doc(db, COL, playlistId), { songIds: arrayRemove(songId) })
 }
+
+export async function reorderPlaylistSongs(playlistId, songIds) {
+  await updateDoc(doc(db, COL, playlistId), { songIds })
+}

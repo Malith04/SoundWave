@@ -9,7 +9,7 @@ function YouTubePlayerMount() {
   useEffect(() => {
     initYTPlayer('yt-hidden-player')
   }, [initYTPlayer])
-  return <div id="yt-hidden-player" style={{ display: 'none' }} />
+  return <div id="yt-hidden-player" style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: '1px', height: '1px', opacity: 0, pointerEvents: 'none' }} />
 }
 
 export default function AppLayout() {

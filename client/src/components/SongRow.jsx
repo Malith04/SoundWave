@@ -43,8 +43,8 @@ function AddToPlaylistModal({ song, onClose }) {
     if (!newName.trim()) return
     setSaving(true)
     try {
-      const id = await createPlaylist(user.uid, newName.trim())
-      await addSongToPlaylist(id, song.id)
+      const plId = await createPlaylist(user.uid, newName.trim())
+      await addSongToPlaylist(plId, song.id)
       toast.success(`Created "${newName.trim()}" and added song`)
       onClose()
     } catch {
@@ -55,7 +55,10 @@ function AddToPlaylistModal({ song, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
+    >
       <div className="bg-[#282828] rounded-2xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-white/10">
@@ -208,7 +211,6 @@ function SongMenu({ song, queue, onRemove, onClose, anchorRef, onAddToPlaylist }
         <ListPlus size={16} />
         Add to Playlist
       </button>
-
       {onRemove && (
         <>
           <div className="border-t border-white/10 my-1" />
@@ -235,6 +237,7 @@ export default function SongRow({ song, index, queue, onRemove, showIndex = true
   const menuBtnRef = useRef(null)
 
   const handlePlay = () => {
+    if (showPlaylistModal) return   // don't play while modal is open
     if (isActive) togglePlay()
     else play(song, queue || [song], queue ? queue.findIndex(s => s.id === song.id) : 0)
   }

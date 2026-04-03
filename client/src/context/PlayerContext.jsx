@@ -6,6 +6,7 @@ import { searchYouTube } from '../services/musicApi'
 import { upsertSong, incrementPlayCount } from '../services/songService'
 
 const PlayerContext = createContext(null)
+const YT_API_KEY = import.meta.env.VITE_YT_API_KEY || ''
 
 const STORAGE_KEY = 'sw_player_state'
 
@@ -150,6 +151,8 @@ export function PlayerProvider({ children }) {
     }, 500)
   }, [])
 
+  const loadAndPlayRef = useRef(null)
+
   const handleEnd = useCallback(() => {
     clearInterval(progressInterval.current)
     setProgress(1)
@@ -163,8 +166,8 @@ export function PlayerProvider({ children }) {
       return
     }
     const nextIdx = shuffle ? Math.floor(Math.random() * q.length) : idx + 1
-    if (nextIdx < q.length) loadAndPlay(q[nextIdx], q, nextIdx)
-    else if (repeat === 'all' && q.length > 0) loadAndPlay(q[0], q, 0)
+    if (nextIdx < q.length) loadAndPlayRef.current?.(q[nextIdx], q, nextIdx)
+    else if (repeat === 'all' && q.length > 0) loadAndPlayRef.current?.(q[0], q, 0)
     else setIsPlaying(false)
   }, [])
 
@@ -195,24 +198,29 @@ export function PlayerProvider({ children }) {
   }, [startProgressTracking, handleEnd])
 
   const playWithYouTube = useCallback(async (song, startAt = 0) => {
-    howlRef.current?.unload()
-    clearInterval(progressInterval.current)
-    setEngine('youtube')
-    setProgress(0); setCurrentTime(0); setDuration(0)
-    setIsLoading(true); setError(null)
-
-    const videoId = await searchYouTube(`${song.title} ${song.artist}`)
-    if (!videoId) {
-      setError('No YouTube key — playing 30s preview')
-      if (song.audioUrl) playWithHowler(song, song.audioUrl, startAt)
-      else { setIsLoading(false); setError('No audio available') }
-      return
+    // Always try the 30s preview first so there's immediate audio feedback
+    if (song.audioUrl) {
+      playWithHowler(song, song.audioUrl, startAt)
     }
-    if (ytReadyRef.current && ytPlayerRef.current) {
-      ytPlayerRef.current.setVolume(mutedRef.current ? 0 : volumeRef.current)
-      ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startAt })
-    } else {
-      pendingYTRef.current = videoId
+
+    // Then try to upgrade to full YouTube track in background
+    if (!YT_API_KEY) return
+    try {
+      const videoId = await searchYouTube(`${song.title} ${song.artist}`)
+      if (!videoId) return
+      setEngine('youtube')
+      if (ytReadyRef.current && ytPlayerRef.current) {
+        howlRef.current?.unload()
+        clearInterval(progressInterval.current)
+        setProgress(0); setCurrentTime(0); setDuration(0)
+        setIsLoading(true); setError(null)
+        ytPlayerRef.current.setVolume(mutedRef.current ? 0 : volumeRef.current)
+        ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startAt })
+      } else {
+        pendingYTRef.current = videoId
+      }
+    } catch {
+      // already playing preview, nothing to do
     }
   }, [playWithHowler])
 
@@ -228,6 +236,8 @@ export function PlayerProvider({ children }) {
     else { setIsLoading(false); setError('No audio available') }
   }, [user, playWithHowler, playWithYouTube])
 
+  // keep ref in sync so handleEnd can call it without stale closure
+  useEffect(() => { loadAndPlayRef.current = loadAndPlay }, [loadAndPlay])
   // ── Restore last session on mount ─────────────────────────
   useEffect(() => {
     const saved = loadState()

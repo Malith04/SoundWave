@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, X, Music } from 'lucide-react'
+import { Search, X, Music, Clock } from 'lucide-react'
 import { searchAll } from '../services/musicApi'
 import SongRow from '../components/SongRow'
 
@@ -8,11 +8,25 @@ const SOURCE_LABELS = {
   jamendo: { label: 'Full Track',  color: 'bg-brand/20 text-brand' },
 }
 
+const HISTORY_KEY = 'sw_search_history'
+const MAX_HISTORY = 8
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || [] } catch { return [] }
+}
+
+function saveHistory(term) {
+  const prev = loadHistory().filter(h => h !== term)
+  const next = [term, ...prev].slice(0, MAX_HISTORY)
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
+}
+
 export default function SearchPage() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState({ itunes: [], jamendo: [], all: [] })
   const [tab, setTab] = useState('all')
   const [loading, setLoading] = useState(false)
+  const [history, setHistory] = useState(loadHistory)
   const debounceRef = useRef(null)
 
   useEffect(() => {
@@ -26,9 +40,24 @@ export default function SearchPage() {
       const res = await searchAll(query)
       setResults(res)
       setLoading(false)
+      if (res.all.length > 0) {
+        saveHistory(query.trim())
+        setHistory(loadHistory())
+      }
     }, 500)
     return () => clearTimeout(debounceRef.current)
   }, [query])
+
+  const removeHistory = (term) => {
+    const next = history.filter(h => h !== term)
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
+    setHistory(next)
+  }
+
+  const clearAllHistory = () => {
+    localStorage.removeItem(HISTORY_KEY)
+    setHistory([])
+  }
 
   const displayed = tab === 'all' ? results.all : results[tab] || []
 
@@ -52,6 +81,37 @@ export default function SearchPage() {
           </button>
         )}
       </div>
+
+      {/* Search history — shown only when no query */}
+      {!query && history.length > 0 && (
+        <div className="max-w-2xl mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-gray-300">Recent searches</p>
+            <button onClick={clearAllHistory} className="text-xs text-gray-500 hover:text-white transition-colors">
+              Clear all
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {history.map(term => (
+              <div key={term} className="flex items-center gap-1.5 bg-surface-2 hover:bg-surface-3 rounded-full pl-3 pr-2 py-1.5 transition-colors group">
+                <Clock size={12} className="text-gray-500 shrink-0" />
+                <button
+                  onClick={() => setQuery(term)}
+                  className="text-sm text-gray-300 group-hover:text-white transition-colors"
+                >
+                  {term}
+                </button>
+                <button
+                  onClick={() => removeHistory(term)}
+                  className="text-gray-600 hover:text-gray-300 transition-colors ml-0.5"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       {results.all.length > 0 && (
@@ -108,7 +168,7 @@ export default function SearchPage() {
       )}
 
       {/* Initial hint */}
-      {!query && (
+      {!query && history.length === 0 && (
         <div className="text-center py-16 text-gray-600">
           <Music size={56} className="mx-auto mb-4 opacity-20" />
           <p className="text-lg text-gray-400">Find your next favourite song</p>
