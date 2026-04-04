@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Home, Search, Library, Plus, LogOut, User } from 'lucide-react'
+import { Home, Search, Library, Plus, LogOut, User, Settings, Heart } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useState, useEffect } from 'react'
 import { getUserPlaylists, createPlaylist } from '../services/playlistService'
@@ -54,9 +54,23 @@ export default function Sidebar() {
         <NavLink to="/library" className={navClass}>
           <Library size={20} /> Your Library
         </NavLink>
+        <NavLink to="/settings" className={navClass}>
+          <Settings size={20} /> Settings
+        </NavLink>
       </nav>
 
       <div className="mx-3 my-4 border-t border-white/10" />
+
+      {/* Liked Songs shortcut */}
+      <div className="px-3 mb-2">
+        <NavLink to="/library"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all">
+          <div className="w-6 h-6 rounded bg-gradient-to-br from-indigo-400 to-pink-500 flex items-center justify-center shrink-0">
+            <Heart size={12} fill="white" className="text-white" />
+          </div>
+          Liked Songs
+        </NavLink>
+      </div>
 
       {/* Playlists */}
       <div className="px-3 flex-1 overflow-y-auto">

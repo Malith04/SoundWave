@@ -1,17 +1,40 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Heart, Music, X } from 'lucide-react'
+import { Plus, Heart, Music, X, Clock, Play, LayoutGrid, List } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { usePlayer } from '../context/PlayerContext'
 import { getUserPlaylists, createPlaylist } from '../services/playlistService'
 import { getUser } from '../services/userService'
 import { getSongById } from '../services/songService'
 import SongRow from '../components/SongRow'
 import toast from 'react-hot-toast'
 
+function PlaylistCover({ songIds }) {
+  const [covers, setCovers] = useState([])
+  useEffect(() => {
+    if (!songIds?.length) return
+    Promise.all(songIds.slice(0, 4).map(id => getSongById(id)))
+      .then(songs => setCovers(songs.filter(Boolean).map(s => s.coverUrl).filter(Boolean)))
+  }, [songIds?.join(',')])
+
+  if (covers.length === 0) return (
+    <div className="w-full aspect-square bg-surface-3 rounded-lg flex items-center justify-center">
+      <Music size={28} className="text-gray-500" />
+    </div>
+  )
+  if (covers.length < 4) return (
+    <img src={covers[0]} alt="" className="w-full aspect-square object-cover rounded-lg" />
+  )
+  return (
+    <div className="w-full aspect-square grid grid-cols-2 rounded-lg overflow-hidden">
+      {covers.slice(0, 4).map((c, i) => <img key={i} src={c} alt="" className="w-full h-full object-cover" />)}
+    </div>
+  )
+}
+
 function CreatePlaylistModal({ onClose, onCreate }) {
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
-
   const handleSubmit = async e => {
     e.preventDefault()
     if (!name.trim()) return
@@ -20,32 +43,19 @@ function CreatePlaylistModal({ onClose, onCreate }) {
     setLoading(false)
     onClose()
   }
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
       <div className="bg-[#282828] rounded-2xl w-full max-w-sm shadow-2xl">
         <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-white/10">
           <h2 className="text-xl font-bold">Create Playlist</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
-            <X size={20} />
-          </button>
+          <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={20} /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm text-gray-400 mb-1.5">Playlist name</label>
-            <input
-              autoFocus
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="My awesome playlist"
-              className="w-full bg-[#3e3e3e] border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors"
-              required
-            />
-          </div>
+          <input autoFocus value={name} onChange={e => setName(e.target.value)}
+            placeholder="My awesome playlist"
+            className="w-full bg-[#3e3e3e] border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors" required />
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-full border border-white/20 text-sm hover:bg-white/5 transition-colors">
-              Cancel
-            </button>
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-full border border-white/20 text-sm hover:bg-white/5 transition-colors">Cancel</button>
             <button type="submit" disabled={loading || !name.trim()} className="flex-1 py-2.5 rounded-full bg-brand text-black font-bold text-sm disabled:opacity-50">
               {loading ? 'Creating...' : 'Create'}
             </button>
@@ -58,136 +68,176 @@ function CreatePlaylistModal({ onClose, onCreate }) {
 
 export default function LibraryPage() {
   const { user } = useAuth()
+  const { play } = usePlayer()
   const [tab, setTab] = useState('playlists')
+  const [view, setView] = useState('grid') // 'grid' | 'list'
   const [playlists, setPlaylists] = useState([])
   const [favSongs, setFavSongs] = useState([])
+  const [recentSongs, setRecentSongs] = useState([])
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [likedLoading, setLikedLoading] = useState(false)
+  const [songsLoading, setSongsLoading] = useState(false)
 
   const loadPlaylists = useCallback(async () => {
     if (!user) return
     setLoading(true)
-    try {
-      const data = await getUserPlaylists(user.uid)
-      setPlaylists(data)
-    } catch {
-      toast.error('Failed to load playlists')
-    } finally {
-      setLoading(false)
-    }
+    try { setPlaylists(await getUserPlaylists(user.uid)) }
+    catch { toast.error('Failed to load playlists') }
+    finally { setLoading(false) }
   }, [user])
 
-  const loadLikedSongs = useCallback(async () => {
+  const loadSongs = useCallback(async (type) => {
     if (!user) return
-    setLikedLoading(true)
+    setSongsLoading(true)
     try {
-      const profile = await getUser(user.uid)
-      const ids = profile?.favoriteSongs || []
-      if (ids.length === 0) { setFavSongs([]); return }
-      const songs = await Promise.all(ids.map(id => getSongById(id)))
-      setFavSongs(songs.filter(Boolean))
-    } catch {
-      toast.error('Failed to load liked songs')
-    } finally {
-      setLikedLoading(false)
-    }
+      const p = await getUser(user.uid)
+      const ids = type === 'liked' ? (p?.favoriteSongs || []) : (p?.recentlyPlayed || []).slice(0, 30)
+      if (!ids.length) { type === 'liked' ? setFavSongs([]) : setRecentSongs([]); return }
+      const songs = (await Promise.all(ids.map(id => getSongById(id)))).filter(Boolean)
+      type === 'liked' ? setFavSongs(songs) : setRecentSongs(songs)
+    } catch { toast.error('Failed to load songs') }
+    finally { setSongsLoading(false) }
   }, [user])
 
   useEffect(() => { loadPlaylists() }, [loadPlaylists])
-
-  useEffect(() => {
-    if (tab === 'liked') loadLikedSongs()
-  }, [tab, loadLikedSongs])
+  useEffect(() => { if (tab === 'liked') loadSongs('liked'); if (tab === 'recent') loadSongs('recent') }, [tab])
 
   const handleCreate = async name => {
-    try {
-      await createPlaylist(user.uid, name)
-      await loadPlaylists()
-      toast.success('Playlist created')
-    } catch {
-      toast.error('Failed to create playlist')
-    }
+    try { await createPlaylist(user.uid, name); await loadPlaylists(); toast.success('Playlist created') }
+    catch { toast.error('Failed to create playlist') }
   }
+
+  const TABS = [
+    { id: 'playlists', label: '🎵 Playlists' },
+    { id: 'liked',     label: '❤️ Liked Songs' },
+    { id: 'recent',    label: '🕐 Recently Played' },
+  ]
 
   return (
     <div className="p-6">
-      {showModal && (
-        <CreatePlaylistModal
-          onClose={() => setShowModal(false)}
-          onCreate={handleCreate}
-        />
-      )}
+      {showModal && <CreatePlaylistModal onClose={() => setShowModal(false)} onCreate={handleCreate} />}
 
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Your Library</h1>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-brand text-black font-semibold px-4 py-2 rounded-full text-sm hover:bg-brand-dark transition-colors"
-        >
-          <Plus size={16} /> New Playlist
-        </button>
+        <div className="flex items-center gap-2">
+          {tab === 'playlists' && (
+            <>
+              <button onClick={() => setView(v => v === 'grid' ? 'list' : 'grid')}
+                className="p-2 text-gray-400 hover:text-white transition-colors">
+                {view === 'grid' ? <List size={18} /> : <LayoutGrid size={18} />}
+              </button>
+              <button onClick={() => setShowModal(true)}
+                className="flex items-center gap-2 bg-brand text-black font-semibold px-4 py-2 rounded-full text-sm hover:bg-brand-dark transition-colors">
+                <Plus size={16} /> New Playlist
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="flex gap-2 mb-6">
-        {['playlists', 'liked'].map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-              tab === t ? 'bg-white text-black' : 'bg-surface-2 text-gray-300 hover:bg-white/10'
-            }`}
-          >
-            {t === 'liked' ? '❤️ Liked Songs' : '🎵 Playlists'}
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${tab === t.id ? 'bg-white text-black' : 'bg-surface-2 text-gray-300 hover:bg-white/10'}`}>
+            {t.label}
           </button>
         ))}
       </div>
 
+      {/* Playlists */}
       {tab === 'playlists' && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {loading ? (
-            <div className="col-span-full text-center py-16 text-gray-500">Loading...</div>
-          ) : playlists.length === 0 ? (
-            <div className="col-span-full text-center py-16 text-gray-500">
+        <>
+          {loading ? <div className="text-center py-16 text-gray-500">Loading...</div>
+          : playlists.length === 0 ? (
+            <div className="text-center py-16 text-gray-500">
               <Music size={48} className="mx-auto mb-3 opacity-20" />
               <p>No playlists yet</p>
-              <button onClick={() => setShowModal(true)} className="mt-3 text-brand text-sm hover:underline">
-                Create one
-              </button>
+              <button onClick={() => setShowModal(true)} className="mt-3 text-brand text-sm hover:underline">Create one</button>
             </div>
-          ) : (
-            playlists.map(pl => (
-              <Link
-                key={pl.id}
-                to={`/playlist/${pl.id}`}
-                className="bg-surface-2 hover:bg-white/5 rounded-xl p-4 transition-colors group"
-              >
-                <div className="w-full aspect-square bg-surface rounded-lg flex items-center justify-center mb-3">
-                  <Music size={32} className="text-gray-500" />
-                </div>
-                <p className="font-medium text-sm truncate">{pl.name}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{pl.songIds?.length || 0} songs</p>
-              </Link>
-            ))
-          )}
-        </div>
-      )}
-
-      {tab === 'liked' && (
-        <div>
-          {likedLoading ? (
-            <div className="text-center py-16 text-gray-500">Loading liked songs...</div>
-          ) : favSongs.length > 0 ? (
-            <div className="space-y-1">
-              {favSongs.map((song, i) => (
-                <SongRow key={song.id} song={song} index={i} queue={favSongs} />
+          ) : view === 'grid' ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {playlists.map(pl => (
+                <Link key={pl.id} to={`/playlist/${pl.id}`}
+                  className="bg-surface-2 hover:bg-surface-3 rounded-xl p-4 transition-all hover:scale-[1.02] group">
+                  <div className="mb-3 relative">
+                    <PlaylistCover songIds={pl.songIds} />
+                    <button onClick={e => { e.preventDefault(); /* play */ }}
+                      className="absolute bottom-2 right-2 w-10 h-10 bg-brand rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all">
+                      <Play size={16} fill="black" className="ml-0.5" />
+                    </button>
+                  </div>
+                  <p className="font-semibold text-sm truncate">{pl.name}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{pl.songIds?.length || 0} songs</p>
+                </Link>
               ))}
             </div>
+          ) : (
+            <div className="space-y-1">
+              {playlists.map((pl, i) => (
+                <Link key={pl.id} to={`/playlist/${pl.id}`}
+                  className="flex items-center gap-4 px-4 py-3 rounded-xl hover:bg-white/5 transition-colors group">
+                  <div className="w-12 h-12 shrink-0 rounded-lg overflow-hidden">
+                    <PlaylistCover songIds={pl.songIds} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{pl.name}</p>
+                    <p className="text-xs text-gray-500">Playlist · {pl.songIds?.length || 0} songs</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Liked Songs */}
+      {tab === 'liked' && (
+        <div>
+          {songsLoading ? <div className="text-center py-16 text-gray-500">Loading...</div>
+          : favSongs.length > 0 ? (
+            <>
+              <div className="flex items-center gap-3 mb-5">
+                <button onClick={() => play(favSongs[0], favSongs, 0)}
+                  className="flex items-center gap-2 bg-brand text-black font-bold px-6 py-3 rounded-full hover:bg-brand-dark transition-colors">
+                  <Play size={18} fill="black" /> Play All
+                </button>
+                <span className="text-gray-400 text-sm">{favSongs.length} songs</span>
+              </div>
+              <div className="space-y-1">
+                {favSongs.map((song, i) => <SongRow key={song.id} song={song} index={i} queue={favSongs} />)}
+              </div>
+            </>
           ) : (
             <div className="text-center py-16 text-gray-500">
               <Heart size={48} className="mx-auto mb-3 opacity-20" />
               <p>No liked songs yet</p>
-              <p className="text-sm mt-1">Click the ❤️ on any song to save it here</p>
+              <p className="text-sm mt-1">Click ❤️ on any song to save it here</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Recently Played */}
+      {tab === 'recent' && (
+        <div>
+          {songsLoading ? <div className="text-center py-16 text-gray-500">Loading...</div>
+          : recentSongs.length > 0 ? (
+            <>
+              <div className="flex items-center gap-3 mb-5">
+                <button onClick={() => play(recentSongs[0], recentSongs, 0)}
+                  className="flex items-center gap-2 bg-brand text-black font-bold px-6 py-3 rounded-full hover:bg-brand-dark transition-colors">
+                  <Play size={18} fill="black" /> Play All
+                </button>
+                <span className="text-gray-400 text-sm">{recentSongs.length} songs</span>
+              </div>
+              <div className="space-y-1">
+                {recentSongs.map((song, i) => <SongRow key={song.id} song={song} index={i} queue={recentSongs} />)}
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-16 text-gray-500">
+              <Clock size={48} className="mx-auto mb-3 opacity-20" />
+              <p>No listening history yet</p>
             </div>
           )}
         </div>

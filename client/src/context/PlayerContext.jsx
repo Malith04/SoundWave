@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext'
 import { addToRecentlyPlayed } from '../services/userService'
 import { searchYouTube } from '../services/musicApi'
 import { upsertSong, incrementPlayCount } from '../services/songService'
+import { useAudioSettings } from './AudioSettingsContext'
 
 const PlayerContext = createContext(null)
 const YT_API_KEY = import.meta.env.VITE_YT_API_KEY || ''
@@ -25,6 +26,7 @@ function loadState() {
 
 export function PlayerProvider({ children }) {
   const { user } = useAuth()
+  const { settings, applyAudioChain } = useAudioSettings()
   const howlRef = useRef(null)
   const progressInterval = useRef(null)
   const ytPlayerRef = useRef(null)
@@ -67,7 +69,46 @@ export function PlayerProvider({ children }) {
   useEffect(() => { currentTimeRef.current = currentTime }, [currentTime])
   useEffect(() => { currentSongRef.current = currentSong }, [currentSong])
 
-  // ── Persist state every 5s ────────────────────────────────
+  // ── Live-apply settings changes to current playback ──────
+  // Playback speed
+  useEffect(() => {
+    if (!settings?.speed) return
+    try { howlRef.current?.rate(settings.speed) } catch (_) {}
+    try { ytPlayerRef.current?.setPlaybackRate?.(settings.speed) } catch (_) {}
+  }, [settings?.speed])
+
+  // Loud volume boost
+  useEffect(() => {
+    if (!howlRef.current) return
+    const base = mutedRef.current ? 0 : volumeRef.current / 100
+    try { howlRef.current.volume(settings?.loudVolume ? Math.min(base * 1.5, 1) : base) } catch (_) {}
+  }, [settings?.loudVolume])
+
+  // Normalization — re-apply volume cap
+  useEffect(() => {
+    if (!howlRef.current) return
+    const base = mutedRef.current ? 0 : volumeRef.current / 100
+    const vol = settings?.normalize ? Math.min(base, 0.85) : base
+    try { howlRef.current.volume(vol) } catch (_) {}
+  }, [settings?.normalize])
+
+  // ── Crossfade: fade out near end, fade in on start ────────
+  const crossfadeRef = useRef(null)
+  useEffect(() => {
+    clearInterval(crossfadeRef.current)
+    const secs = settings?.crossfade ?? 0
+    if (secs <= 0 || !howlRef.current) return
+    crossfadeRef.current = setInterval(() => {
+      const h = howlRef.current
+      if (!h || !h.playing()) return
+      const remaining = (h.duration() || 0) - (h.seek() || 0)
+      if (remaining > 0 && remaining <= secs) {
+        const fadeVol = Math.max(0, (remaining / secs) * (volumeRef.current / 100))
+        try { h.volume(fadeVol) } catch (_) {}
+      }
+    }, 200)
+    return () => clearInterval(crossfadeRef.current)
+  }, [settings?.crossfade, isPlaying])
   useEffect(() => {
     const t = setInterval(() => {
       if (currentSongRef.current) {
@@ -94,6 +135,9 @@ export function PlayerProvider({ children }) {
           onReady: () => {
             ytReadyRef.current = true
             ytPlayerRef.current.setVolume(mutedRef.current ? 0 : volumeRef.current)
+            if (settings?.speed && settings.speed !== 1) {
+              try { ytPlayerRef.current.setPlaybackRate(settings.speed) } catch(_) {}
+            }
             if (pendingYTRef.current) {
               ytPlayerRef.current.loadVideoById(pendingYTRef.current)
               pendingYTRef.current = null
@@ -178,24 +222,35 @@ export function PlayerProvider({ children }) {
     setEngine('howler')
     setProgress(0); setCurrentTime(0); setDuration(0)
 
+    const speed = settings?.speed ?? 1.0
+    const baseVol = mutedRef.current ? 0 : volumeRef.current / 100
+    const vol = settings?.loudVolume
+      ? Math.min(baseVol * 1.5, 1)
+      : settings?.normalize
+        ? Math.min(baseVol, 0.85)
+        : baseVol
+
     const howl = new Howl({
       src: [audioUrl],
       html5: true,
-      volume: mutedRef.current ? 0 : volumeRef.current / 100,
+      volume: vol,
+      rate: speed,
       format: ['mp3', 'ogg', 'aac', 'm4a'],
       onplay: () => {
         if (startAt > 0) { howl.seek(startAt) }
+        // AudioContext is now live — apply all audio settings
+        setTimeout(() => applyAudioChain(settings), 50)
         setIsPlaying(true); setIsLoading(false); startProgressTracking()
       },
       onpause: () => { setIsPlaying(false); clearInterval(progressInterval.current) },
-      onstop: () => { setIsPlaying(false); clearInterval(progressInterval.current) },
-      onend: handleEnd,
+      onstop:  () => { setIsPlaying(false); clearInterval(progressInterval.current) },
+      onend:   handleEnd,
       onloaderror: () => { setIsLoading(false); setError('Could not load audio.'); setIsPlaying(false) },
-      onplayerror: () => { setIsLoading(false); setError('Playback error.'); setIsPlaying(false) },
+      onplayerror: () => { setIsLoading(false); setError('Playback error.');        setIsPlaying(false) },
     })
     howlRef.current = howl
     howl.play()
-  }, [startProgressTracking, handleEnd])
+  }, [startProgressTracking, handleEnd, settings?.speed, settings?.normalize])
 
   const playWithYouTube = useCallback(async (song, startAt = 0) => {
     // Always try the 30s preview first so there's immediate audio feedback
@@ -228,7 +283,7 @@ export function PlayerProvider({ children }) {
     setError(null); setIsLoading(true)
     setCurrentSong(song); setQueue(songQueue); setQueueIndex(index)
     upsertSong(song).then(() => incrementPlayCount(song.id)).catch(() => {})
-    if (user) addToRecentlyPlayed(user.uid, song.id).catch(() => {})
+    if (user && !settings?.privateSession) addToRecentlyPlayed(user.uid, song.id).catch(() => {})
 
     if (song.source === 'jamendo' && song.audioUrl) playWithHowler(song, song.audioUrl, startAt)
     else if (song.source === 'itunes') playWithYouTube(song, startAt)

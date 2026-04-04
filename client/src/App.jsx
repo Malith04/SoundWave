@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { PlayerProvider } from './context/PlayerContext'
+import { AudioSettingsProvider } from './context/AudioSettingsContext'
 import AppLayout from './components/AppLayout'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
@@ -11,6 +12,7 @@ import LibraryPage from './pages/LibraryPage'
 import PlaylistPage from './pages/PlaylistPage'
 import GenrePage from './pages/GenrePage'
 import ProfilePage from './pages/ProfilePage'
+import SettingsPage from './pages/SettingsPage'
 
 // Full-screen spinner shown while Firebase resolves auth state
 function Spinner() {
@@ -43,9 +45,11 @@ function AppRoutes() {
         path="/"
         element={
           <ProtectedRoute>
-            <PlayerProvider>
-              <AppLayout />
-            </PlayerProvider>
+            <AudioSettingsProvider>
+              <PlayerProvider>
+                <AppLayout />
+              </PlayerProvider>
+            </AudioSettingsProvider>
           </ProtectedRoute>
         }
       >
@@ -55,6 +59,7 @@ function AppRoutes() {
         <Route path="playlist/:id" element={<PlaylistPage />} />
         <Route path="genre/:genre" element={<GenrePage />} />
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
       {/* Catch-all */}
       <Route path="*" element={<Navigate to="/" replace />} />

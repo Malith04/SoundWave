@@ -23,6 +23,10 @@ export async function createUser(uid, data) {
   })
 }
 
+export async function updateUser(uid, data) {
+  await updateDoc(doc(db, COL, uid), data)
+}
+
 export async function addToRecentlyPlayed(uid, songId) {
   const user = await getUser(uid)
   if (!user) return

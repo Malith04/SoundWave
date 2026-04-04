@@ -13,9 +13,12 @@ export async function searchYouTube(query) {
   if (!YT_API_KEY) return null
   try {
     const res = await fetchWithTimeout(
-      `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=1&q=${encodeURIComponent(query + ' official audio')}&key=${YT_API_KEY}`
+      `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=1&q=${encodeURIComponent(query + ' official audio')}&key=${YT_API_KEY}`,
+      10000,
+      { 'Referer': window.location.origin }
     )
     const data = await res.json()
+    if (data.error) { console.warn('YouTube API error:', data.error.message); return null }
     const item = data.items?.[0]
     return item?.id?.videoId || null
   } catch (e) {
@@ -25,11 +28,11 @@ export async function searchYouTube(query) {
 }
 
 // Fetch with timeout
-async function fetchWithTimeout(url, ms = 10000) {
+async function fetchWithTimeout(url, ms = 10000, extraHeaders = {}) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), ms)
   try {
-    const res = await fetch(url, { signal: controller.signal })
+    const res = await fetch(url, { signal: controller.signal, headers: extraHeaders })
     clearTimeout(timer)
     return res
   } catch (e) {
