@@ -327,51 +327,236 @@ function PrivacyTab({ settings, update }) {
 
 // ── Account Tab ───────────────────────────────────────────────
 function AccountTab({ profile, logout, navigate }) {
-  const handleLogout = async () => {
-    await logout()
-    navigate('/login')
+  const { user, refreshProfile } = useAuth()
+
+  const [name, setName]         = useState(profile?.name || '')
+  const [bio, setBio]           = useState(profile?.bio || '')
+  const [country, setCountry]   = useState(profile?.country || '')
+  const [language, setLanguage] = useState(profile?.language || 'en')
+  const [gender, setGender]     = useState(profile?.gender || '')
+  const [saving, setSaving]     = useState(false)
+
+  const [newEmail, setNewEmail]       = useState('')
+  const [newPass, setNewPass]         = useState('')
+  const [confirmPass, setConfirmPass] = useState('')
+  const [savingEmail, setSavingEmail] = useState(false)
+  const [savingPass, setSavingPass]   = useState(false)
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteInput, setDeleteInput] = useState('')
+
+  const avatarColor = localStorage.getItem('sw_avatar_color') || 0
+  const AVATAR_COLORS = [
+    'from-brand to-emerald-700','from-purple-500 to-indigo-700',
+    'from-pink-500 to-rose-700','from-orange-500 to-red-700',
+    'from-blue-500 to-cyan-700','from-yellow-500 to-amber-700',
+  ]
+
+  const handleSaveProfile = async () => {
+    if (!user) return
+    setSaving(true)
+    try {
+      await updateUser(user.uid, {
+        name: name.trim(),
+        bio: bio.trim(),
+        country,
+        language,
+        gender,
+      })
+      await refreshProfile()
+      toast.success('Profile updated')
+    } catch { toast.error('Failed to save') }
+    finally { setSaving(false) }
   }
+
+  const handleChangeEmail = async e => {
+    e.preventDefault()
+    if (!newEmail.trim()) return
+    setSavingEmail(true)
+    try {
+      await user.updateEmail(newEmail.trim())
+      await updateUser(user.uid, { email: newEmail.trim() })
+      toast.success('Email updated')
+      setNewEmail('')
+    } catch (err) {
+      toast.error(err.message?.includes('requires-recent-login')
+        ? 'Please sign out and sign back in first'
+        : 'Failed to update email')
+    } finally { setSavingEmail(false) }
+  }
+
+  const handleChangePassword = async e => {
+    e.preventDefault()
+    if (newPass !== confirmPass) { toast.error('Passwords do not match'); return }
+    if (newPass.length < 6) { toast.error('Password must be at least 6 characters'); return }
+    setSavingPass(true)
+    try {
+      await user.updatePassword(newPass)
+      toast.success('Password updated')
+      setNewPass(''); setConfirmPass('')
+    } catch (err) {
+      toast.error(err.message?.includes('requires-recent-login')
+        ? 'Please sign out and sign back in first'
+        : 'Failed to update password')
+    } finally { setSavingPass(false) }
+  }
+
+  const handleLogout = async () => { await logout(); navigate('/login') }
+
   return (
     <>
-      <Section title="Profile">
-        <div className="py-4 flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-brand/20 flex items-center justify-center text-2xl font-bold text-brand shrink-0">
+      {/* Profile card */}
+      <Section title="Your Profile">
+        <div className="py-5 flex items-center gap-5 border-b border-white/5">
+          <div className={`w-20 h-20 rounded-full bg-gradient-to-br ${AVATAR_COLORS[avatarColor]} flex items-center justify-center text-3xl font-bold text-white shrink-0 shadow-lg`}>
             {profile?.name?.[0]?.toUpperCase() || '?'}
           </div>
-          <div>
-            <p className="font-semibold">{profile?.name || 'User'}</p>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-lg">{profile?.name || 'User'}</p>
             <p className="text-sm text-gray-400">{profile?.email}</p>
-            <span className="text-xs text-brand mt-1 block">Free Plan</span>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="text-xs bg-brand/20 text-brand px-2 py-0.5 rounded-full font-medium">Free Plan</span>
+              <span className="text-xs text-gray-500">Member since {profile?.createdAt ? new Date(profile.createdAt).getFullYear() : '—'}</span>
+            </div>
           </div>
+        </div>
+
+        {/* Editable fields */}
+        <div className="py-4 space-y-4">
+          <div>
+            <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1.5">Display Name</label>
+            <input value={name} onChange={e => setName(e.target.value)}
+              placeholder="Your name"
+              className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1.5">Bio</label>
+            <textarea value={bio} onChange={e => setBio(e.target.value)}
+              placeholder="Tell people a bit about yourself..."
+              rows={3}
+              className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors resize-none" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1.5">Gender</label>
+              <select value={gender} onChange={e => setGender(e.target.value)}
+                className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand transition-colors">
+                <option value="">Prefer not to say</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="nonbinary">Non-binary</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1.5">Country</label>
+              <select value={country} onChange={e => setCountry(e.target.value)}
+                className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand transition-colors">
+                <option value="">Select country</option>
+                {['Sri Lanka','United States','United Kingdom','India','Australia','Canada','Germany','France','Japan','Brazil','South Korea','Singapore'].map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1.5">Language</label>
+            <select value={language} onChange={e => setLanguage(e.target.value)}
+              className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand transition-colors">
+              {[
+                { v:'en', l:'English' },{ v:'si', l:'Sinhala' },{ v:'ta', l:'Tamil' },
+                { v:'es', l:'Spanish' },{ v:'fr', l:'French' },{ v:'de', l:'German' },
+                { v:'ja', l:'Japanese' },{ v:'ko', l:'Korean' },{ v:'pt', l:'Portuguese' },
+              ].map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+            </select>
+          </div>
+          <button onClick={handleSaveProfile} disabled={saving}
+            className="bg-brand text-black font-bold px-6 py-2.5 rounded-full text-sm hover:bg-brand-dark transition-colors disabled:opacity-50">
+            {saving ? 'Saving...' : 'Save Profile'}
+          </button>
         </div>
       </Section>
 
+      {/* Subscription */}
       <Section title="Subscription">
         <div className="py-4">
-          <div className="bg-gradient-to-r from-brand/20 to-purple-500/20 border border-brand/30 rounded-xl p-4 flex items-center justify-between">
+          <div className="bg-gradient-to-r from-brand/20 to-purple-500/20 border border-brand/30 rounded-xl p-5 flex items-center justify-between">
             <div>
-              <p className="font-bold text-sm">Upgrade to Premium</p>
-              <p className="text-xs text-gray-400 mt-0.5">Ad-free, offline listening & more</p>
+              <p className="font-bold">SoundWave Premium</p>
+              <p className="text-xs text-gray-400 mt-1">Ad-free · Offline listening · HQ audio · Unlimited skips</p>
             </div>
-            <button className="bg-brand text-black font-bold px-4 py-2 rounded-full text-sm hover:bg-brand-dark transition-colors shrink-0">
+            <button className="bg-brand text-black font-bold px-5 py-2.5 rounded-full text-sm hover:bg-brand-dark transition-colors shrink-0">
               Upgrade
             </button>
           </div>
         </div>
       </Section>
 
+      {/* Change email */}
+      <Section title="Change Email">
+        <form onSubmit={handleChangeEmail} className="py-4 space-y-3">
+          <p className="text-xs text-gray-500">Current: <span className="text-gray-300">{profile?.email}</span></p>
+          <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)}
+            placeholder="New email address"
+            className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors" />
+          <button type="submit" disabled={savingEmail || !newEmail.trim()}
+            className="bg-surface-3 hover:bg-surface-4 border border-white/10 text-white font-medium px-5 py-2 rounded-full text-sm transition-colors disabled:opacity-50">
+            {savingEmail ? 'Updating...' : 'Update Email'}
+          </button>
+        </form>
+      </Section>
+
+      {/* Change password */}
+      <Section title="Change Password">
+        <form onSubmit={handleChangePassword} className="py-4 space-y-3">
+          <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)}
+            placeholder="New password (min 6 characters)"
+            className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors" />
+          <input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)}
+            placeholder="Confirm new password"
+            className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors" />
+          <button type="submit" disabled={savingPass || !newPass || !confirmPass}
+            className="bg-surface-3 hover:bg-surface-4 border border-white/10 text-white font-medium px-5 py-2 rounded-full text-sm transition-colors disabled:opacity-50">
+            {savingPass ? 'Updating...' : 'Update Password'}
+          </button>
+        </form>
+      </Section>
+
+      {/* Danger zone */}
       <Section title="Danger Zone">
-        <div className="py-3.5">
+        <div className="py-3.5 border-b border-white/5">
           <button onClick={handleLogout}
             className="flex items-center gap-3 text-red-400 hover:text-red-300 transition-colors text-sm font-medium">
             <LogOut size={16} /> Sign out of SoundWave
           </button>
         </div>
         <div className="py-3.5">
-          <button onClick={() => toast.error('Account deletion coming soon')}
-            className="flex items-center gap-3 text-red-500 hover:text-red-400 transition-colors text-sm font-medium">
-            <Trash2 size={16} /> Delete account
-          </button>
+          {!showDeleteConfirm ? (
+            <button onClick={() => setShowDeleteConfirm(true)}
+              className="flex items-center gap-3 text-red-500 hover:text-red-400 transition-colors text-sm font-medium">
+              <Trash2 size={16} /> Delete account
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-red-400 font-medium">This will permanently delete your account and all data.</p>
+              <p className="text-xs text-gray-500">Type <span className="text-white font-mono">DELETE</span> to confirm</p>
+              <input value={deleteInput} onChange={e => setDeleteInput(e.target.value)}
+                placeholder="Type DELETE"
+                className="w-full bg-surface-3 border border-red-500/30 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors" />
+              <div className="flex gap-3">
+                <button
+                  disabled={deleteInput !== 'DELETE'}
+                  onClick={() => toast.error('Account deletion requires backend support')}
+                  className="bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-full text-sm transition-colors disabled:opacity-30">
+                  Delete Forever
+                </button>
+                <button onClick={() => { setShowDeleteConfirm(false); setDeleteInput('') }}
+                  className="bg-surface-3 hover:bg-surface-4 text-gray-300 px-5 py-2 rounded-full text-sm transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </Section>
     </>
