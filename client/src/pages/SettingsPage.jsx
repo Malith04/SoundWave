@@ -1,11 +1,14 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useAudioSettings, EQ_PRESETS } from '../context/AudioSettingsContext'
 import { useAuth } from '../context/AuthContext'
+import { usePlayer } from '../context/PlayerContext'
 import { updateUser } from '../services/userService'
+import { storage } from '../services/firebase'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import {
   RotateCcw, SlidersHorizontal, Wind, Waves, Gauge, Music2,
   Monitor, Bell, Shield, User, Headphones, Radio, Mic2,
-  Globe, Trash2, Check, Zap, LogOut
+  Globe, Trash2, Check, Zap, LogOut, Camera
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
@@ -32,8 +35,8 @@ function Toggle({ label, desc, value, onChange, badge }) {
         {desc && <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{desc}</p>}
       </div>
       <button onClick={() => onChange(!value)}
-        className={`relative w-12 h-6 rounded-full transition-colors duration-200 shrink-0 ${value ? 'bg-brand' : 'bg-surface-4'}`}>
-        <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${value ? 'translate-x-6' : 'translate-x-0.5'}`} />
+        className={`relative w-12 h-6 rounded-full transition-colors duration-200 shrink-0 overflow-hidden ${value ? 'bg-brand' : 'bg-surface-4'}`}>
+        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${value ? 'translate-x-5' : 'translate-x-0'}`} />
       </button>
     </div>
   )
@@ -141,11 +144,20 @@ function AudioTab({ settings, update, applyPreset, setEqBand }) {
       <Section title="Enhancement">
         <RangeSlider label="Bass Boost" desc="Boost low frequencies for deeper bass"
           value={settings.bassBoost} min={0} max={12} step={1} unit=" dB"
-          onChange={v => update('bassBoost', v)} />
+          onChange={v => {
+            console.log('Bass boost changed to:', v)
+            update('bassBoost', v)
+          }} />
         <Toggle label="Audio Normalization" desc="Keeps volume consistent across all tracks"
-          value={settings.normalize} onChange={v => update('normalize', v)} />
+          value={settings.normalize} onChange={v => {
+            console.log('Normalization changed to:', v)
+            update('normalize', v)
+          }} />
         <Toggle label="Mono Audio" desc="Combine left and right channels into one"
-          value={settings.mono} onChange={v => update('mono', v)} />
+          value={settings.mono} onChange={v => {
+            console.log('Mono audio changed to:', v)
+            update('mono', v)
+          }} />
       </Section>
 
       <Section title="Sound Profiles">
@@ -178,21 +190,48 @@ function AudioTab({ settings, update, applyPreset, setEqBand }) {
 
 // ── Playback Tab ──────────────────────────────────────────────
 function PlaybackTab({ settings, update }) {
+  const { forceApplySettings } = usePlayer()
+  
   return (
     <>
       <Section title="Playback Behaviour">
         <RangeSlider label="Playback Speed" desc="Slow down or speed up all tracks"
           value={settings.speed} min={0.5} max={2.0} step={0.05} unit="x"
-          onChange={v => { update('speed', v) }} />
+          onChange={v => { 
+            console.log('Playback speed changed to:', v)
+            update('speed', v)
+            // Force apply immediately
+            setTimeout(() => {
+              forceApplySettings?.()
+              if (v !== 1) {
+                toast.success(`Playback speed set to ${v}x`)
+              }
+            }, 100)
+          }} />
         <RangeSlider label="Crossfade" desc="Smoothly fade between songs at the end of each track"
           value={settings.crossfade} min={0} max={12} step={1} unit="s"
-          onChange={v => update('crossfade', v)} />
+          onChange={v => {
+            console.log('Crossfade changed to:', v)
+            update('crossfade', v)
+            if (v > 0) {
+              toast.success(`Crossfade set to ${v} seconds`)
+            }
+          }} />
         <Toggle label="Gapless Playback" desc="Remove silence between tracks for seamless listening"
-          value={settings.gapless} onChange={v => update('gapless', v)} />
+          value={settings.gapless} onChange={v => {
+            console.log('Gapless changed to:', v)
+            update('gapless', v)
+          }} />
         <Toggle label="Autoplay" desc="Keep playing similar songs when your queue ends"
-          value={settings.autoplay} onChange={v => update('autoplay', v)} />
+          value={settings.autoplay} onChange={v => {
+            console.log('Autoplay changed to:', v)
+            update('autoplay', v)
+          }} />
         <Toggle label="Smart Shuffle" desc="Mix in recommended songs while shuffling" badge="NEW"
-          value={settings.smartShuffle} onChange={v => update('smartShuffle', v)} />
+          value={settings.smartShuffle} onChange={v => {
+            console.log('Smart shuffle changed to:', v)
+            update('smartShuffle', v)
+          }} />
       </Section>
 
       <Section title="Audio Quality">
@@ -205,16 +244,49 @@ function PlaybackTab({ settings, update }) {
             { value: 'high',   label: 'High (160 kbps)' },
             { value: 'very_high', label: 'Very High (320 kbps)' },
           ]}
-          onChange={v => update('streamQuality', v)} />
+          onChange={v => {
+            console.log('Stream quality changed to:', v)
+            update('streamQuality', v)
+          }} />
         <Toggle label="Loud Volume Level" desc="Increase maximum volume beyond normal levels"
-          value={settings.loudVolume} onChange={v => update('loudVolume', v)} />
+          value={settings.loudVolume} onChange={v => {
+            console.log('Loud volume changed to:', v)
+            update('loudVolume', v)
+            // Force apply immediately
+            setTimeout(() => {
+              forceApplySettings?.()
+              toast.success(v ? 'Loud volume enabled' : 'Loud volume disabled')
+            }, 100)
+          }} />
       </Section>
 
       <Section title="Queue & History">
         <Toggle label="Remember Queue on Restart" desc="Restore your queue when you reopen the app"
-          value={settings.rememberQueue} onChange={v => update('rememberQueue', v)} />
+          value={settings.rememberQueue} onChange={v => {
+            console.log('Remember queue changed to:', v)
+            update('rememberQueue', v)
+          }} />
         <Toggle label="Show Recently Played" desc="Display your listening history on the home screen"
-          value={settings.showRecent} onChange={v => update('showRecent', v)} />
+          value={settings.showRecent} onChange={v => {
+            console.log('Show recent changed to:', v)
+            update('showRecent', v)
+          }} />
+      </Section>
+
+      {/* Debug section */}
+      <Section title="Debug">
+        <div className="py-3.5">
+          <button 
+            onClick={() => {
+              console.log('🔧 Manual force apply settings triggered')
+              forceApplySettings?.()
+            }}
+            className="px-4 py-2 bg-brand text-black font-medium rounded-lg hover:bg-brand-dark transition-colors"
+          >
+            Force Apply Settings
+          </button>
+          <p className="text-xs text-gray-500 mt-2">Click to manually apply all audio settings to current playback</p>
+        </div>
       </Section>
     </>
   )
@@ -328,6 +400,7 @@ function PrivacyTab({ settings, update }) {
 // ── Account Tab ───────────────────────────────────────────────
 function AccountTab({ profile, logout, navigate }) {
   const { user, refreshProfile } = useAuth()
+  const fileInputRef = useRef(null)
 
   const [name, setName]         = useState(profile?.name || '')
   const [bio, setBio]           = useState(profile?.bio || '')
@@ -335,6 +408,8 @@ function AccountTab({ profile, logout, navigate }) {
   const [language, setLanguage] = useState(profile?.language || 'en')
   const [gender, setGender]     = useState(profile?.gender || '')
   const [saving, setSaving]     = useState(false)
+  const [profilePic, setProfilePic] = useState(profile?.profilePicUrl || null)
+  const [uploadingPic, setUploadingPic] = useState(false)
 
   const [newEmail, setNewEmail]       = useState('')
   const [newPass, setNewPass]         = useState('')
@@ -351,6 +426,97 @@ function AccountTab({ profile, logout, navigate }) {
     'from-pink-500 to-rose-700','from-orange-500 to-red-700',
     'from-blue-500 to-cyan-700','from-yellow-500 to-amber-700',
   ]
+
+  // Profile picture sync logic - improved with better error handling
+  useEffect(() => {
+    if (profile?.profilePicUrl && !uploadingPic) {
+      console.log('Syncing profile picture from database:', profile.profilePicUrl)
+      setProfilePic(profile.profilePicUrl)
+      // Cache the profile picture URL
+      if (user?.uid) {
+        localStorage.setItem(`sw_profile_pic_${user.uid}`, profile.profilePicUrl)
+        console.log('Profile picture cached for user:', user.uid)
+      }
+    }
+  }, [profile?.profilePicUrl, uploadingPic, user?.uid])
+
+  // Load cached profile picture on mount - improved logic
+  useEffect(() => {
+    if (user?.uid) {
+      const cachedPic = localStorage.getItem(`sw_profile_pic_${user.uid}`)
+      console.log('Checking cached profile picture for user:', user.uid, 'Found:', !!cachedPic)
+      if (cachedPic && !profilePic && !profile?.profilePicUrl) {
+        console.log('Loading cached profile picture:', cachedPic)
+        setProfilePic(cachedPic)
+      }
+    }
+  }, [user?.uid, profile])
+
+  // Initialize profile picture when profile loads - improved
+  useEffect(() => {
+    if (profile?.profilePicUrl && !profilePic) {
+      console.log('Initializing profile picture from profile data:', profile.profilePicUrl)
+      setProfilePic(profile.profilePicUrl)
+      // Ensure it's cached
+      if (user?.uid) {
+        localStorage.setItem(`sw_profile_pic_${user.uid}`, profile.profilePicUrl)
+      }
+    }
+  }, [profile?.profilePicUrl, profilePic, user?.uid])
+
+  const handlePicUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) { toast.error('Image must be under 5MB'); return }
+
+    console.log('Starting profile picture upload:', file.name, 'Size:', file.size)
+
+    // Show preview immediately
+    const localUrl = URL.createObjectURL(file)
+    setProfilePic(localUrl)
+
+    setUploadingPic(true)
+    try {
+      console.log('Uploading to Firebase Storage...')
+      // Path must match storage rules: profiles/{userId}/...
+      const storageRef = ref(storage, `profiles/${user.uid}/avatar_${Date.now()}`)
+      const snapshot = await uploadBytes(storageRef, file)
+      console.log('Upload successful, getting download URL...')
+      const url = await getDownloadURL(storageRef)
+      console.log('Download URL obtained:', url)
+      
+      // Update user profile in database
+      console.log('Updating user profile in database...')
+      await updateUser(user.uid, { profilePicUrl: url })
+      console.log('Database updated successfully')
+      
+      // Clean up the local preview URL
+      URL.revokeObjectURL(localUrl)
+      
+      // Set the final URL and cache it
+      setProfilePic(url)
+      localStorage.setItem(`sw_profile_pic_${user.uid}`, url)
+      console.log('Profile picture cached locally')
+      
+      // Refresh the profile context to get updated data
+      console.log('Refreshing profile context...')
+      await refreshProfile()
+      console.log('Profile refresh completed')
+      
+      toast.success('Profile picture updated successfully!')
+    } catch (err) {
+      console.error('Upload failed:', err)
+      toast.error('Upload failed: ' + (err.message || 'Unknown error'))
+      // Revert preview on failure
+      const fallbackUrl = profile?.profilePicUrl || localStorage.getItem(`sw_profile_pic_${user.uid}`)
+      setProfilePic(fallbackUrl || null)
+      URL.revokeObjectURL(localUrl)
+    } finally {
+      setUploadingPic(false)
+      // Reset input so same file can be picked again
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   const handleSaveProfile = async () => {
     if (!user) return
@@ -408,9 +574,34 @@ function AccountTab({ profile, logout, navigate }) {
       {/* Profile card */}
       <Section title="Your Profile">
         <div className="py-5 flex items-center gap-5 border-b border-white/5">
-          <div className={`w-20 h-20 rounded-full bg-gradient-to-br ${AVATAR_COLORS[avatarColor]} flex items-center justify-center text-3xl font-bold text-white shrink-0 shadow-lg`}>
-            {profile?.name?.[0]?.toUpperCase() || '?'}
+          <div className="relative shrink-0">
+            <div className="w-20 h-20 rounded-full overflow-hidden shadow-lg border-4 border-white/10"
+              style={profilePic ? {} : { background: `linear-gradient(135deg, ${AVATAR_COLORS[avatarColor].split(' ')[1]}, ${AVATAR_COLORS[avatarColor].split(' ')[3]})` }}>
+              {profilePic ? (
+                <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-white">
+                  {profile?.name?.[0]?.toUpperCase() || '?'}
+                </div>
+              )}
+            </div>
+            
+            {/* Upload picture button */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingPic}
+              className="absolute -bottom-1 -right-1 w-7 h-7 bg-[#282828] hover:bg-[#3e3e3e] rounded-full flex items-center justify-center border-2 border-black transition-colors shadow-lg"
+              title="Change profile picture"
+            >
+              {uploadingPic ? (
+                <div className="w-3 h-3 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Camera size={12} className="text-white" />
+              )}
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePicUpload} />
           </div>
+          
           <div className="flex-1 min-w-0">
             <p className="font-bold text-lg">{profile?.name || 'User'}</p>
             <p className="text-sm text-gray-400">{profile?.email}</p>

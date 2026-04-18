@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Play, Clock } from 'lucide-react'
+import { Play, Clock, TrendingUp, Sparkles } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getTopChart, getJamendoTrending, getJamendoNew, getJamendoByGenre } from '../services/musicApi'
+import { getRecommendations } from '../services/recommendationService'
 import SectionRow from '../components/SectionRow'
+import MoodSelector from '../components/MoodSelector'
 import { usePlayer } from '../context/PlayerContext'
 import { getUser } from '../services/userService'
 import { getSongById } from '../services/songService'
@@ -73,9 +75,11 @@ export default function HomePage() {
   const [chart, setChart]       = useState([])
   const [trending, setTrending] = useState([])
   const [newReleases, setNew]   = useState([])
+  const [recommendations, setRecommendations] = useState([])
   const [mixes, setMixes]       = useState({})
   const [recentSongs, setRecent] = useState([])
   const [loading, setLoading]   = useState(true)
+  const [showMoodSelector, setShowMoodSelector] = useState(false)
   const [apiError, setApiError] = useState(false)
 
   useEffect(() => {
@@ -95,21 +99,37 @@ export default function HomePage() {
       const mixMap = {}
       MIXES.forEach((m, i) => { mixMap[m.id] = mixResults[i].status === 'fulfilled' ? mixResults[i].value : [] })
       setChart(chartData); setTrending(trendData); setNew(newData); setMixes(mixMap)
-      if (!chartData.length && !trendData.length && !newData.length) setApiError(true)
+      
+      // Check if all APIs failed
+      const totalSongs = chartData.length + trendData.length + newData.length
+      if (totalSongs === 0) {
+        console.warn('🚨 All music APIs appear to be unreachable')
+        setApiError(true)
+      }
+      
       setLoading(false)
     })
     return () => { cancelled = true }
   }, [])
 
-  // Load recently played
+  // Load recently played and recommendations
   useEffect(() => {
     if (!user) return
+    
+    // Load recently played
     getUser(user.uid).then(async p => {
       const ids = (p?.recentlyPlayed || []).slice(0, 8)
       if (!ids.length) return
       const songs = (await Promise.all(ids.map(id => getSongById(id)))).filter(Boolean)
       setRecent(songs)
     }).catch(() => {})
+
+    // Load AI recommendations
+    getRecommendations(user.uid, 15).then(recs => {
+      setRecommendations(recs)
+    }).catch(err => {
+      console.warn('Failed to load recommendations:', err)
+    })
   }, [user])
 
   if (loading) return (
@@ -120,45 +140,95 @@ export default function HomePage() {
   )
 
   return (
-    <div className="px-6 py-6 pb-8">
-      <h1 className="text-3xl font-bold mb-8">
-        {greeting()}{profile?.name ? `, ${profile.name.split(' ')[0]}` : ''} 👋
+    <div className="px-4 lg:px-6 py-4 lg:py-6 pb-8">
+      <h1 className="text-2xl lg:text-3xl font-bold mb-6 lg:mb-8">
+        {greeting()} 👋
       </h1>
 
       {/* API error notice */}
       {apiError && (
         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-6 text-sm text-yellow-400">
-          ⚠️ Could not reach music servers. Check your internet connection and refresh.
+          <div className="flex items-start gap-3">
+            <span className="text-lg">⚠️</span>
+            <div>
+              <p className="font-medium mb-1">Music APIs Unreachable</p>
+              <p className="text-xs text-yellow-300">
+                This might be due to network restrictions or CORS policies when accessing from mobile networks. 
+                Try connecting to a different network or use the desktop version.
+              </p>
+              <button 
+                onClick={() => window.location.reload()} 
+                className="mt-2 text-xs bg-yellow-500/20 hover:bg-yellow-500/30 px-3 py-1 rounded-full transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
       {/* Recently Played quick row */}
       {recentSongs.length > 0 && (
-        <section className="mb-8">
+        <section className="mb-6 lg:mb-8">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold flex items-center gap-2"><Clock size={20} /> Recently Played</h2>
+            <h2 className="text-lg lg:text-xl font-bold flex items-center gap-2"><Clock size={18} className="lg:hidden" /><Clock size={20} className="hidden lg:block" /> Recently Played</h2>
             <Link to="/library" className="text-xs text-gray-400 hover:text-white uppercase tracking-wider transition-colors">See all</Link>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-2 lg:gap-3">
             {recentSongs.map(song => (
               <button key={song.id} onClick={() => play(song, recentSongs, recentSongs.findIndex(s => s.id === song.id))}
-                className="flex items-center gap-3 bg-surface-2 hover:bg-surface-3 rounded-lg px-3 py-2 transition-all hover:scale-[1.02] group text-left">
+                className="flex items-center gap-2 lg:gap-3 bg-surface-2 hover:bg-surface-3 rounded-lg px-2 lg:px-3 py-2 transition-all hover:scale-[1.02] group text-left">
                 <img src={song.coverUrl || 'https://via.placeholder.com/40'} alt={song.title}
-                  className="w-10 h-10 rounded object-cover shrink-0" />
-                <p className="text-sm font-medium truncate">{song.title}</p>
+                  className="w-8 h-8 lg:w-10 lg:h-10 rounded object-cover shrink-0" />
+                <p className="text-xs lg:text-sm font-medium truncate">{song.title}</p>
               </button>
             ))}
           </div>
         </section>
       )}
 
+      {/* Mood-based recommendations */}
+      <section className="mb-6 lg:mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg lg:text-xl font-bold flex items-center gap-2">🎭 Music for Your Mood</h2>
+          <button 
+            onClick={() => setShowMoodSelector(true)}
+            className="text-xs text-gray-400 hover:text-white uppercase tracking-wider transition-colors"
+          >
+            Choose Mood
+          </button>
+        </div>
+        <button
+          onClick={() => setShowMoodSelector(true)}
+          className="w-full bg-gradient-to-r from-purple-600/20 via-pink-600/20 to-blue-600/20 border border-white/10 rounded-xl p-4 lg:p-6 hover:border-brand/30 transition-all group"
+        >
+          <div className="flex items-center justify-center gap-3 mb-2">
+            <Sparkles size={20} className="text-brand lg:hidden" />
+            <Sparkles size={24} className="text-brand hidden lg:block" />
+            <span className="text-base lg:text-lg font-bold">Discover Music by Mood</span>
+          </div>
+          <p className="text-xs lg:text-sm text-gray-400 group-hover:text-gray-300 transition-colors">
+            Get AI-powered recommendations based on how you're feeling right now
+          </p>
+        </button>
+      </section>
+
+      {/* AI Recommendations */}
+      {recommendations.length > 0 && (
+        <SectionRow 
+          title="🤖 Recommended for You" 
+          songs={recommendations} 
+          subtitle="Based on your listening history"
+        />
+      )}
+
       {/* Global chart */}
       {chart.length > 0 && <SectionRow title="🔥 Global Chart" songs={chart} />}
 
       {/* Daily Mixes */}
-      <section className="mb-8">
-        <h2 className="text-xl font-bold mb-4">🎛️ Your Daily Mixes</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <section className="mb-6 lg:mb-8">
+        <h2 className="text-lg lg:text-xl font-bold mb-4">🎛️ Your Daily Mixes</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 lg:gap-3">
           {MIXES.map(mix => (
             <MixCard key={mix.id} mix={mix} songs={mixes[mix.id] || []} onPlay={play} />
           ))}
@@ -166,17 +236,17 @@ export default function HomePage() {
       </section>
 
       {/* Genre grid — always show */}
-      <section className="mb-8">
-        <h2 className="text-xl font-bold mb-4">Browse Genres</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+      <section className="mb-6 lg:mb-8">
+        <h2 className="text-lg lg:text-xl font-bold mb-4">Browse Genres</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 lg:gap-3">
           {GENRES.map(g => (
             <Link
               key={g.name}
               to={`/genre/${g.name}`}
-              className={`bg-gradient-to-br ${g.color} rounded-xl p-4 h-24 flex flex-col justify-between hover:scale-105 transition-transform`}
+              className={`bg-gradient-to-br ${g.color} rounded-xl p-3 lg:p-4 h-20 lg:h-24 flex flex-col justify-between hover:scale-105 transition-transform`}
             >
-              <span className="text-2xl">{g.emoji}</span>
-              <span className="font-bold text-sm">{g.name}</span>
+              <span className="text-xl lg:text-2xl">{g.emoji}</span>
+              <span className="font-bold text-xs lg:text-sm">{g.name}</span>
             </Link>
           ))}
         </div>
@@ -184,6 +254,9 @@ export default function HomePage() {
 
       {trending.length > 0 && <SectionRow title="🎵 Trending Full Tracks" songs={trending} />}
       {newReleases.length > 0 && <SectionRow title="✨ New Releases" songs={newReleases} />}
+      
+      {/* Mood Selector Modal */}
+      {showMoodSelector && <MoodSelector onClose={() => setShowMoodSelector(false)} />}
     </div>
   )
 }

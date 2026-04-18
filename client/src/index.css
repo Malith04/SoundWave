@@ -242,3 +242,60 @@ input[type='range'].seek-bar-lg::-webkit-slider-thumb {
   cursor: pointer;
   accent-color: #1DB954;
 }
+
+/* Mobile-specific improvements */
+@media (max-width: 1024px) {
+  /* Larger touch targets for mobile */
+  input[type='range']::-webkit-slider-thumb {
+    width: 16px;
+    height: 16px;
+    margin-top: -6px;
+  }
+  
+  /* Better button spacing on mobile */
+  .mobile-touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Responsive text sizing */
+@media (max-width: 640px) {
+  .text-responsive-sm {
+    font-size: 0.75rem;
+  }
+  
+  .text-responsive-base {
+    font-size: 0.875rem;
+  }
+}
+
+/* Next-up song preview slide-in */
+@keyframes next-up-slide {
+  0%   { transform: translateY(100%); opacity: 0; }
+  20%  { transform: translateY(0);    opacity: 1; }
+  80%  { transform: translateY(0);    opacity: 1; }
+  100% { transform: translateY(0);    opacity: 1; }
+}
+.animate-next-up {
+  animation: next-up-slide 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Slide down animation for up next notification */
+@keyframes slide-down {
+  0%   { transform: translateY(-20px); opacity: 0; }
+  100% { transform: translateY(0);     opacity: 1; }
+}
+.animate-slide-down {
+  animation: slide-down 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Pulse animation for up next notification */
+@keyframes up-next-pulse {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+.animate-up-next-pulse {
+  animation: up-next-pulse 2s ease-in-out infinite;
+}

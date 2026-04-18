@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { PlayerProvider } from './context/PlayerContext'
 import { AudioSettingsProvider } from './context/AudioSettingsContext'
 import AppLayout from './components/AppLayout'
+import InstallPrompt from './components/InstallPrompt'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
@@ -71,6 +72,7 @@ export default function App() {
   return (
     <AuthProvider>
       <AppRoutes />
+      <InstallPrompt />
     </AuthProvider>
   )
 }

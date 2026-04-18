@@ -1,0 +1,18 @@
+{
+  "name": "soundwave-app",
+  "version": "1.0.0",
+  "description": "SoundWave - AI-Powered Music Streaming Platform",
+  "main": "index.js",
+  "scripts": {
+    "build": "cd client && npm run build",
+    "start": "cd client && npm run preview",
+    "dev": "cd client && npm run dev",
+    "install-client": "cd client && npm install"
+  },
+  "keywords": ["music", "streaming", "pwa", "ai", "recommendations"],
+  "author": "SoundWave Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

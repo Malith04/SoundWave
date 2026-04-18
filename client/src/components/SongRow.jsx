@@ -1,9 +1,10 @@
-import { Play, Pause, Heart, MoreHorizontal, ListPlus, Trash2, PlusCircle, ListMusic, X, Plus } from 'lucide-react'
+import { Play, Pause, Heart, MoreHorizontal, ListPlus, Trash2, PlusCircle, ListMusic, X, Plus, Info } from 'lucide-react'
 import { usePlayer } from '../context/PlayerContext'
 import { useAuth } from '../context/AuthContext'
 import { useState, useRef, useEffect } from 'react'
 import { toggleFavorite, isFavorite } from '../services/userService'
 import { getUserPlaylists, createPlaylist, addSongToPlaylist } from '../services/playlistService'
+import SongModal from './SongModal'
 import toast from 'react-hot-toast'
 
 function formatTime(ms) {
@@ -138,7 +139,7 @@ function AddToPlaylistModal({ song, onClose }) {
 }
 
 // ── Context Menu ──────────────────────────────────────────────
-function SongMenu({ song, queue, onRemove, onClose, anchorRef, onAddToPlaylist }) {
+function SongMenu({ song, queue, onRemove, onClose, anchorRef, onAddToPlaylist, onShowDetails }) {
   const { user } = useAuth()
   const [liked, setLiked] = useState(false)
   const menuRef = useRef(null)
@@ -189,6 +190,14 @@ function SongMenu({ song, queue, onRemove, onClose, anchorRef, onAddToPlaylist }
       </div>
 
       <button
+        onClick={e => { e.stopPropagation(); onClose(); onShowDetails() }}
+        className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-200 hover:bg-white/10 transition-colors text-left"
+      >
+        <Info size={16} />
+        Song Details
+      </button>
+
+      <button
         onClick={handleFavorite}
         className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-white/10 transition-colors text-left ${liked ? 'text-brand' : 'text-gray-200'}`}
       >
@@ -234,10 +243,11 @@ export default function SongRow({ song, index, queue, onRemove, showIndex = true
   const [hovered, setHovered] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [showPlaylistModal, setShowPlaylistModal] = useState(false)
+  const [showSongModal, setShowSongModal] = useState(false)
   const menuBtnRef = useRef(null)
 
   const handlePlay = () => {
-    if (showPlaylistModal) return   // don't play while modal is open
+    if (showPlaylistModal || showSongModal) return   // don't play while modal is open
     if (isActive) togglePlay()
     else play(song, queue || [song], queue ? queue.findIndex(s => s.id === song.id) : 0)
   }
@@ -246,6 +256,10 @@ export default function SongRow({ song, index, queue, onRemove, showIndex = true
     <>
       {showPlaylistModal && (
         <AddToPlaylistModal song={song} onClose={() => setShowPlaylistModal(false)} />
+      )}
+      
+      {showSongModal && (
+        <SongModal song={song} queue={queue} onClose={() => setShowSongModal(false)} />
       )}
 
       <div
@@ -300,6 +314,7 @@ export default function SongRow({ song, index, queue, onRemove, showIndex = true
               onClose={() => setMenuOpen(false)}
               anchorRef={menuBtnRef}
               onAddToPlaylist={() => setShowPlaylistModal(true)}
+              onShowDetails={() => setShowSongModal(true)}
             />
           )}
         </div>

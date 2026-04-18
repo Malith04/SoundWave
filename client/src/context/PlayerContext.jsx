@@ -70,45 +70,124 @@ export function PlayerProvider({ children }) {
   useEffect(() => { currentSongRef.current = currentSong }, [currentSong])
 
   // ── Live-apply settings changes to current playback ──────
-  // Playback speed
+  // Playback speed - improved with force application
   useEffect(() => {
-    if (!settings?.speed) return
-    try { howlRef.current?.rate(settings.speed) } catch (_) {}
-    try { ytPlayerRef.current?.setPlaybackRate?.(settings.speed) } catch (_) {}
-  }, [settings?.speed])
+    console.log('Applying playback speed:', settings?.speed, 'Current Howl:', !!howlRef.current)
+    
+    if (!settings?.speed) {
+      console.log('No speed setting, skipping')
+      return
+    }
+    
+    try { 
+      if (howlRef.current) {
+        console.log('Setting Howler rate from', howlRef.current.rate(), 'to', settings.speed)
+        howlRef.current.rate(settings.speed)
+        console.log('Howler speed set successfully to:', howlRef.current.rate())
+      } else {
+        console.log('No Howler instance available for speed change')
+      }
+    } catch (e) { 
+      console.warn('Failed to set Howler speed:', e)
+    }
+    
+    try { 
+      if (ytPlayerRef.current?.setPlaybackRate) {
+        console.log('Setting YouTube playback rate to:', settings.speed)
+        ytPlayerRef.current.setPlaybackRate(settings.speed)
+        console.log('YouTube speed set successfully')
+      } else {
+        console.log('No YouTube player available for speed change')
+      }
+    } catch (e) { 
+      console.warn('Failed to set YouTube speed:', e)
+    }
+  }, [settings?.speed, currentSong]) // Added currentSong dependency to reapply on song change
 
   // Loud volume boost
   useEffect(() => {
     if (!howlRef.current) return
     const base = mutedRef.current ? 0 : volumeRef.current / 100
-    try { howlRef.current.volume(settings?.loudVolume ? Math.min(base * 1.5, 1) : base) } catch (_) {}
-  }, [settings?.loudVolume])
+    const finalVolume = settings?.loudVolume ? Math.min(base * 1.5, 1) : base
+    console.log('Applying loud volume:', settings?.loudVolume, 'Base volume:', base, 'Final volume:', finalVolume)
+    try { 
+      howlRef.current.volume(finalVolume)
+      console.log('Volume applied successfully')
+    } catch (e) { 
+      console.warn('Failed to set volume:', e)
+    }
+  }, [settings?.loudVolume, volume, isMuted])
 
   // Normalization — re-apply volume cap
   useEffect(() => {
     if (!howlRef.current) return
     const base = mutedRef.current ? 0 : volumeRef.current / 100
     const vol = settings?.normalize ? Math.min(base, 0.85) : base
-    try { howlRef.current.volume(vol) } catch (_) {}
-  }, [settings?.normalize])
+    console.log('Applying normalization:', settings?.normalize, 'Base volume:', base, 'Normalized volume:', vol)
+    try { 
+      howlRef.current.volume(vol)
+      console.log('Normalization applied successfully')
+    } catch (e) { 
+      console.warn('Failed to set normalized volume:', e)
+    }
+  }, [settings?.normalize, volume, isMuted])
 
   // ── Crossfade: fade out near end, fade in on start ────────
   const crossfadeRef = useRef(null)
   useEffect(() => {
     clearInterval(crossfadeRef.current)
     const secs = settings?.crossfade ?? 0
-    if (secs <= 0 || !howlRef.current) return
+    console.log('Setting up crossfade:', secs, 'seconds', 'Current song:', currentSong?.title, 'Is playing:', isPlaying)
+    
+    if (secs <= 0) {
+      console.log('Crossfade disabled (0 seconds)')
+      return
+    }
+    
+    if (!howlRef.current) {
+      console.log('No Howler instance for crossfade')
+      return
+    }
+    
+    if (!isPlaying) {
+      console.log('Not playing, crossfade not needed')
+      return
+    }
+    
+    console.log('Starting crossfade interval check every 200ms')
     crossfadeRef.current = setInterval(() => {
       const h = howlRef.current
-      if (!h || !h.playing()) return
-      const remaining = (h.duration() || 0) - (h.seek() || 0)
+      if (!h || !h.playing()) {
+        console.log('Howler not playing, skipping crossfade check')
+        return
+      }
+      
+      const currentPos = h.seek() || 0
+      const totalDuration = h.duration() || 0
+      const remaining = totalDuration - currentPos
+      
       if (remaining > 0 && remaining <= secs) {
-        const fadeVol = Math.max(0, (remaining / secs) * (volumeRef.current / 100))
-        try { h.volume(fadeVol) } catch (_) {}
+        const baseVol = mutedRef.current ? 0 : volumeRef.current / 100
+        const fadeVol = Math.max(0, (remaining / secs) * baseVol)
+        console.log('🎵 CROSSFADE ACTIVE:', {
+          remaining: remaining.toFixed(1) + 's',
+          fadeVol: fadeVol.toFixed(2),
+          baseVol: baseVol.toFixed(2),
+          crossfadeDuration: secs + 's'
+        })
+        try { 
+          h.volume(fadeVol)
+        } catch (e) { 
+          console.warn('Crossfade volume error:', e)
+        }
       }
     }, 200)
-    return () => clearInterval(crossfadeRef.current)
-  }, [settings?.crossfade, isPlaying])
+    
+    return () => {
+      console.log('Cleaning up crossfade interval')
+      clearInterval(crossfadeRef.current)
+    }
+  }, [settings?.crossfade, isPlaying, currentSong])
   useEffect(() => {
     const t = setInterval(() => {
       if (currentSongRef.current) {
@@ -128,48 +207,68 @@ export function PlayerProvider({ children }) {
   // ── YouTube IFrame API ────────────────────────────────────
   const initYTPlayer = useCallback((divId) => {
     const create = () => {
-      ytPlayerRef.current = new window.YT.Player(divId, {
-        height: '0', width: '0',
-        playerVars: { autoplay: 1, controls: 0, playsinline: 1 },
-        events: {
-          onReady: () => {
-            ytReadyRef.current = true
-            ytPlayerRef.current.setVolume(mutedRef.current ? 0 : volumeRef.current)
-            if (settings?.speed && settings.speed !== 1) {
-              try { ytPlayerRef.current.setPlaybackRate(settings.speed) } catch(_) {}
-            }
-            if (pendingYTRef.current) {
-              ytPlayerRef.current.loadVideoById(pendingYTRef.current)
-              pendingYTRef.current = null
-            }
+      try {
+        ytPlayerRef.current = new window.YT.Player(divId, {
+          height: '0', width: '0',
+          playerVars: { autoplay: 1, controls: 0, playsinline: 1 },
+          events: {
+            onReady: () => {
+              ytReadyRef.current = true
+              ytPlayerRef.current.setVolume(mutedRef.current ? 0 : volumeRef.current)
+              if (settings?.speed && settings.speed !== 1) {
+                try { ytPlayerRef.current.setPlaybackRate(settings.speed) } catch(_) {}
+              }
+              if (pendingYTRef.current) {
+                ytPlayerRef.current.loadVideoById(pendingYTRef.current)
+                pendingYTRef.current = null
+              }
+            },
+            onStateChange: (e) => {
+              const S = window.YT.PlayerState
+              if (e.data === S.PLAYING) { 
+                console.log('YouTube player started playing - upgrade successful!')
+                setIsPlaying(true); setIsLoading(false); startYTProgress() 
+              }
+              else if (e.data === S.PAUSED) { setIsPlaying(false); clearInterval(progressInterval.current) }
+              else if (e.data === S.ENDED) { clearInterval(progressInterval.current); handleEnd() }
+              else if (e.data === S.BUFFERING) { setIsLoading(true) }
+            },
+            onError: (e) => {
+              console.warn('YouTube player error:', e)
+              setIsLoading(false)
+              setError('YouTube failed — playing 30s preview')
+              const song = queueRef.current[queueIndexRef.current]
+              if (song?.audioUrl) playWithHowler(song, song.audioUrl)
+            },
           },
-          onStateChange: (e) => {
-            const S = window.YT.PlayerState
-            if (e.data === S.PLAYING) { setIsPlaying(true); setIsLoading(false); startYTProgress() }
-            else if (e.data === S.PAUSED) { setIsPlaying(false); clearInterval(progressInterval.current) }
-            else if (e.data === S.ENDED) { clearInterval(progressInterval.current); handleEnd() }
-            else if (e.data === S.BUFFERING) { setIsLoading(true) }
-          },
-          onError: () => {
-            setIsLoading(false)
-            setError('YouTube failed — playing 30s preview')
-            const song = queueRef.current[queueIndexRef.current]
-            if (song?.audioUrl) playWithHowler(song, song.audioUrl)
-          },
-        },
-      })
-    }
-    if (window.YT && window.YT.Player) { create() }
-    else {
-      window.onYouTubeIframeAPIReady = create
-      if (!document.getElementById('yt-iframe-api')) {
-        const s = document.createElement('script')
-        s.id = 'yt-iframe-api'
-        s.src = 'https://www.youtube.com/iframe_api'
-        document.head.appendChild(s)
+        })
+      } catch (error) {
+        console.error('Failed to create YouTube player:', error)
+        setError('YouTube player initialization failed')
       }
     }
-  }, [])
+    
+    try {
+      if (window.YT && window.YT.Player) { 
+        create() 
+      } else {
+        window.onYouTubeIframeAPIReady = create
+        if (!document.getElementById('yt-iframe-api')) {
+          const s = document.createElement('script')
+          s.id = 'yt-iframe-api'
+          s.src = 'https://www.youtube.com/iframe_api'
+          s.onerror = () => {
+            console.error('Failed to load YouTube IFrame API')
+            setError('YouTube API failed to load')
+          }
+          document.head.appendChild(s)
+        }
+      }
+    } catch (error) {
+      console.error('Error initializing YouTube API:', error)
+      setError('YouTube initialization failed')
+    }
+  }, [settings?.speed])
 
   const startYTProgress = useCallback(() => {
     clearInterval(progressInterval.current)
@@ -216,55 +315,154 @@ export function PlayerProvider({ children }) {
   }, [])
 
   const playWithHowler = useCallback((song, audioUrl, startAt = 0) => {
-    howlRef.current?.unload()
-    clearInterval(progressInterval.current)
-    ytPlayerRef.current?.stopVideo?.()
-    setEngine('howler')
-    setProgress(0); setCurrentTime(0); setDuration(0)
-
-    const speed = settings?.speed ?? 1.0
-    const baseVol = mutedRef.current ? 0 : volumeRef.current / 100
-    const vol = settings?.loudVolume
-      ? Math.min(baseVol * 1.5, 1)
-      : settings?.normalize
-        ? Math.min(baseVol, 0.85)
-        : baseVol
-
-    const howl = new Howl({
-      src: [audioUrl],
-      html5: true,
-      volume: vol,
-      rate: speed,
-      format: ['mp3', 'ogg', 'aac', 'm4a'],
-      onplay: () => {
-        if (startAt > 0) { howl.seek(startAt) }
-        // AudioContext is now live — apply all audio settings
-        setTimeout(() => applyAudioChain(settings), 50)
-        setIsPlaying(true); setIsLoading(false); startProgressTracking()
-      },
-      onpause: () => { setIsPlaying(false); clearInterval(progressInterval.current) },
-      onstop:  () => { setIsPlaying(false); clearInterval(progressInterval.current) },
-      onend:   handleEnd,
-      onloaderror: () => { setIsLoading(false); setError('Could not load audio.'); setIsPlaying(false) },
-      onplayerror: () => { setIsLoading(false); setError('Playback error.');        setIsPlaying(false) },
+    console.log('playWithHowler called:', {
+      title: song.title,
+      source: song.source,
+      audioUrl: audioUrl?.substring(0, 50) + '...',
+      startAt
     })
-    howlRef.current = howl
-    howl.play()
-  }, [startProgressTracking, handleEnd, settings?.speed, settings?.normalize])
+    
+    try {
+      howlRef.current?.unload()
+      clearInterval(progressInterval.current)
+      ytPlayerRef.current?.stopVideo?.()
+      setEngine('howler')
+      setProgress(0); setCurrentTime(0); setDuration(0)
+
+      const speed = settings?.speed ?? 1.0
+      const baseVol = mutedRef.current ? 0 : volumeRef.current / 100
+      const vol = settings?.loudVolume
+        ? Math.min(baseVol * 1.5, 1)
+        : settings?.normalize
+          ? Math.min(baseVol, 0.85)
+          : baseVol
+
+      console.log('Creating Howl with:', { speed, vol, audioUrl })
+
+      const howl = new Howl({
+        src: [audioUrl],
+        html5: true,
+        volume: vol,
+        rate: speed,
+        format: ['mp3', 'ogg', 'aac', 'm4a'],
+        onload: () => {
+          console.log('Howl loaded successfully, duration:', howl.duration())
+        },
+        onplay: () => {
+          console.log('Howl started playing')
+          if (startAt > 0) { 
+            console.log('Seeking to:', startAt)
+            howl.seek(startAt) 
+          }
+          
+          // Apply playback speed immediately
+          if (settings?.speed && settings.speed !== 1) {
+            console.log('Applying playback speed on play:', settings.speed)
+            try {
+              howl.rate(settings.speed)
+              console.log('Speed applied successfully:', howl.rate())
+            } catch (e) {
+              console.warn('Failed to apply speed on play:', e)
+            }
+          }
+          
+          // AudioContext is now live — apply all audio settings
+          setTimeout(() => {
+            try {
+              console.log('Song started playing, applying audio chain...')
+              applyAudioChain(settings)
+              
+              // Also re-apply volume settings that might have been overridden
+              const baseVol = mutedRef.current ? 0 : volumeRef.current / 100
+              const finalVol = settings?.loudVolume 
+                ? Math.min(baseVol * 1.5, 1) 
+                : settings?.normalize 
+                  ? Math.min(baseVol, 0.85) 
+                  : baseVol
+              howl.volume(finalVol)
+              console.log('Volume re-applied after audio chain:', finalVol)
+            } catch (error) {
+              console.warn('Failed to apply audio chain:', error)
+            }
+          }, 50)
+          setIsPlaying(true); setIsLoading(false); startProgressTracking()
+        },
+        onpause: () => { 
+          console.log('Howl paused')
+          setIsPlaying(false); clearInterval(progressInterval.current) 
+        },
+        onstop:  () => { 
+          console.log('Howl stopped')
+          setIsPlaying(false); clearInterval(progressInterval.current) 
+        },
+        onend:   () => {
+          console.log('Howl ended')
+          handleEnd()
+        },
+        onloaderror: (id, error) => { 
+          console.error('Howler load error:', error, 'URL:', audioUrl)
+          setIsLoading(false); setError('Could not load audio file'); setIsPlaying(false) 
+        },
+        onplayerror: (id, error) => { 
+          console.error('Howler play error:', error, 'URL:', audioUrl)
+          setIsLoading(false); setError('Playback error'); setIsPlaying(false) 
+        },
+      })
+      howlRef.current = howl
+      console.log('Starting Howl playback...')
+      howl.play()
+    } catch (error) {
+      console.error('Error in playWithHowler:', error)
+      setIsLoading(false)
+      setError('Failed to initialize audio player')
+      setIsPlaying(false)
+    }
+  }, [startProgressTracking, handleEnd, settings, applyAudioChain])
 
   const playWithYouTube = useCallback(async (song, startAt = 0) => {
+    console.log('playWithYouTube called for:', song.title, 'by', song.artist)
+    
     // Always try the 30s preview first so there's immediate audio feedback
     if (song.audioUrl) {
+      console.log('Playing 30s preview while searching for full track...')
       playWithHowler(song, song.audioUrl, startAt)
     }
 
     // Then try to upgrade to full YouTube track in background
-    if (!YT_API_KEY) return
+    if (!YT_API_KEY) {
+      console.warn('No YouTube API key configured - staying with preview')
+      return
+    }
+    
     try {
-      const videoId = await searchYouTube(`${song.title} ${song.artist}`)
-      if (!videoId) return
+      // Try multiple search variations for better results
+      const searchQueries = [
+        `${song.title} ${song.artist} official audio`,
+        `${song.title} ${song.artist} official`,
+        `${song.title} ${song.artist}`,
+        `${song.artist} ${song.title}`
+      ]
+      
+      let videoId = null
+      for (const searchQuery of searchQueries) {
+        console.log('Trying YouTube search:', searchQuery)
+        videoId = await searchYouTube(searchQuery)
+        if (videoId) {
+          console.log('Found video with query:', searchQuery)
+          break
+        }
+      }
+      
+      if (!videoId) {
+        console.log('No YouTube video found after trying all search variations - staying with preview')
+        return
+      }
+      
+      console.log('Found YouTube video, switching to full track:', videoId)
       setEngine('youtube')
+      
       if (ytReadyRef.current && ytPlayerRef.current) {
+        console.log('YouTube player ready, loading video...')
         howlRef.current?.unload()
         clearInterval(progressInterval.current)
         setProgress(0); setCurrentTime(0); setDuration(0)
@@ -272,24 +470,82 @@ export function PlayerProvider({ children }) {
         ytPlayerRef.current.setVolume(mutedRef.current ? 0 : volumeRef.current)
         ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startAt })
       } else {
+        console.log('YouTube player not ready, queuing video:', videoId)
         pendingYTRef.current = videoId
       }
-    } catch {
-      // already playing preview, nothing to do
+    } catch (error) {
+      console.error('YouTube upgrade failed:', error)
+      // Stay with preview - already playing
     }
   }, [playWithHowler])
 
   const loadAndPlay = useCallback((song, songQueue = [], index = 0, startAt = 0) => {
+    console.log('loadAndPlay called:', { song: song?.title, source: song?.source, hasAudioUrl: !!song?.audioUrl })
+    
+    // Defensive checks
+    if (!song) {
+      console.error('loadAndPlay: No song provided')
+      setError('No song to play')
+      return
+    }
+    
+    if (!song.id) {
+      console.error('loadAndPlay: Song missing ID', song)
+      setError('Invalid song data')
+      return
+    }
+
     setError(null); setIsLoading(true)
     setCurrentSong(song); setQueue(songQueue); setQueueIndex(index)
-    upsertSong(song).then(() => incrementPlayCount(song.id)).catch(() => {})
-    if (user && !settings?.privateSession) addToRecentlyPlayed(user.uid, song.id).catch(() => {})
+    
+    // Save to database (non-blocking)
+    upsertSong(song).then(() => incrementPlayCount(song.id)).catch(err => {
+      console.warn('Failed to update song stats:', err)
+    })
+    
+    // Add to recently played (non-blocking)
+    if (user && !settings?.privateSession) {
+      addToRecentlyPlayed(user.uid, song.id).catch(err => {
+        console.warn('Failed to add to recently played:', err)
+      })
+    }
 
-    if (song.source === 'jamendo' && song.audioUrl) playWithHowler(song, song.audioUrl, startAt)
-    else if (song.source === 'itunes') playWithYouTube(song, startAt)
-    else if (song.audioUrl) playWithHowler(song, song.audioUrl, startAt)
-    else { setIsLoading(false); setError('No audio available') }
-  }, [user, playWithHowler, playWithYouTube])
+    // Play the song - prioritize full-length sources
+    try {
+      console.log('Determining playback method for:', { 
+        title: song.title,
+        source: song.source, 
+        hasAudioUrl: !!song.audioUrl,
+        audioUrl: song.audioUrl?.substring(0, 50) + '...'
+      })
+      
+      // Always prefer Jamendo for full-length playback
+      if (song.source === 'jamendo' && song.audioUrl) {
+        console.log('✅ Playing Jamendo track with Howler (FULL LENGTH)')
+        playWithHowler(song, song.audioUrl, startAt)
+      } 
+      // iTunes tracks: try YouTube upgrade but start with preview
+      else if (song.source === 'itunes') {
+        console.log('⏳ Playing iTunes track - will attempt YouTube upgrade for full length')
+        playWithYouTube(song, startAt)
+      } 
+      // Any other track with audioUrl: play with Howler
+      else if (song.audioUrl) {
+        console.log('🎵 Playing track with Howler (fallback) - source:', song.source)
+        playWithHowler(song, song.audioUrl, startAt)
+      } 
+      // No audio source available
+      else {
+        console.error('❌ No audio source available for song:', song)
+        setIsLoading(false)
+        setError('No audio available for this track')
+      }
+    } catch (error) {
+      console.error('Error in loadAndPlay:', error)
+      setIsLoading(false)
+      setError('Failed to play track')
+    }
+  }, [user, playWithHowler, playWithYouTube, settings?.privateSession])
 
   // keep ref in sync so handleEnd can call it without stale closure
   useEffect(() => { loadAndPlayRef.current = loadAndPlay }, [loadAndPlay])
@@ -375,6 +631,48 @@ export function PlayerProvider({ children }) {
     })
   }, [])
 
+  // Force apply all audio settings - useful for debugging
+  const forceApplySettings = useCallback(() => {
+    console.log('🔧 FORCE APPLYING ALL AUDIO SETTINGS')
+    
+    // Apply speed
+    if (howlRef.current && settings?.speed) {
+      console.log('Force applying speed:', settings.speed)
+      try {
+        howlRef.current.rate(settings.speed)
+        console.log('Speed applied:', howlRef.current.rate())
+      } catch (e) {
+        console.error('Failed to apply speed:', e)
+      }
+    }
+    
+    // Apply volume settings
+    if (howlRef.current) {
+      const baseVol = mutedRef.current ? 0 : volumeRef.current / 100
+      const finalVol = settings?.loudVolume 
+        ? Math.min(baseVol * 1.5, 1) 
+        : settings?.normalize 
+          ? Math.min(baseVol, 0.85) 
+          : baseVol
+      console.log('Force applying volume:', finalVol)
+      try {
+        howlRef.current.volume(finalVol)
+        console.log('Volume applied successfully')
+      } catch (e) {
+        console.error('Failed to apply volume:', e)
+      }
+    }
+    
+    // Apply audio chain
+    try {
+      console.log('Force applying audio chain...')
+      applyAudioChain(settings)
+      console.log('Audio chain applied successfully')
+    } catch (e) {
+      console.error('Failed to apply audio chain:', e)
+    }
+  }, [settings, applyAudioChain])
+
   return (
     <PlayerContext.Provider value={{
       currentSong, queue, queueIndex, isPlaying, progress,
@@ -385,6 +683,7 @@ export function PlayerProvider({ children }) {
       toggleShuffle: () => setIsShuffled(s => !s),
       cycleRepeat: () => setRepeatMode(m => m === 'none' ? 'all' : m === 'all' ? 'one' : 'none'),
       initYTPlayer,
+      forceApplySettings, // Add this for debugging
     }}>
       {children}
     </PlayerContext.Provider>

@@ -104,12 +104,23 @@ export function AudioSettingsProvider({ children }) {
   // Safe to call multiple times — rebuilds only if ctx changed.
   const applyAudioChain = useCallback((s) => {
     const ctx = Howler.ctx
-    if (!ctx) return // AudioContext not ready yet — will be called again on next change
+    console.log('Applying audio chain:', { 
+      hasContext: !!ctx, 
+      contextState: ctx?.state,
+      settings: s 
+    })
+    
+    if (!ctx) {
+      console.log('AudioContext not ready yet — will be called again on next change')
+      return // AudioContext not ready yet — will be called again on next change
+    }
 
     const n = nodes.current
 
     // Build nodes if not built or if ctx changed
     if (!n.built || !n.bass) {
+      console.log('Building audio nodes...')
+      
       // Bass boost (lowshelf 100Hz)
       n.bass = ctx.createBiquadFilter()
       n.bass.type = 'lowshelf'
@@ -149,6 +160,7 @@ export function AudioSettingsProvider({ children }) {
         n.widthR.connect(n.merger, 0, 1)
         n.merger.connect(ctx.destination)
         n.built = true
+        console.log('Audio chain built successfully')
       } catch(e) {
         console.warn('Audio chain build failed:', e)
         return
@@ -156,39 +168,60 @@ export function AudioSettingsProvider({ children }) {
     }
 
     // ── Apply all values ──────────────────────────────────
+    console.log('Applying audio values...')
+    
     // Bass boost
-    n.bass.gain.value = s.bassBoost ?? 0
+    if (n.bass) {
+      n.bass.gain.value = s.bassBoost ?? 0
+      console.log('Bass boost applied:', s.bassBoost)
+    }
 
     // EQ
     EQ_BANDS.forEach(freq => {
       if (!n.eq[freq]) return
-      n.eq[freq].gain.value = s.eqEnabled ? (s.eq[freq] ?? 0) : 0
+      const gain = s.eqEnabled ? (s.eq[freq] ?? 0) : 0
+      n.eq[freq].gain.value = gain
     })
+    console.log('EQ applied:', s.eqEnabled ? 'enabled' : 'disabled')
 
     // Mono: both channels from left
     try {
       n.splitter.disconnect()
       if (s.mono) {
+        console.log('Applying mono audio')
         n.splitter.connect(n.widthL, 0)
         n.splitter.connect(n.widthR, 0) // both from left channel
       } else if (s.spatialEnabled) {
         const w = s.spatialWidth ?? 1.0
+        console.log('Applying spatial audio, width:', w)
         n.widthL.gain.value = w
         n.widthR.gain.value = w
         n.splitter.connect(n.widthL, 0)
         n.splitter.connect(n.widthR, 1)
       } else {
+        console.log('Applying normal stereo')
         n.widthL.gain.value = 1
         n.widthR.gain.value = 1
         n.splitter.connect(n.widthL, 0)
         n.splitter.connect(n.widthR, 1)
       }
-    } catch (_) {}
+    } catch (e) {
+      console.warn('Failed to apply spatial/mono settings:', e)
+    }
 
+    console.log('Audio chain application completed')
   }, [])
 
   // Re-apply chain whenever relevant audio settings change
   useEffect(() => {
+    console.log('Audio settings changed, applying chain:', {
+      eqEnabled: settings.eqEnabled,
+      bassBoost: settings.bassBoost,
+      mono: settings.mono,
+      spatialEnabled: settings.spatialEnabled,
+      spatialWidth: settings.spatialWidth,
+      loudVolume: settings.loudVolume
+    })
     applyAudioChain(settings)
   }, [
     settings.eqEnabled, settings.eq,
@@ -196,6 +229,7 @@ export function AudioSettingsProvider({ children }) {
     settings.mono,
     settings.spatialEnabled, settings.spatialWidth,
     settings.loudVolume,
+    applyAudioChain
   ])
 
   // ── State updaters ────────────────────────────────────────
