@@ -24,6 +24,27 @@ export async function updateUser(uid, data) {
   }
 }
 
+export async function uploadProfilePicture(file) {
+  const formData = new FormData()
+  formData.append('image', file)
+
+  const token = localStorage.getItem('sw_auth_token')
+  const res = await fetch('/api/auth/profile-picture', {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: formData
+  })
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}))
+    throw new Error(errorData.error || 'Failed to upload profile picture')
+  }
+
+  return await res.json()
+}
+
 export async function addToRecentlyPlayed(uid, songId, songData = {}) {
   try {
     if (!songId) return

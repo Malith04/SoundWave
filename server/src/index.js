@@ -5,7 +5,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { initDb } from './db/index.js'
 
-import authRoutes from './routes/auth.js'
+import authRoutes, { purgeExpiredAccounts } from './routes/auth.js'
 import songsRoutes from './routes/songs.js'
 import playlistsRoutes from './routes/playlists.js'
 import usersRoutes from './routes/users.js'
@@ -72,6 +72,11 @@ app.use((err, req, res, next) => {
 // ── Start Server ──
 async function start() {
   await initDb()
+
+  // Run cleanup of any accounts whose 14-day recovery window expired
+  await purgeExpiredAccounts()
+  // Run periodic hourly check
+  setInterval(purgeExpiredAccounts, 60 * 60 * 1000)
 
   app.listen(PORT, () => {
     console.log(`🚀 SoundWave Server running on http://localhost:${PORT}`)

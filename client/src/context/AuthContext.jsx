@@ -46,7 +46,7 @@ export function AuthProvider({ children }) {
     setAuthToken(data.token)
     setUser(data.user)
     setProfile(data.user)
-    return data.user
+    return { ...data.user, restored: data.restored, message: data.message }
   }
 
   const signup = async (email, password, name) => {
@@ -88,7 +88,7 @@ export function AuthProvider({ children }) {
       setAuthToken(data.token)
       setUser(data.user)
       setProfile(data.user)
-      return { user: data.user, isNewUser: data.isNewUser }
+      return { user: data.user, isNewUser: data.isNewUser, restored: data.restored, message: data.message }
     }
   }
 

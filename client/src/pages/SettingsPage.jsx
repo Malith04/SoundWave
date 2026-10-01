@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useAudioSettings, EQ_PRESETS } from '../context/AudioSettingsContext'
 import { useAuth } from '../context/AuthContext'
 import { usePlayer } from '../context/PlayerContext'
-import { updateUser, clearSearchHistory, clearRecentlyPlayed } from '../services/userService'
+import { updateUser, uploadProfilePicture, clearSearchHistory, clearRecentlyPlayed } from '../services/userService'
 import { api } from '../services/api'
 import {
   RotateCcw, SlidersHorizontal, Wind, Waves, Gauge, Music2,
@@ -431,6 +431,7 @@ function AccountTab({ profile, logout, navigate }) {
   const [country, setCountry]   = useState(profile?.country || user?.country || '')
   const [language, setLanguage] = useState(profile?.language || user?.language || 'en')
   const [gender, setGender]     = useState(profile?.gender || user?.gender || '')
+  const [birthDate, setBirthDate] = useState(profile?.birthDate || profile?.birth_date || user?.birthDate || '')
   const [saving, setSaving]     = useState(false)
   const [imgError, setImgError] = useState(false)
 
@@ -457,6 +458,7 @@ function AccountTab({ profile, logout, navigate }) {
       if (profile.country) setCountry(profile.country)
       if (profile.language) setLanguage(profile.language)
       if (profile.gender) setGender(profile.gender)
+      if (profile.birthDate || profile.birth_date) setBirthDate(profile.birthDate || profile.birth_date)
       if (profile.profilePicUrl) {
         setProfilePic(profile.profilePicUrl)
         setImgError(false)
@@ -467,25 +469,25 @@ function AccountTab({ profile, logout, navigate }) {
   const handlePicUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 8 * 1024 * 1024) {
-      toast.error('Image must be under 8MB')
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image must be under 10MB')
       return
     }
 
     setUploadingPic(true)
     try {
-      const dataUrl = await compressImage(file, 320, 320, 0.85)
-      setProfilePic(dataUrl)
+      // Upload directly to Supabase Storage S3 bucket via server endpoint
+      const res = await uploadProfilePicture(file)
+      const newUrl = res.profilePicUrl
+      setProfilePic(newUrl)
       setImgError(false)
 
-      await updateUser(user.uid, { profilePicUrl: dataUrl })
-
       if (user?.uid) {
-        localStorage.setItem(`sw_profile_pic_${user.uid}`, dataUrl)
+        localStorage.setItem(`sw_profile_pic_${user.uid}`, newUrl)
       }
 
       await refreshProfile()
-      toast.success('Profile picture updated successfully!')
+      toast.success('Profile picture saved to Supabase Storage & database!')
     } catch (err) {
       console.error('Upload failed:', err)
       toast.error('Failed to update picture: ' + (err.message || 'Unknown error'))
@@ -503,12 +505,13 @@ function AccountTab({ profile, logout, navigate }) {
         displayName: name.trim(),
         name: name.trim(),
         bio: bio.trim(),
+        gender,
+        birthDate,
         country,
         language,
-        gender,
       })
       await refreshProfile()
-      toast.success('Profile updated successfully!')
+      toast.success('Profile details saved to database!')
     } catch (err) {
       toast.error('Failed to save profile: ' + (err.message || 'Unknown error'))
     } finally {
@@ -558,9 +561,12 @@ function AccountTab({ profile, logout, navigate }) {
   const handleDeleteAccount = async () => {
     setDeletingAccount(true)
     try {
-      await api.delete('/auth/account')
+      const res = await api.delete('/auth/account')
       await logout()
-      toast.success('Your account has been deleted.')
+      toast.success(
+        res?.message || 'Account scheduled for deletion. Your data is backed up for 14 days — log back in anytime to restore!',
+        { duration: 6000 }
+      )
       navigate('/login')
     } catch (err) {
       toast.error(err.message || 'Failed to delete account')
@@ -654,7 +660,7 @@ function AccountTab({ profile, logout, navigate }) {
               className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors resize-none"
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="text-xs text-gray-400 uppercase tracking-wider font-semibold block mb-1.5">Gender</label>
               <select
@@ -668,6 +674,15 @@ function AccountTab({ profile, logout, navigate }) {
                 <option value="nonbinary">Non-binary</option>
                 <option value="other">Other</option>
               </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 uppercase tracking-wider font-semibold block mb-1.5">Birth Date</label>
+              <input
+                type="date"
+                value={birthDate}
+                onChange={e => setBirthDate(e.target.value)}
+                className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand transition-colors scheme-dark"
+              />
             </div>
             <div>
               <label className="text-xs text-gray-400 uppercase tracking-wider font-semibold block mb-1.5">Country</label>
@@ -796,21 +811,41 @@ function AccountTab({ profile, logout, navigate }) {
             </button>
           ) : (
             <div className="space-y-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
-              <p className="text-sm text-red-400 font-semibold">Warning: This will permanently erase your playlists, listening history, and user profile.</p>
-              <p className="text-xs text-gray-400">Please type <strong className="text-white font-mono bg-black/40 px-2 py-0.5 rounded">DELETE</strong> to confirm.</p>
-              <input
-                value={deleteInput}
-                onChange={e => setDeleteInput(e.target.value)}
-                placeholder="Type DELETE"
-                className="w-full bg-surface-3 border border-red-500/40 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors font-mono"
-              />
+              <div className="flex items-start gap-2.5">
+                <Trash2 size={18} className="text-red-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm text-red-400 font-semibold">14-Day Deletion & Backup Protection</p>
+                  <p className="text-xs text-gray-300 mt-1 leading-relaxed">
+                    Your account will be deactivated and logged out immediately. All your playlists, favorites, and profile data will remain <strong>safely backed up for 14 days</strong>.
+                  </p>
+                  <p className="text-xs text-emerald-400 mt-1.5 font-medium">
+                    💡 If you change your mind, simply log back in with your account within 14 days to instantly restore everything.
+                  </p>
+                  <p className="text-xs text-red-400/80 mt-1">
+                    ⚠️ If you do not log in for more than 14 days, your account and all data will be permanently purged from the database.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-1">
+                <p className="text-xs text-gray-400 mb-1.5">
+                  Please type <strong className="text-white font-mono bg-black/40 px-2 py-0.5 rounded">DELETE</strong> to confirm:
+                </p>
+                <input
+                  value={deleteInput}
+                  onChange={e => setDeleteInput(e.target.value)}
+                  placeholder="Type DELETE"
+                  className="w-full bg-surface-3 border border-red-500/40 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors font-mono"
+                />
+              </div>
+
               <div className="flex gap-3 pt-1">
                 <button
                   disabled={deleteInput !== 'DELETE' || deletingAccount}
                   onClick={handleDeleteAccount}
                   className="bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-full text-sm transition-colors disabled:opacity-30"
                 >
-                  {deletingAccount ? 'Deleting...' : 'Delete Forever'}
+                  {deletingAccount ? 'Scheduling Deletion...' : 'Deactivate & Schedule Deletion'}
                 </button>
                 <button
                   onClick={() => { setShowDeleteConfirm(false); setDeleteInput('') }}

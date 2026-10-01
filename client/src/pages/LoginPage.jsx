@@ -17,6 +17,12 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const loggedUser = await login(email, password)
+      if (loggedUser?.restored) {
+        toast.success(
+          loggedUser.message || '🎉 Welcome back! Your account and all playlists have been restored from backup.',
+          { duration: 5000 }
+        )
+      }
       if (!loggedUser?.onboardingCompleted) {
         navigate('/onboarding')
       } else {
@@ -33,6 +39,12 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const res = await loginWithGoogle()
+      if (res?.restored) {
+        toast.success(
+          res.message || '🎉 Welcome back! Your account and all playlists have been restored from backup.',
+          { duration: 5000 }
+        )
+      }
       if (res?.isNewUser || !res?.user?.onboardingCompleted) {
         navigate('/onboarding')
       } else if (res?.user) {
