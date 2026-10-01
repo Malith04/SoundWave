@@ -229,8 +229,8 @@ function QueuePanel({ queue, queueIndex, onClose, onPlay, expanded = false }) {
 function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duration, volume, isMuted,
   isShuffled, repeatMode, isLoading, error, engine, queue, queueIndex, liked, onLike, onClose,
   togglePlay, seek, next, previous, setVolume, toggleMute, toggleShuffle, cycleRepeat, play,
-  showParticles }) {
-  const [panel, setPanel] = useState(null)
+  showParticles, settings, switchEngine }) {
+  const [panel, setPanel] = useState(() => (settings?.autoLyrics ? 'lyrics' : null))
   const [viewMode, setViewMode] = useState('audio')
   const [videoId, setVideoId] = useState(null)
   const [loadingVideo, setLoadingVideo] = useState(false)
@@ -285,8 +285,9 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
               {viewMode === 'audio' ? (
                 <>
                   <div className="absolute -inset-3 rounded-2xl opacity-30 blur-2xl" style={{ background: 'var(--brand)' }} />
-                  <div className="relative w-full aspect-square rounded-2xl overflow-hidden shadow-2xl">
-                    <img src={currentSong.coverUrl || 'https://via.placeholder.com/300'} alt={currentSong.title} className="w-full h-full object-cover" />
+                  <div className={`relative w-full aspect-square rounded-2xl overflow-hidden shadow-2xl ${settings?.animatedArt && isPlaying ? 'album-glow' : ''}`}>
+                    <img src={currentSong.coverUrl || 'https://via.placeholder.com/300'} alt={currentSong.title}
+                      className={`w-full h-full object-cover transition-transform duration-500 ${settings?.animatedArt && isPlaying ? 'scale-105' : ''}`} />
                   </div>
                 </>
               ) : (
@@ -310,6 +311,9 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
               <p className="text-xl font-bold leading-tight mb-1 truncate">{currentSong.title}</p>
               <p className="text-gray-400 text-sm truncate">{currentSong.artist}</p>
               {currentSong.album && <p className="text-xs text-gray-600 mt-0.5 truncate">{currentSong.album}</p>}
+              {settings?.showCredits && (
+                <p className="text-[11px] text-gray-500 mt-1">Source: {currentSong.source} {currentSong.genre ? `• ${currentSong.genre}` : ''}</p>
+              )}
             </div>
 
             {/* Like + badge */}
@@ -317,9 +321,15 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
               <button onClick={onLike} className={`touch-target transition-all active:scale-90 ${liked ? 'text-brand' : 'text-gray-500 hover:text-white'}`}>
                 <Heart size={22} fill={liked ? 'currentColor' : 'none'} />
               </button>
-              <span className={`text-xs px-3 py-1.5 rounded-full font-semibold ${currentSong.source === 'jamendo' ? 'bg-brand/20 text-brand' : 'bg-purple-500/20 text-purple-400'}`}>
-                {currentSong.source === 'jamendo' ? 'Full Track' : engine === 'youtube' ? 'Full Track' : '30s Preview'}
-              </span>
+              <button
+                type="button"
+                onClick={() => switchEngine?.(engine === 'youtube' ? 'howler' : 'youtube')}
+                title="Click to toggle Studio EQ / YouTube stream"
+                className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+                  currentSong.source === 'jamendo' ? 'bg-brand/20 text-brand' : 'bg-purple-500/20 text-purple-400'
+                }`}>
+                {currentSong.source === 'jamendo' ? 'Full Track (Studio EQ)' : engine === 'youtube' ? 'Full Track (YouTube)' : 'Studio EQ Audio'}
+              </button>
               <AudioBars isPlaying={isPlaying} size="lg" />
             </div>
 
@@ -410,7 +420,7 @@ export default function Player() {
   const {
     currentSong, queue, queueIndex, isPlaying, progress, currentTime, duration,
     volume, isMuted, isShuffled, repeatMode, isLoading, error, engine,
-    play, togglePlay, seek, next, previous, setVolume, toggleMute, toggleShuffle, cycleRepeat
+    play, togglePlay, seek, next, previous, setVolume, toggleMute, toggleShuffle, cycleRepeat, switchEngine
   } = usePlayer()
   const { user } = useAuth()
   const { settings } = useAudioSettings()
@@ -492,6 +502,8 @@ export default function Player() {
           setVolume={setVolume} toggleMute={toggleMute} toggleShuffle={toggleShuffle}
           cycleRepeat={cycleRepeat} play={play}
           showParticles={settings?.particles !== false}
+          settings={settings}
+          switchEngine={switchEngine}
         />
       )}
 
@@ -585,9 +597,9 @@ export default function Player() {
         </div>
 
         {/* Desktop layout: full 3-column bar */}
-        <div className="hidden sm:flex items-center gap-3 px-4 py-2 h-[72px]">
+        <div className="hidden sm:flex items-center gap-4 px-4 sm:px-6 py-2 h-[72px]">
           {/* Left: song info */}
-          <div className="flex items-center gap-3 min-w-0 w-56 lg:w-64 shrink-0">
+          <div className="flex items-center gap-3 min-w-0 w-60 lg:w-72 shrink-0">
             <button onClick={() => setExpanded(true)} className="relative group shrink-0 touch-target" title="Open full player">
               <img src={currentSong.coverUrl} alt={currentSong.title}
                 className={`w-12 h-12 rounded-lg object-cover transition-all group-hover:scale-105 ${isPlaying ? 'ring-2 ring-brand/60' : ''}`} />
@@ -599,8 +611,17 @@ export default function Player() {
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold truncate leading-tight">{currentSong.title}</p>
               <p className="text-xs text-gray-400 truncate">{currentSong.artist}</p>
-              {currentSong.source === 'itunes' && <span className="text-xs text-purple-400">{engine === 'youtube' ? 'Full track' : '30s preview'}</span>}
-              {currentSong.source === 'jamendo' && <span className="text-xs text-brand">Full track</span>}
+              {currentSong.source === 'itunes' && (
+                <button
+                  type="button"
+                  onClick={() => switchEngine?.(engine === 'youtube' ? 'howler' : 'youtube')}
+                  title={engine === 'youtube' ? 'Switch to Studio Web Audio (Full EQ)' : 'Switch to Full YouTube Stream'}
+                  className="text-[11px] px-2 py-0.5 rounded-full font-semibold transition-all hover:scale-105 active:scale-95 bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 cursor-pointer"
+                >
+                  {engine === 'youtube' ? 'Full track (YT)' : 'Studio EQ'}
+                </button>
+              )}
+              {currentSong.source === 'jamendo' && <span className="text-xs text-brand font-medium">Full track (Studio EQ)</span>}
             </div>
             <button onClick={handleLike} className={`touch-target shrink-0 transition-all active:scale-125 ${liked ? 'text-brand' : 'text-gray-500 hover:text-white'}`}>
               <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
@@ -642,25 +663,28 @@ export default function Player() {
           </div>
 
           {/* Right: volume + extras */}
-          <div className="flex items-center gap-1.5 shrink-0 w-36 lg:w-44 justify-end">
+          <div className="flex items-center gap-2 lg:gap-2.5 shrink-0 w-60 lg:w-72 justify-end">
             <AudioBars isPlaying={isPlaying} />
             <button onClick={() => { setShowLyrics(l => !l); setShowQueue(false); setShowSleepTimer(false) }}
-              className={`touch-target transition-colors hidden lg:flex ${showLyrics ? 'text-brand' : 'text-gray-400 hover:text-white'}`}>
+              className={`p-2 rounded-full hover:bg-white/10 transition-colors hidden lg:flex items-center justify-center shrink-0 ${showLyrics ? 'text-brand' : 'text-gray-400 hover:text-white'}`}
+              title="Lyrics">
               <Mic2 size={17} />
             </button>
             <button onClick={() => { setShowQueue(q => !q); setShowLyrics(false); setShowSleepTimer(false) }}
-              className={`touch-target transition-colors ${showQueue ? 'text-brand' : 'text-gray-400 hover:text-white'}`}>
+              className={`p-2 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center shrink-0 ${showQueue ? 'text-brand' : 'text-gray-400 hover:text-white'}`}
+              title="Queue">
               <ListMusic size={17} />
             </button>
             <button onClick={() => { setShowSleepTimer(s => !s); setShowLyrics(false); setShowQueue(false) }}
-              className={`touch-target relative transition-colors hidden lg:flex ${showSleepTimer || sleepTimer ? 'text-brand' : 'text-gray-400 hover:text-white'}`}>
+              className={`p-2 rounded-full hover:bg-white/10 relative transition-colors hidden lg:flex items-center justify-center shrink-0 ${showSleepTimer || sleepTimer ? 'text-brand' : 'text-gray-400 hover:text-white'}`}
+              title="Sleep Timer">
               <Timer size={17} />
-              {sleepTimer && <span className="absolute -top-1 -right-1 w-2 h-2 bg-brand rounded-full animate-pulse" />}
+              {sleepTimer && <span className="absolute top-1 right-1 w-2 h-2 bg-brand rounded-full animate-pulse" />}
             </button>
-            <button onClick={toggleMute} className="touch-target text-gray-400 hover:text-white transition-colors">
+            <button onClick={toggleMute} className="p-2 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors flex items-center justify-center shrink-0" title={isMuted ? "Unmute" : "Mute"}>
               <VolumeIcon size={17} />
             </button>
-            <div className="w-16 lg:w-20">
+            <div className="w-20 lg:w-24 shrink-0 flex items-center pr-1">
               <input type="range" min={0} max={100} step={1} value={isMuted ? 0 : volume}
                 onChange={e => setVolume(parseFloat(e.target.value))}
                 className="w-full seek-bar unified-volume-bar cursor-pointer"

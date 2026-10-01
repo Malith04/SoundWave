@@ -1,8 +1,9 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { Home, Search, Library, Plus, LogOut, User, Settings, Heart } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { getUserPlaylists, createPlaylist } from '../services/playlistService'
+import CreatePlaylistModal from './CreatePlaylistModal'
 import toast from 'react-hot-toast'
 
 export default function Sidebar({ onNavigate }) {
@@ -10,7 +11,6 @@ export default function Sidebar({ onNavigate }) {
   const navigate = useNavigate()
   const [playlists, setPlaylists] = useState([])
   const [imgError, setImgError] = useState(false)
-
   const activeAvatar = profile?.profilePicUrl || user?.profilePicUrl || user?.photoURL || localStorage.getItem(`sw_profile_pic_${user?.uid}`) || null
 
   useEffect(() => {
@@ -21,8 +21,18 @@ export default function Sidebar({ onNavigate }) {
     setImgError(false)
   }, [activeAvatar])
 
-  const handleCreatePlaylist = async () => {
-    const name = prompt('Playlist name:')
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [anchorRect, setAnchorRect] = useState(null)
+  const plusButtonRef = useRef(null)
+
+  const handleOpenCreateModal = () => {
+    if (plusButtonRef.current) {
+      setAnchorRect(plusButtonRef.current.getBoundingClientRect())
+    }
+    setShowCreateModal(true)
+  }
+
+  const handleCreatePlaylist = async (name) => {
     if (!name?.trim()) return
     const id = await createPlaylist(user.uid, name.trim())
     toast.success('Playlist created')
@@ -87,7 +97,12 @@ export default function Sidebar({ onNavigate }) {
       <div className="px-3 flex-1 overflow-y-auto min-h-0">
         <div className="flex items-center justify-between mb-2 px-1">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Playlists</span>
-          <button onClick={handleCreatePlaylist} className="text-gray-400 hover:text-white transition-colors touch-target" title="Create playlist">
+          <button
+            ref={plusButtonRef}
+            onClick={handleOpenCreateModal}
+            className="text-gray-400 hover:text-white transition-colors touch-target"
+            title="Create playlist"
+          >
             <Plus size={18} />
           </button>
         </div>
@@ -132,6 +147,16 @@ export default function Sidebar({ onNavigate }) {
           <LogOut size={16} /> Sign Out
         </button>
       </div>
+
+      <CreatePlaylistModal
+        isOpen={showCreateModal}
+        onClose={() => {
+          setShowCreateModal(false)
+          setAnchorRect(null)
+        }}
+        onCreate={handleCreatePlaylist}
+        anchorRect={anchorRect}
+      />
     </aside>
   )
 }

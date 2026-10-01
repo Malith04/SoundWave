@@ -7,6 +7,7 @@ import { getUserPlaylists, createPlaylist } from '../services/playlistService'
 import { getUser, getFavoriteSongs, getRecentlyPlayed } from '../services/userService'
 import { getSongById } from '../services/songService'
 import SongRow from '../components/SongRow'
+import CreatePlaylistModal from '../components/CreatePlaylistModal'
 import toast from 'react-hot-toast'
 
 function PlaylistCover({ songIds }) {
@@ -32,39 +33,6 @@ function PlaylistCover({ songIds }) {
   )
 }
 
-function CreatePlaylistModal({ onClose, onCreate }) {
-  const [name, setName] = useState('')
-  const [loading, setLoading] = useState(false)
-  const handleSubmit = async e => {
-    e.preventDefault()
-    if (!name.trim()) return
-    setLoading(true)
-    await onCreate(name.trim())
-    setLoading(false)
-    onClose()
-  }
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="bg-[#282828] rounded-2xl w-full max-w-sm shadow-2xl">
-        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-white/10">
-          <h2 className="text-xl font-bold">Create Playlist</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={20} /></button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <input autoFocus value={name} onChange={e => setName(e.target.value)}
-            placeholder="My awesome playlist"
-            className="w-full bg-[#3e3e3e] border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors" required />
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-full border border-white/20 text-sm hover:bg-white/5 transition-colors">Cancel</button>
-            <button type="submit" disabled={loading || !name.trim()} className="flex-1 py-2.5 rounded-full bg-brand text-black font-bold text-sm disabled:opacity-50">
-              {loading ? 'Creating...' : 'Create'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
 
 export default function LibraryPage() {
   const { user } = useAuth()
@@ -116,8 +84,8 @@ export default function LibraryPage() {
   ]
 
   return (
-    <div className="mobile-page-container">
-      {showModal && <CreatePlaylistModal onClose={() => setShowModal(false)} onCreate={handleCreate} />}
+    <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-16 max-w-7xl mx-auto animate-fade-in">
+      <CreatePlaylistModal isOpen={showModal} onClose={() => setShowModal(false)} onCreate={handleCreate} />
 
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl sm:text-2xl font-bold">Your Library</h1>

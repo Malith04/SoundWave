@@ -331,6 +331,11 @@ export function PlayerProvider({ children }) {
       setEngine('howler')
       setProgress(0); setCurrentTime(0); setDuration(0)
 
+      // Ensure AudioContext is ready and un-suspended
+      if (Howler.ctx && Howler.ctx.state === 'suspended') {
+        Howler.ctx.resume().catch(() => {})
+      }
+
       const speed = settings?.speed ?? 1.0
       const baseVol = mutedRef.current ? 0 : volumeRef.current / 100
       const vol = settings?.loudVolume
@@ -339,79 +344,89 @@ export function PlayerProvider({ children }) {
           ? Math.min(baseVol, 0.85)
           : baseVol
 
-      console.log('Creating Howl with:', { speed, vol, audioUrl })
+      console.log('Creating Howl (Web Audio Mode) with:', { speed, vol, audioUrl })
 
+      // Primary: Web Audio API mode (html5: false) so Equalizer, Bass Boost, 3D Spatial Audio & Normalization process audio directly
       const howl = new Howl({
         src: [audioUrl],
-        html5: true,
+        html5: false,
         volume: vol,
         rate: speed,
         format: ['mp3', 'ogg', 'aac', 'm4a'],
         onload: () => {
-          console.log('Howl loaded successfully, duration:', howl.duration())
+          console.log('Howl loaded successfully via Web Audio, duration:', howl.duration())
         },
         onplay: () => {
-          console.log('Howl started playing')
+          console.log('Howl started playing via Web Audio')
           if (startAt > 0) { 
-            console.log('Seeking to:', startAt)
             howl.seek(startAt) 
           }
           
-          // Apply playback speed immediately
           if (settings?.speed && settings.speed !== 1) {
-            console.log('Applying playback speed on play:', settings.speed)
-            try {
-              howl.rate(settings.speed)
-              console.log('Speed applied successfully:', howl.rate())
-            } catch (e) {
-              console.warn('Failed to apply speed on play:', e)
-            }
+            try { howl.rate(settings.speed) } catch (_) {}
           }
           
-          // AudioContext is now live — apply all audio settings
-          setTimeout(() => {
-            try {
-              console.log('Song started playing, applying audio chain...')
-              applyAudioChain(settings)
-              
-              // Also re-apply volume settings that might have been overridden
-              const baseVol = mutedRef.current ? 0 : volumeRef.current / 100
-              const finalVol = settings?.loudVolume 
-                ? Math.min(baseVol * 1.5, 1) 
-                : settings?.normalize 
-                  ? Math.min(baseVol, 0.85) 
-                  : baseVol
-              howl.volume(finalVol)
-              console.log('Volume re-applied after audio chain:', finalVol)
-            } catch (error) {
-              console.warn('Failed to apply audio chain:', error)
-            }
-          }, 50)
+          // AudioContext is live — apply all audio settings immediately
+          try {
+            applyAudioChain(settings)
+          } catch (e) {
+            console.warn('Failed to apply audio chain on play:', e)
+          }
+
           setIsPlaying(true); setIsLoading(false); startProgressTracking()
         },
         onpause: () => { 
-          console.log('Howl paused')
           setIsPlaying(false); clearInterval(progressInterval.current) 
         },
-        onstop:  () => { 
-          console.log('Howl stopped')
+        onstop: () => { 
           setIsPlaying(false); clearInterval(progressInterval.current) 
         },
-        onend:   () => {
-          console.log('Howl ended')
+        onend: () => {
           handleEnd()
         },
         onloaderror: (id, error) => { 
-          console.error('Howler load error:', error, 'URL:', audioUrl)
-          setIsLoading(false); setError('Could not load audio file'); setIsPlaying(false) 
+          console.warn('Howler Web Audio load error, falling back to HTML5 audio element:', error)
+          // Fallback to HTML5 audio element
+          try {
+            const fallbackHowl = new Howl({
+              src: [audioUrl],
+              html5: true,
+              volume: vol,
+              rate: speed,
+              format: ['mp3', 'ogg', 'aac', 'm4a'],
+              onload: () => console.log('HTML5 fallback loaded successfully'),
+              onplay: () => {
+                // Route HTML5 audio element through Web Audio if supported
+                try {
+                  const node = fallbackHowl._sounds?.[0]?._node
+                  if (node && !node._sourceNode && Howler.ctx) {
+                    node.crossOrigin = 'anonymous'
+                    const src = Howler.ctx.createMediaElementSource(node)
+                    src.connect(Howler.masterGain)
+                    node._sourceNode = src
+                    applyAudioChain(settings)
+                  }
+                } catch (_) {}
+                setIsPlaying(true); setIsLoading(false); startProgressTracking()
+              },
+              onpause: () => { setIsPlaying(false); clearInterval(progressInterval.current) },
+              onstop: () => { setIsPlaying(false); clearInterval(progressInterval.current) },
+              onend: () => handleEnd(),
+              onloaderror: () => { setIsLoading(false); setError('Could not load audio file'); setIsPlaying(false) },
+              onplayerror: () => { setIsLoading(false); setError('Playback error'); setIsPlaying(false) },
+            })
+            howlRef.current = fallbackHowl
+            fallbackHowl.play()
+          } catch (e) {
+            setIsLoading(false); setError('Could not load audio'); setIsPlaying(false)
+          }
         },
         onplayerror: (id, error) => { 
-          console.error('Howler play error:', error, 'URL:', audioUrl)
+          console.error('Howler play error:', error)
           setIsLoading(false); setError('Playback error'); setIsPlaying(false) 
         },
       })
       howlRef.current = howl
-      console.log('Starting Howl playback...')
       howl.play()
     } catch (error) {
       console.error('Error in playWithHowler:', error)
@@ -527,10 +542,18 @@ export function PlayerProvider({ children }) {
         console.log('✅ Playing Jamendo track with Howler (FULL LENGTH)')
         playWithHowler(song, song.audioUrl, startAt)
       } 
-      // iTunes tracks: try YouTube upgrade but start with preview
+      // iTunes tracks: if user has Equalizer or Spatial Audio active, or requested Studio engine:
       else if (song.source === 'itunes') {
-        console.log('⏳ Playing iTunes track - will attempt YouTube upgrade for full length')
-        playWithYouTube(song, startAt)
+        const wantsStudioAudio = settings?.audioEngine === 'studio' || 
+          (settings?.audioEngine !== 'youtube' && (settings?.eqEnabled || settings?.bassBoost > 0 || settings?.spatialEnabled))
+
+        if (wantsStudioAudio && song.audioUrl) {
+          console.log('🎛️ Equalizer active — playing iTunes track with Studio Web Audio Engine')
+          playWithHowler(song, song.audioUrl, startAt)
+        } else {
+          console.log('⏳ Playing iTunes track - attempting YouTube upgrade for full length')
+          playWithYouTube(song, startAt)
+        }
       } 
       // Any other track with audioUrl: play with Howler
       else if (song.audioUrl) {
@@ -548,7 +571,23 @@ export function PlayerProvider({ children }) {
       setIsLoading(false)
       setError('Failed to play track')
     }
-  }, [user, playWithHowler, playWithYouTube, settings?.privateSession])
+  }, [user, playWithHowler, playWithYouTube, settings])
+
+  const switchEngine = useCallback((targetEngine) => {
+    const song = currentSongRef.current
+    if (!song) return
+    const curTime = currentTimeRef.current
+
+    if (targetEngine === 'howler' || targetEngine === 'studio') {
+      if (song.audioUrl) {
+        playWithHowler(song, song.audioUrl, curTime)
+      } else {
+        toast.error('No direct audio preview available for this track')
+      }
+    } else if (targetEngine === 'youtube') {
+      playWithYouTube(song, curTime)
+    }
+  }, [playWithHowler, playWithYouTube])
 
   // keep ref in sync so handleEnd can call it without stale closure
   useEffect(() => { loadAndPlayRef.current = loadAndPlay }, [loadAndPlay])
@@ -723,6 +762,7 @@ export function PlayerProvider({ children }) {
       toggleShuffle: () => setIsShuffled(s => !s),
       cycleRepeat: () => setRepeatMode(m => m === 'none' ? 'all' : m === 'all' ? 'one' : 'none'),
       initYTPlayer,
+      switchEngine,
       forceApplySettings, // Add this for debugging
     }}>
       {children}

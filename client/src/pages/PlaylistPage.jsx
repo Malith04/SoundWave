@@ -5,6 +5,7 @@ import { getPlaylist, deletePlaylist, renamePlaylist, removeSongFromPlaylist, re
 import { getSongById } from '../services/songService'
 import { usePlayer } from '../context/PlayerContext'
 import SongRow from '../components/SongRow'
+import CreatePlaylistModal from '../components/CreatePlaylistModal'
 import toast from 'react-hot-toast'
 
 // ── Playlist cover: 1 song = its cover, 2-4 = grid, else first 4 grid ──
@@ -77,12 +78,17 @@ export default function PlaylistPage() {
     play(queue[0], queue, 0)
   }
 
-  const handleRename = async () => {
-    const name = prompt('New name:', playlist.name)
-    if (!name?.trim() || name === playlist.name) return
-    await renamePlaylist(id, name.trim())
-    setPlaylist(p => ({ ...p, name: name.trim() }))
-    toast.success('Renamed')
+  const [showRenameModal, setShowRenameModal] = useState(false)
+
+  const handleRename = () => {
+    setShowRenameModal(true)
+  }
+
+  const handleRenameSubmit = async (newName) => {
+    if (!newName?.trim() || newName === playlist.name) return
+    await renamePlaylist(id, newName.trim())
+    setPlaylist(p => ({ ...p, name: newName.trim() }))
+    toast.success('Playlist renamed')
   }
 
   const handleDelete = async () => {
@@ -207,6 +213,16 @@ export default function PlaylistPage() {
         </div>
       ) : (
         <p className="text-gray-500 text-center py-12">This playlist is empty</p>
+      )}
+      {showRenameModal && (
+        <CreatePlaylistModal
+          isOpen={showRenameModal}
+          onClose={() => setShowRenameModal(false)}
+          onCreate={handleRenameSubmit}
+          initialName={playlist?.name || ''}
+          title="Rename Playlist"
+          buttonText="Save Name"
+        />
       )}
     </div>
   )

@@ -11,6 +11,7 @@ import { getRecommendations, getMoodPlaylist } from '../services/recommendationS
 import SectionRow from '../components/SectionRow'
 import MoodSelector from '../components/MoodSelector'
 import { usePlayer } from '../context/PlayerContext'
+import { useAudioSettings } from '../context/AudioSettingsContext'
 import { getUser } from '../services/userService'
 import { getSongById } from '../services/songService'
 import toast from 'react-hot-toast'
@@ -206,6 +207,7 @@ function FeedSkeleton() {
 export default function HomePage() {
   const { profile, user } = useAuth()
   const { play, currentSong, isPlaying } = usePlayer()
+  const { settings } = useAudioSettings()
 
   const [chart, setChart]               = useState([])
   const [trending, setTrending]         = useState([])
@@ -358,7 +360,7 @@ export default function HomePage() {
       )}
 
       {/* ── Recently Played Quick Grid ── */}
-      {(activeTab === 'All' || activeTab === 'Spotlight') && recentSongs.length > 0 && (
+      {(activeTab === 'All' || activeTab === 'Spotlight') && (settings?.showRecent !== false) && recentSongs.length > 0 && (
         <section className="mb-8 lg:mb-10">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg lg:text-xl font-bold flex items-center gap-2 text-white font-display">
@@ -492,7 +494,7 @@ export default function HomePage() {
       )}
 
       {/* ── Your Daily Mixes ── */}
-      {(activeTab === 'All' || activeTab === 'Mixes') && (
+      {(activeTab === 'All' || activeTab === 'Mixes') && (settings?.showMixes !== false) && (
         <section className="mb-8 lg:mb-10">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -556,7 +558,7 @@ export default function HomePage() {
         />
       )}
 
-      {(activeTab === 'All' || activeTab === 'Trending') && newReleases.length > 0 && (
+      {(activeTab === 'All' || activeTab === 'Trending') && (settings?.showNew !== false) && newReleases.length > 0 && (
         <SectionRow 
           title="✨ New Releases" 
           subtitle="Freshly uploaded music and premieres"

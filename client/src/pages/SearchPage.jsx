@@ -43,28 +43,49 @@ export default function SearchPage() {
   }, [user?.uid, historyKey])
 
   useEffect(() => {
-    if (query.length < 2) {
+    const trimmed = query.trim()
+    if (trimmed.length < 2) {
       setResults({ itunes: [], jamendo: [], all: [] })
       return
     }
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(async () => {
       setLoading(true)
-      const res = await searchAll(query)
+      const res = await searchAll(trimmed)
       setResults(res)
       setLoading(false)
-      if (res.all.length > 0) {
-        const term = query.trim()
-        addToSearchHistory(term)
-        setHistory(prev => {
-          const next = [term, ...prev.filter(h => h.toLowerCase() !== term.toLowerCase())].slice(0, 10)
-          try { localStorage.setItem(historyKey, JSON.stringify(next)) } catch (_) {}
-          return next
-        })
-      }
-    }, 500)
+    }, 450)
     return () => clearTimeout(debounceRef.current)
-  }, [query, historyKey])
+  }, [query])
+
+  const commitSearchHistory = (searchTerm) => {
+    const term = (searchTerm !== undefined ? searchTerm : query).trim()
+    if (!term || term.length < 2) return
+    addToSearchHistory(term)
+    setHistory(prev => {
+      const next = [term, ...prev.filter(h => h.toLowerCase() !== term.toLowerCase())].slice(0, 10)
+      try { localStorage.setItem(historyKey, JSON.stringify(next)) } catch (_) {}
+      return next
+    })
+  }
+
+  const handleSearchSubmit = (e, explicitTerm) => {
+    if (e && e.preventDefault) e.preventDefault()
+    const term = (explicitTerm !== undefined ? explicitTerm : query).trim()
+    if (!term) return
+
+    // Save history ONLY on explicit user submit (Enter key, search icon click, or clicking a history tag)
+    commitSearchHistory(term)
+
+    if (term.length >= 2) {
+      clearTimeout(debounceRef.current)
+      setLoading(true)
+      searchAll(term).then(res => {
+        setResults(res)
+        setLoading(false)
+      })
+    }
+  }
 
   const removeHistory = (term) => {
     const next = history.filter(h => h !== term)
@@ -81,25 +102,45 @@ export default function SearchPage() {
   const displayed = tab === 'all' ? results.all : results[tab] || []
 
   return (
-    <div className="px-6 py-6">
-      <h1 className="text-3xl font-bold mb-6">Search</h1>
+    <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-16 max-w-7xl mx-auto animate-fade-in">
+      <h1 className="text-2xl sm:text-3xl font-extrabold mb-6 tracking-tight">Search</h1>
 
       {/* Search bar */}
-      <div className="relative max-w-2xl mb-6">
-        <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+      <form onSubmit={handleSearchSubmit} className="relative max-w-2xl mb-6">
+        <button
+          type="submit"
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black p-1.5 rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-brand cursor-pointer"
+          title="Search"
+          aria-label="Search"
+        >
+          <Search size={18} />
+        </button>
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              handleSearchSubmit(e)
+            }
+          }}
           placeholder="Search songs, artists, albums..."
-          className="w-full bg-white text-black placeholder-gray-500 rounded-full pl-11 pr-10 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand"
+          className="w-full bg-white text-black placeholder-gray-500 rounded-full pl-11 pr-10 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand shadow-sm transition-shadow"
           autoFocus
         />
         {query && (
-          <button onClick={() => setQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-black">
+          <button
+            type="button"
+            onClick={() => {
+              setQuery('')
+              setResults({ itunes: [], jamendo: [], all: [] })
+            }}
+            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-black p-1 transition-colors"
+            title="Clear search"
+          >
             <X size={16} />
           </button>
         )}
-      </div>
+      </form>
 
       {/* Search history — shown only when no query */}
       {!query && history.length > 0 && (
@@ -115,14 +156,20 @@ export default function SearchPage() {
               <div key={term} className="flex items-center gap-1.5 bg-surface-2 hover:bg-surface-3 rounded-full pl-3 pr-2 py-1.5 transition-colors group">
                 <Clock size={12} className="text-gray-500 shrink-0" />
                 <button
-                  onClick={() => setQuery(term)}
+                  type="button"
+                  onClick={() => {
+                    setQuery(term)
+                    handleSearchSubmit(null, term)
+                  }}
                   className="text-sm text-gray-300 group-hover:text-white transition-colors"
                 >
                   {term}
                 </button>
                 <button
+                  type="button"
                   onClick={() => removeHistory(term)}
-                  className="text-gray-600 hover:text-gray-300 transition-colors ml-0.5"
+                  className="text-gray-600 hover:text-gray-300 transition-colors ml-0.5 p-0.5"
+                  title={`Remove ${term}`}
                 >
                   <X size={12} />
                 </button>

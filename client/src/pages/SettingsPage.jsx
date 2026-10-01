@@ -90,20 +90,77 @@ function Section({ title, children }) {
 
 // ── Audio Tab ─────────────────────────────────────────────────
 function AudioTab({ settings, update, applyPreset, setEqBand }) {
+  const { currentSong, engine, switchEngine } = usePlayer()
+
   return (
     <>
       <Section title="Equalizer">
-        <Toggle label="Enable Equalizer" desc="Adjust frequency levels for your perfect sound"
-          value={settings.eqEnabled} onChange={v => update('eqEnabled', v)} />
+        <div className="flex items-center justify-between py-3.5 border-b border-white/5">
+          <div className="flex-1 min-w-0 pr-4">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium">Enable Equalizer</p>
+              {settings.eqEnabled && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-brand/20 text-brand">
+                  ● ACTIVE
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+              Adjust 10 frequency bands in real-time with zero latency
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const nextVal = !settings.eqEnabled
+              update('eqEnabled', nextVal)
+              toast.success(nextVal ? 'Equalizer enabled' : 'Equalizer bypassed (flat)')
+            }}
+            className={`relative w-12 h-6 rounded-full transition-colors duration-200 shrink-0 overflow-hidden ${settings.eqEnabled ? 'bg-brand' : 'bg-surface-4'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${settings.eqEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+          </button>
+        </div>
+
+        {/* Engine status notice if on YouTube */}
+        {currentSong && engine === 'youtube' && (
+          <div className="my-3 p-3 rounded-xl bg-purple-500/10 border border-purple-500/25 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="text-base shrink-0">🎧</span>
+              <p className="text-xs text-purple-300">
+                Playing YouTube stream. Switch to Studio Audio Engine for real-time Equalizer & 3D Spatial processing.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                switchEngine('howler')
+                toast.success('Switched to Studio Audio Engine')
+              }}
+              className="text-xs px-3 py-1 bg-purple-500 text-white font-bold rounded-full hover:bg-purple-600 transition-colors shrink-0 shadow-sm"
+            >
+              Switch to Studio Audio
+            </button>
+          </div>
+        )}
 
         <div className="py-4">
           <p className="text-xs text-gray-500 mb-3">Presets</p>
           <div className="flex flex-wrap gap-2">
             {Object.keys(EQ_PRESETS).map(name => (
-              <button key={name} onClick={() => applyPreset(name)}
+              <button
+                key={name}
+                type="button"
+                onClick={() => {
+                  applyPreset(name)
+                  toast.success(`${name.toUpperCase()} preset applied`)
+                }}
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize transition-all ${
-                  settings.eqPreset === name ? 'bg-brand text-black' : 'bg-surface-3 text-gray-300 hover:bg-surface-4'
-                }`}>{name}</button>
+                  settings.eqPreset === name ? 'bg-brand text-black shadow-md' : 'bg-surface-3 text-gray-300 hover:bg-surface-4'
+                }`}
+              >
+                {name}
+              </button>
             ))}
             {settings.eqPreset === 'custom' && (
               <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-500/20 text-purple-400">Custom</span>
@@ -118,11 +175,18 @@ function AudioTab({ settings, update, applyPreset, setEqBand }) {
               const gain = settings.eq[freq] ?? 0
               return (
                 <div key={freq} className="flex flex-col items-center gap-1 flex-1">
-                  <span className="text-xs text-brand font-mono tabular-nums" style={{fontSize:'10px'}}>{gain > 0 ? `+${gain}` : gain}</span>
-                  <input type="range" min={-12} max={12} step={1} value={gain}
+                  <span className="text-xs text-brand font-mono tabular-nums" style={{ fontSize: '10px' }}>{gain > 0 ? `+${gain}` : gain}</span>
+                  <input
+                    type="range"
+                    min={-12}
+                    max={12}
+                    step={1}
+                    value={gain}
                     onChange={e => setEqBand(freq, parseInt(e.target.value))}
-                    className="eq-slider" style={{ height: '80px', cursor: 'pointer', accentColor: '#1DB954' }} />
-                  <span className="text-gray-500" style={{fontSize:'10px'}}>{EQ_LABELS[i]}</span>
+                    className="eq-slider"
+                    style={{ height: '80px', cursor: 'pointer', accentColor: 'var(--brand)' }}
+                  />
+                  <span className="text-gray-500" style={{ fontSize: '10px' }}>{EQ_LABELS[i]}</span>
                 </div>
               )
             })}
@@ -131,32 +195,59 @@ function AudioTab({ settings, update, applyPreset, setEqBand }) {
       </Section>
 
       <Section title="Spatial Audio">
-        <Toggle label="Spatial Audio" desc="Widens stereo field for an immersive 3D-like experience" badge="NEW"
-          value={settings.spatialEnabled} onChange={v => update('spatialEnabled', v)} />
+        <Toggle
+          label="Spatial Audio"
+          desc="Widens stereo field for an immersive 3D-like experience"
+          badge="NEW"
+          value={settings.spatialEnabled}
+          onChange={v => {
+            update('spatialEnabled', v)
+            toast.success(v ? '3D Spatial Audio enabled' : '3D Spatial Audio disabled')
+          }}
+        />
         <div className={settings.spatialEnabled ? '' : 'opacity-40 pointer-events-none'}>
-          <RangeSlider label="Stereo Width" desc="0x = mono · 1x = normal · 2x = ultra wide"
-            value={settings.spatialWidth} min={0} max={2} step={0.1} unit="x"
-            onChange={v => update('spatialWidth', v)} />
+          <RangeSlider
+            label="Stereo Width"
+            desc="0x = mono · 1x = normal · 2x = ultra wide"
+            value={settings.spatialWidth}
+            min={0}
+            max={2}
+            step={0.1}
+            unit="x"
+            onChange={v => update('spatialWidth', v)}
+          />
         </div>
       </Section>
 
       <Section title="Enhancement">
-        <RangeSlider label="Bass Boost" desc="Boost low frequencies for deeper bass"
-          value={settings.bassBoost} min={0} max={12} step={1} unit=" dB"
+        <RangeSlider
+          label="Bass Boost"
+          desc="Boost low frequencies for deeper, punchier bass"
+          value={settings.bassBoost}
+          min={0}
+          max={12}
+          step={1}
+          unit=" dB"
+          onChange={v => update('bassBoost', v)}
+        />
+        <Toggle
+          label="Audio Normalization"
+          desc="Keeps volume consistent across all tracks using studio dynamics compressor"
+          value={settings.normalize}
           onChange={v => {
-            console.log('Bass boost changed to:', v)
-            update('bassBoost', v)
-          }} />
-        <Toggle label="Audio Normalization" desc="Keeps volume consistent across all tracks"
-          value={settings.normalize} onChange={v => {
-            console.log('Normalization changed to:', v)
             update('normalize', v)
-          }} />
-        <Toggle label="Mono Audio" desc="Combine left and right channels into one"
-          value={settings.mono} onChange={v => {
-            console.log('Mono audio changed to:', v)
+            toast.success(v ? 'Audio normalization enabled' : 'Audio normalization disabled')
+          }}
+        />
+        <Toggle
+          label="Mono Audio"
+          desc="Combine left and right channels into a balanced mono stream"
+          value={settings.mono}
+          onChange={v => {
             update('mono', v)
-          }} />
+            toast.success(v ? 'Mono audio downmix enabled' : 'Stereo audio restored')
+          }}
+        />
       </Section>
 
       <Section title="Sound Profiles">
@@ -169,10 +260,17 @@ function AudioTab({ settings, update, applyPreset, setEqBand }) {
             { name: 'Electronic', desc: 'Crisp highs & punchy bass',    icon: '🎛️', preset: 'electronic' },
             { name: 'Podcast',    desc: 'Voice clarity boost',          icon: '🎙️', preset: 'podcast' },
           ].map(p => (
-            <button key={p.name} onClick={() => { applyPreset(p.preset); toast.success(`${p.name} profile applied`) }}
+            <button
+              key={p.name}
+              type="button"
+              onClick={() => {
+                applyPreset(p.preset)
+                toast.success(`${p.name} profile applied`)
+              }}
               className={`flex items-start gap-3 p-3.5 rounded-xl border transition-all text-left hover:scale-[1.02] ${
                 settings.eqPreset === p.preset ? 'border-brand bg-brand/10' : 'border-white/10 bg-surface-3 hover:border-white/20'
-              }`}>
+              }`}
+            >
               <span className="text-xl shrink-0">{p.icon}</span>
               <div>
                 <p className="text-sm font-semibold">{p.name}</p>
@@ -189,73 +287,78 @@ function AudioTab({ settings, update, applyPreset, setEqBand }) {
 
 // ── Playback Tab ──────────────────────────────────────────────
 function PlaybackTab({ settings, update }) {
-  const { forceApplySettings } = usePlayer()
+  const { forceApplySettings, switchEngine } = usePlayer()
   
   return (
     <>
       <Section title="Playback Behaviour">
-        <RangeSlider label="Playback Speed" desc="Slow down or speed up all tracks"
+        <RangeSlider label="Playback Speed" desc="Slow down or speed up all tracks in real-time"
           value={settings.speed} min={0.5} max={2.0} step={0.05} unit="x"
           onChange={v => { 
-            console.log('Playback speed changed to:', v)
             update('speed', v)
-            // Force apply immediately
             setTimeout(() => {
               forceApplySettings?.()
               if (v !== 1) {
                 toast.success(`Playback speed set to ${v}x`)
               }
-            }, 100)
+            }, 60)
           }} />
         <RangeSlider label="Crossfade" desc="Smoothly fade between songs at the end of each track"
           value={settings.crossfade} min={0} max={12} step={1} unit="s"
           onChange={v => {
-            console.log('Crossfade changed to:', v)
             update('crossfade', v)
             if (v > 0) {
               toast.success(`Crossfade set to ${v} seconds`)
             }
           }} />
         <Toggle label="Gapless Playback" desc="Remove silence between tracks for seamless listening"
-          value={settings.gapless} onChange={v => {
-            console.log('Gapless changed to:', v)
-            update('gapless', v)
-          }} />
+          value={settings.gapless} onChange={v => update('gapless', v)} />
         <Toggle label="Autoplay" desc="Keep playing similar songs when your queue ends"
-          value={settings.autoplay} onChange={v => {
-            console.log('Autoplay changed to:', v)
-            update('autoplay', v)
-          }} />
+          value={settings.autoplay} onChange={v => update('autoplay', v)} />
         <Toggle label="Smart Shuffle" desc="Mix in recommended songs while shuffling" badge="NEW"
-          value={settings.smartShuffle} onChange={v => {
-            console.log('Smart shuffle changed to:', v)
-            update('smartShuffle', v)
-          }} />
+          value={settings.smartShuffle} onChange={v => update('smartShuffle', v)} />
       </Section>
 
-      <Section title="Audio Quality">
+      <Section title="Audio Engine & Quality">
+        <Select label="Audio Playback Engine" desc="Choose between Studio Web Audio with full EQ or YouTube stream"
+          value={settings.audioEngine || 'auto'}
+          options={[
+            { value: 'auto',    label: '✨ Smart Auto (Studio EQ when active)' },
+            { value: 'studio',  label: '🎧 Studio Audio Engine (Full 10-Band EQ & 3D Spatial)' },
+            { value: 'youtube', label: '🎬 YouTube Stream (Full tracks for iTunes)' },
+          ]}
+          onChange={v => {
+            update('audioEngine', v)
+            if (v === 'studio') {
+              switchEngine?.('howler')
+              toast.success('Studio Audio Engine activated (Full EQ & 3D Spatial active)')
+            } else if (v === 'youtube') {
+              switchEngine?.('youtube')
+              toast.success('YouTube streaming engine activated')
+            } else {
+              toast.success('Smart Audio Engine mode enabled')
+            }
+          }} />
         <Select label="Streaming Quality" desc="Higher quality uses more data"
           value={settings.streamQuality}
           options={[
-            { value: 'auto',   label: 'Automatic' },
-            { value: 'low',    label: 'Low (24 kbps)' },
-            { value: 'normal', label: 'Normal (96 kbps)' },
-            { value: 'high',   label: 'High (160 kbps)' },
-            { value: 'very_high', label: 'Very High (320 kbps)' },
+            { value: 'auto',   label: 'Automatic (Best available)' },
+            { value: 'low',    label: 'Low (64 kbps)' },
+            { value: 'normal', label: 'Normal (128 kbps)' },
+            { value: 'high',   label: 'High (256 kbps)' },
+            { value: 'very_high', label: 'Very High Lossless (320 kbps)' },
           ]}
           onChange={v => {
-            console.log('Stream quality changed to:', v)
             update('streamQuality', v)
+            toast.success(`Quality set to ${v}`)
           }} />
         <Toggle label="Loud Volume Level" desc="Increase maximum volume beyond normal levels"
           value={settings.loudVolume} onChange={v => {
-            console.log('Loud volume changed to:', v)
             update('loudVolume', v)
-            // Force apply immediately
             setTimeout(() => {
               forceApplySettings?.()
-              toast.success(v ? 'Loud volume enabled' : 'Loud volume disabled')
-            }, 100)
+              toast.success(v ? 'Loud volume boost enabled' : 'Loud volume disabled')
+            }, 60)
           }} />
       </Section>
 
