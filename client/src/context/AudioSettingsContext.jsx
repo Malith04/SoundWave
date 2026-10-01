@@ -1,7 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { Howler } from 'howler'
-
-const STORAGE_KEY = 'sw_audio_settings'
+import { useAuth } from './AuthContext'
 
 export const DEFAULT = {
   eq: { 32:0, 64:0, 125:0, 250:0, 500:0, 1000:0, 2000:0, 4000:0, 8000:0, 16000:0 },
@@ -47,8 +46,8 @@ export const EQ_PRESETS = {
   podcast:    { 32:-4, 64:-2, 125:0, 250:2,  500:4,  1000:4,  2000:3, 4000:1, 8000:-1, 16000:-2 },
 }
 
-function load() {
-  try { return { ...DEFAULT, ...JSON.parse(localStorage.getItem(STORAGE_KEY)) } } catch { return { ...DEFAULT } }
+function load(key) {
+  try { return { ...DEFAULT, ...JSON.parse(localStorage.getItem(key)) } } catch { return { ...DEFAULT } }
 }
 
 function darkenHex(hex, amount) {
@@ -66,7 +65,10 @@ const EQ_BANDS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
 const AudioSettingsContext = createContext(null)
 
 export function AudioSettingsProvider({ children }) {
-  const [settings, setSettings] = useState(load)
+  const auth = useAuth()
+  const settingsKey = auth?.user?.uid ? `sw_audio_settings_${auth.user.uid}` : 'sw_audio_settings_guest'
+
+  const [settings, setSettings] = useState(() => load(settingsKey))
   const settingsRef = useRef(settings)
 
   // Audio nodes
@@ -80,13 +82,20 @@ export function AudioSettingsProvider({ children }) {
     widthR: null,
   })
 
+  // Sync settings when switching user account
+  useEffect(() => {
+    setSettings(load(settingsKey))
+  }, [settingsKey])
+
   // Keep settingsRef in sync for use inside callbacks
   useEffect(() => { settingsRef.current = settings }, [settings])
 
   // ── Persist ───────────────────────────────────────────────
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
-  }, [settings])
+    try {
+      localStorage.setItem(settingsKey, JSON.stringify(settings))
+    } catch (_) {}
+  }, [settings, settingsKey])
 
   // ── Theme ─────────────────────────────────────────────────
   useEffect(() => {

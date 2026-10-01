@@ -9,17 +9,19 @@ import { useAudioSettings } from './AudioSettingsContext'
 const PlayerContext = createContext(null)
 const YT_API_KEY = import.meta.env.VITE_YT_API_KEY || ''
 
-const STORAGE_KEY = 'sw_player_state'
+function getStorageKey(userId) {
+  return userId ? `sw_player_state_${userId}` : 'sw_player_state_guest'
+}
 
-function saveState(song, queue, index, time) {
+function saveState(userId, song, queue, index, time) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ song, queue, index, time }))
+    localStorage.setItem(getStorageKey(userId), JSON.stringify({ song, queue, index, time }))
   } catch (_) {}
 }
 
-function loadState() {
+function loadState(userId) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(getStorageKey(userId))
     return raw ? JSON.parse(raw) : null
   } catch (_) { return null }
 }
@@ -497,6 +499,7 @@ export function PlayerProvider({ children }) {
 
     setError(null); setIsLoading(true)
     setCurrentSong(song); setQueue(songQueue); setQueueIndex(index)
+    saveState(user?.uid, song, songQueue, index, startAt)
     
     // Save to database (non-blocking)
     upsertSong(song).then(() => incrementPlayCount(song.id)).catch(err => {
@@ -549,9 +552,46 @@ export function PlayerProvider({ children }) {
 
   // keep ref in sync so handleEnd can call it without stale closure
   useEffect(() => { loadAndPlayRef.current = loadAndPlay }, [loadAndPlay])
-  // ── Restore last session on mount ─────────────────────────
+  // ── Restore last session on mount / user switch ─────────────────────────
+  const prevUserRef = useRef(user?.uid)
+
   useEffect(() => {
-    const saved = loadState()
+    // If user changed (e.g. login, logout, switch account):
+    if (prevUserRef.current !== user?.uid) {
+      prevUserRef.current = user?.uid
+      // Stop current playback
+      if (howlRef.current) {
+        howlRef.current.stop()
+        howlRef.current.unload()
+        howlRef.current = null
+      }
+      if (ytPlayerRef.current?.stopVideo) {
+        try { ytPlayerRef.current.stopVideo() } catch (_) {}
+      }
+      setIsPlaying(false)
+      clearInterval(progressInterval.current)
+
+      // Restore the new user's saved state
+      const saved = loadState(user?.uid)
+      if (saved?.song) {
+        setCurrentSong(saved.song)
+        setQueue(saved.queue || [saved.song])
+        setQueueIndex(saved.index || 0)
+        setCurrentTime(saved.time || 0)
+        setProgress(saved.time && saved.song.duration ? saved.time / (saved.song.duration / 1000) : 0)
+        setDuration(saved.song.duration ? saved.song.duration / 1000 : 0)
+      } else {
+        setCurrentSong(null)
+        setQueue([])
+        setQueueIndex(0)
+        setCurrentTime(0)
+        setProgress(0)
+        setDuration(0)
+      }
+      return
+    }
+
+    const saved = loadState(user?.uid)
     if (saved?.song) {
       // Restore state but don't auto-play — just set the song info
       setCurrentSong(saved.song)
@@ -561,7 +601,7 @@ export function PlayerProvider({ children }) {
       setProgress(saved.time && saved.song.duration ? saved.time / (saved.song.duration / 1000) : 0)
       setDuration(saved.song.duration ? saved.song.duration / 1000 : 0)
     }
-  }, [])
+  }, [user?.uid])
 
   const togglePlay = useCallback(() => {
     if (engine === 'youtube') {
