@@ -73,6 +73,11 @@ self.addEventListener('fetch', event => {
   const { request } = event
   const url = new URL(request.url)
 
+  // Skip dev requests on localhost to allow Vite HMR and dynamic modules
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+    return
+  }
+
   // Skip non-GET requests
   if (request.method !== 'GET') return
 
@@ -249,7 +254,7 @@ function isMusicAPI(url) {
 }
 
 function isStaticAsset(url) {
-  return url.pathname.match(/\.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot)$/)
+  return url.pathname.match(/\.(js|jsx|ts|tsx|mjs|json|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot)$/)
 }
 
 // Offline music data for when APIs are unavailable
