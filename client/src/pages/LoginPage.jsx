@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { Mail, Lock, Eye, EyeOff, Sparkles, Music2, ArrowRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const { login, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
@@ -14,8 +16,12 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     try {
-      await login(email, password)
-      navigate('/')
+      const loggedUser = await login(email, password)
+      if (!loggedUser?.onboardingCompleted) {
+        navigate('/onboarding')
+      } else {
+        navigate('/')
+      }
     } catch (err) {
       toast.error(err.code === 'auth/invalid-credential' ? 'Invalid email or password' : err.message)
     } finally {
@@ -24,27 +30,64 @@ export default function LoginPage() {
   }
 
   const handleGoogle = async () => {
+    setLoading(true)
     try {
-      await loginWithGoogle()
-      navigate('/')
+      const res = await loginWithGoogle()
+      if (res?.isNewUser || !res?.user?.onboardingCompleted) {
+        navigate('/onboarding')
+      } else if (res?.user) {
+        navigate('/')
+      }
     } catch (err) {
-      toast.error('Google sign-in failed')
+      const isCancelled = [
+        'auth/popup-closed-by-user',
+        'auth/cancelled-popup-request',
+        'auth/popup-blocked',
+        'auth/user-cancelled'
+      ].includes(err.code)
+      if (!isCancelled) {
+        const cleanMsg = err.message?.replace(/^Firebase:\s*/i, '').replace(/\s*\(auth\/[^)]+\)\.?/i, '')
+        toast.error(cleanMsg || 'Google sign-in could not be completed')
+      }
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-surface flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
+    <div className="relative min-h-screen bg-surface flex items-center justify-center p-4 sm:p-6 overflow-hidden">
+      {/* ── Ambient Aurora Background ── */}
+      <div className="absolute top-[-10%] left-[-10%] w-[450px] h-[450px] bg-brand/15 rounded-full blur-[120px] pointer-events-none animate-aurora" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-600/15 rounded-full blur-[140px] pointer-events-none animate-aurora" style={{ animationDelay: '-6s' }} />
+      <div className="absolute top-[40%] right-[20%] w-[350px] h-[350px] bg-blue-600/10 rounded-full blur-[110px] pointer-events-none animate-aurora" style={{ animationDelay: '-3s' }} />
+
+      {/* Decorative floating sound wave dots */}
+      <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
+
+      {/* ── Main Glass Card ── */}
+      <div className="relative z-10 w-full max-w-md glass-modal rounded-3xl p-6 sm:p-10 shadow-2xl border border-white/10 animate-pop-in">
+        
+        {/* Header with animated logo */}
         <div className="text-center mb-8">
-          <span className="text-5xl">🎵</span>
-          <h1 className="text-3xl font-bold mt-3">SoundWave</h1>
-          <p className="text-gray-400 mt-1">Log in to continue</p>
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand to-emerald-400 p-0.5 shadow-lg shadow-brand/30 mb-4 hover:scale-105 transition-transform duration-300">
+            <div className="w-full h-full bg-[#121212] rounded-[14px] flex items-center justify-center">
+              <Music2 className="text-brand w-8 h-8 animate-pulse" />
+            </div>
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight font-display bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
+            SoundWave
+          </h1>
+          <p className="text-gray-400 text-sm mt-1.5 flex items-center justify-center gap-1.5">
+            <Sparkles size={14} className="text-brand" />
+            Stream beyond limits. Log in to your rhythm.
+          </p>
         </div>
 
-        {/* Google */}
+        {/* Google One-Click Auth */}
         <button
           onClick={handleGoogle}
-          className="w-full flex items-center justify-center gap-3 border border-white/20 rounded-full py-3 text-sm font-semibold hover:border-white/40 transition-colors mb-6"
+          type="button"
+          className="w-full flex items-center justify-center gap-3 glass-input rounded-2xl py-3 px-4 text-sm font-semibold text-white hover:bg-white/10 hover:border-white/20 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 shadow-sm"
         >
           <svg width="18" height="18" viewBox="0 0 18 18">
             <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
@@ -55,45 +98,83 @@ export default function LoginPage() {
           Continue with Google
         </button>
 
-        <div className="flex items-center gap-3 mb-6">
+        {/* Divider */}
+        <div className="flex items-center gap-3 my-6">
           <div className="flex-1 h-px bg-white/10" />
-          <span className="text-xs text-gray-500">or</span>
+          <span className="text-xs uppercase tracking-wider text-gray-500 font-medium">or email</span>
           <div className="flex-1 h-px bg-white/10" />
         </div>
 
+        {/* Email & Password Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-1.5">Email address</label>
-            <input
-              type="email" value={email} onChange={e => setEmail(e.target.value)}
-              className="w-full bg-surface-2 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-brand transition-colors"
-              placeholder="you@example.com" required
-            />
+            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5 ml-1">
+              Email Address
+            </label>
+            <div className="relative">
+              <Mail size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="w-full glass-input rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none"
+                placeholder="you@domain.com"
+                required
+              />
+            </div>
           </div>
+
           <div>
-            <label className="block text-sm text-gray-400 mb-1.5">Password</label>
-            <input
-              type="password" value={password} onChange={e => setPassword(e.target.value)}
-              className="w-full bg-surface-2 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-brand transition-colors"
-              placeholder="••••••••" required
-            />
+            <div className="flex items-center justify-between mb-1.5 ml-1">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400">
+                Password
+              </label>
+              <Link to="/forgot-password" className="text-xs text-brand hover:underline transition-colors font-medium">
+                Forgot password?
+              </Link>
+            </div>
+            <div className="relative">
+              <Lock size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="w-full glass-input rounded-xl pl-10 pr-11 py-3 text-sm text-white placeholder-gray-500 focus:outline-none"
+                placeholder="••••••••"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1 rounded-md transition-colors"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
-          <div className="text-right">
-            <Link to="/forgot-password" className="text-sm text-gray-400 hover:text-white transition-colors">
-              Forgot password?
-            </Link>
-          </div>
+
           <button
-            type="submit" disabled={loading}
-            className="w-full bg-brand hover:bg-brand-dark text-black font-bold py-3 rounded-full transition-all disabled:opacity-50"
+            type="submit"
+            disabled={loading}
+            className="w-full mt-2 bg-gradient-to-r from-brand to-emerald-400 hover:from-brand-dark hover:to-emerald-500 text-black font-extrabold py-3.5 px-6 rounded-full shadow-lg shadow-brand/25 transition-all duration-300 hover:shadow-brand/40 hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 group text-sm"
           >
-            {loading ? 'Logging in...' : 'Log In'}
+            {loading ? (
+              <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <>
+                <span>Log In</span>
+                <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+              </>
+            )}
           </button>
         </form>
 
-        <p className="text-center text-sm text-gray-400 mt-6">
+        <p className="text-center text-sm text-gray-400 mt-7">
           Don't have an account?{' '}
-          <Link to="/signup" className="text-white font-semibold hover:text-brand transition-colors">Sign up</Link>
+          <Link to="/signup" className="text-brand font-semibold hover:underline transition-colors">
+            Sign up for free
+          </Link>
         </p>
       </div>
     </div>

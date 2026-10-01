@@ -14,8 +14,9 @@ import PlaylistPage from './pages/PlaylistPage'
 import GenrePage from './pages/GenrePage'
 import ProfilePage from './pages/ProfilePage'
 import SettingsPage from './pages/SettingsPage'
+import OnboardingPage from './pages/OnboardingPage'
 
-// Full-screen spinner shown while Firebase resolves auth state
+// Full-screen spinner shown while resolving auth state
 function Spinner() {
   return (
     <div className="min-h-screen bg-surface flex items-center justify-center">
@@ -27,7 +28,17 @@ function Spinner() {
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
   if (loading) return <Spinner />
-  return user ? children : <Navigate to="/login" replace />
+  if (!user) return <Navigate to="/login" replace />
+  if (!user.onboardingCompleted) return <Navigate to="/onboarding" replace />
+  return children
+}
+
+function OnboardingRoute({ children }) {
+  const { user, loading } = useAuth()
+  if (loading) return <Spinner />
+  if (!user) return <Navigate to="/login" replace />
+  if (user.onboardingCompleted) return <Navigate to="/" replace />
+  return children
 }
 
 function GuestRoute({ children }) {
@@ -42,6 +53,7 @@ function AppRoutes() {
       <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
       <Route path="/signup" element={<GuestRoute><SignupPage /></GuestRoute>} />
       <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
+      <Route path="/onboarding" element={<OnboardingRoute><OnboardingPage /></OnboardingRoute>} />
       <Route
         path="/"
         element={
