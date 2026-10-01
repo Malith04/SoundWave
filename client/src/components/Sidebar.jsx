@@ -9,32 +9,17 @@ export default function Sidebar({ onNavigate }) {
   const { user, profile, logout } = useAuth()
   const navigate = useNavigate()
   const [playlists, setPlaylists] = useState([])
-  const [profilePic, setProfilePic] = useState(profile?.profilePicUrl || null)
+  const [imgError, setImgError] = useState(false)
+
+  const activeAvatar = profile?.profilePicUrl || user?.profilePicUrl || user?.photoURL || localStorage.getItem(`sw_profile_pic_${user?.uid}`) || null
 
   useEffect(() => {
     if (user) getUserPlaylists(user.uid).then(setPlaylists)
   }, [user])
 
-  // Profile picture sync with cache - improved
   useEffect(() => {
-    console.log('Sidebar: Profile picture sync check', { 
-      profilePicUrl: profile?.profilePicUrl, 
-      userId: user?.uid 
-    })
-    
-    if (profile?.profilePicUrl) {
-      console.log('Sidebar: Setting profile picture from database:', profile.profilePicUrl)
-      setProfilePic(profile.profilePicUrl)
-    } else if (user?.uid) {
-      // Load cached profile picture as fallback
-      const cachedPic = localStorage.getItem(`sw_profile_pic_${user.uid}`)
-      console.log('Sidebar: Checking cached profile picture:', !!cachedPic)
-      if (cachedPic) {
-        console.log('Sidebar: Loading cached profile picture:', cachedPic)
-        setProfilePic(cachedPic)
-      }
-    }
-  }, [profile?.profilePicUrl, user?.uid])
+    setImgError(false)
+  }, [activeAvatar])
 
   const handleCreatePlaylist = async () => {
     const name = prompt('Playlist name:')
@@ -47,9 +32,14 @@ export default function Sidebar({ onNavigate }) {
   }
 
   const handleLogout = async () => {
-    await logout()
-    navigate('/login')
-    onNavigate?.() // Close mobile sidebar
+    try {
+      await logout()
+      toast.success('Signed out successfully')
+      navigate('/login')
+      onNavigate?.() // Close mobile sidebar
+    } catch (err) {
+      toast.error('Failed to sign out')
+    }
   }
 
   const navClass = ({ isActive }) =>
@@ -117,20 +107,28 @@ export default function Sidebar({ onNavigate }) {
       <div className="px-3 py-3 border-t border-white/10 space-y-0.5 shrink-0 bg-[#0a0a0a]">
         <NavLink to="/profile" onClick={onNavigate}
           className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition-all group">
-          <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center text-brand text-sm font-bold shrink-0 overflow-hidden">
-            {profilePic
-              ? <img src={profilePic} alt="" className="w-full h-full object-cover" />
-              : <User size={14} />
-            }
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand/40 to-brand/80 flex items-center justify-center text-white text-xs font-bold shrink-0 overflow-hidden ring-1 ring-white/20 shadow-sm">
+            {activeAvatar && !imgError ? (
+              <img
+                src={activeAvatar}
+                alt=""
+                className="w-full h-full object-cover"
+                onError={() => setImgError(true)}
+              />
+            ) : (
+              <span>{(user?.displayName?.[0] || user?.name?.[0] || user?.email?.[0] || 'U').toUpperCase()}</span>
+            )}
           </div>
-          <span className="text-sm text-gray-300 group-hover:text-white truncate flex-1">Profile</span>
+          <span className="text-sm font-medium text-gray-300 group-hover:text-white truncate flex-1">
+            {user?.displayName || user?.name || 'Profile'}
+          </span>
         </NavLink>
         <NavLink to="/settings" onClick={onNavigate}
           className={({ isActive }) => `flex items-center gap-3 px-2 py-2 rounded-lg text-sm font-medium transition-all ${isActive ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
           <Settings size={16} /> Settings
         </NavLink>
         <button onClick={handleLogout}
-          className="flex items-center gap-3 px-2 py-2 w-full rounded-lg text-sm text-gray-400 hover:text-red-400 hover:bg-red-400/10 transition-all">
+          className="flex items-center gap-3 px-2 py-2 w-full rounded-lg text-sm text-gray-400 hover:text-red-400 hover:bg-red-400/10 transition-all text-left">
           <LogOut size={16} /> Sign Out
         </button>
       </div>

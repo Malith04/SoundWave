@@ -3,8 +3,7 @@ import { useAudioSettings, EQ_PRESETS } from '../context/AudioSettingsContext'
 import { useAuth } from '../context/AuthContext'
 import { usePlayer } from '../context/PlayerContext'
 import { updateUser, clearSearchHistory, clearRecentlyPlayed } from '../services/userService'
-import { storage } from '../services/firebase'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { api } from '../services/api'
 import {
   RotateCcw, SlidersHorizontal, Wind, Waves, Gauge, Music2,
   Monitor, Bell, Shield, User, Headphones, Radio, Mic2,
@@ -388,18 +387,56 @@ function PrivacyTab({ settings, update }) {
   )
 }
 
+function compressImage(file, maxWidth = 320, maxHeight = 320, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        let width = img.width
+        let height = img.height
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width)
+            width = maxWidth
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height)
+            height = maxHeight
+          }
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, width, height)
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      }
+      img.onerror = reject
+      img.src = e.target.result
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 // ── Account Tab ───────────────────────────────────────────────
 function AccountTab({ profile, logout, navigate }) {
   const { user, refreshProfile } = useAuth()
   const fileInputRef = useRef(null)
 
-  const [name, setName]         = useState(profile?.name || '')
-  const [bio, setBio]           = useState(profile?.bio || '')
-  const [country, setCountry]   = useState(profile?.country || '')
-  const [language, setLanguage] = useState(profile?.language || 'en')
-  const [gender, setGender]     = useState(profile?.gender || '')
+  const [name, setName]         = useState(profile?.displayName || profile?.name || user?.displayName || '')
+  const [bio, setBio]           = useState(profile?.bio || user?.bio || '')
+  const [country, setCountry]   = useState(profile?.country || user?.country || '')
+  const [language, setLanguage] = useState(profile?.language || user?.language || 'en')
+  const [gender, setGender]     = useState(profile?.gender || user?.gender || '')
   const [saving, setSaving]     = useState(false)
-  const [profilePic, setProfilePic] = useState(profile?.profilePicUrl || null)
+  const [imgError, setImgError] = useState(false)
+
+  const [profilePic, setProfilePic] = useState(
+    profile?.profilePicUrl || user?.profilePicUrl || user?.photoURL || (user?.uid ? localStorage.getItem(`sw_profile_pic_${user.uid}`) : null)
+  )
   const [uploadingPic, setUploadingPic] = useState(false)
 
   const [newEmail, setNewEmail]       = useState('')
@@ -410,101 +447,50 @@ function AccountTab({ profile, logout, navigate }) {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteInput, setDeleteInput] = useState('')
+  const [deletingAccount, setDeletingAccount] = useState(false)
 
-  const avatarColor = localStorage.getItem('sw_avatar_color') || 0
-  const AVATAR_COLORS = [
-    'from-brand to-emerald-700','from-purple-500 to-indigo-700',
-    'from-pink-500 to-rose-700','from-orange-500 to-red-700',
-    'from-blue-500 to-cyan-700','from-yellow-500 to-amber-700',
-  ]
-
-  // Profile picture sync logic - improved with better error handling
+  // Keep state synced when profile updates
   useEffect(() => {
-    if (profile?.profilePicUrl && !uploadingPic) {
-      console.log('Syncing profile picture from database:', profile.profilePicUrl)
-      setProfilePic(profile.profilePicUrl)
-      // Cache the profile picture URL
-      if (user?.uid) {
-        localStorage.setItem(`sw_profile_pic_${user.uid}`, profile.profilePicUrl)
-        console.log('Profile picture cached for user:', user.uid)
+    if (profile) {
+      if (profile.displayName || profile.name) setName(profile.displayName || profile.name)
+      if (profile.bio) setBio(profile.bio)
+      if (profile.country) setCountry(profile.country)
+      if (profile.language) setLanguage(profile.language)
+      if (profile.gender) setGender(profile.gender)
+      if (profile.profilePicUrl) {
+        setProfilePic(profile.profilePicUrl)
+        setImgError(false)
       }
     }
-  }, [profile?.profilePicUrl, uploadingPic, user?.uid])
-
-  // Load cached profile picture on mount - improved logic
-  useEffect(() => {
-    if (user?.uid) {
-      const cachedPic = localStorage.getItem(`sw_profile_pic_${user.uid}`)
-      console.log('Checking cached profile picture for user:', user.uid, 'Found:', !!cachedPic)
-      if (cachedPic && !profilePic && !profile?.profilePicUrl) {
-        console.log('Loading cached profile picture:', cachedPic)
-        setProfilePic(cachedPic)
-      }
-    }
-  }, [user?.uid, profile])
-
-  // Initialize profile picture when profile loads - improved
-  useEffect(() => {
-    if (profile?.profilePicUrl && !profilePic) {
-      console.log('Initializing profile picture from profile data:', profile.profilePicUrl)
-      setProfilePic(profile.profilePicUrl)
-      // Ensure it's cached
-      if (user?.uid) {
-        localStorage.setItem(`sw_profile_pic_${user.uid}`, profile.profilePicUrl)
-      }
-    }
-  }, [profile?.profilePicUrl, profilePic, user?.uid])
+  }, [profile])
 
   const handlePicUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 5 * 1024 * 1024) { toast.error('Image must be under 5MB'); return }
-
-    console.log('Starting profile picture upload:', file.name, 'Size:', file.size)
-
-    // Show preview immediately
-    const localUrl = URL.createObjectURL(file)
-    setProfilePic(localUrl)
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error('Image must be under 8MB')
+      return
+    }
 
     setUploadingPic(true)
     try {
-      console.log('Uploading to Firebase Storage...')
-      // Path must match storage rules: profiles/{userId}/...
-      const storageRef = ref(storage, `profiles/${user.uid}/avatar_${Date.now()}`)
-      const snapshot = await uploadBytes(storageRef, file)
-      console.log('Upload successful, getting download URL...')
-      const url = await getDownloadURL(storageRef)
-      console.log('Download URL obtained:', url)
-      
-      // Update user profile in database
-      console.log('Updating user profile in database...')
-      await updateUser(user.uid, { profilePicUrl: url })
-      console.log('Database updated successfully')
-      
-      // Clean up the local preview URL
-      URL.revokeObjectURL(localUrl)
-      
-      // Set the final URL and cache it
-      setProfilePic(url)
-      localStorage.setItem(`sw_profile_pic_${user.uid}`, url)
-      console.log('Profile picture cached locally')
-      
-      // Refresh the profile context to get updated data
-      console.log('Refreshing profile context...')
+      const dataUrl = await compressImage(file, 320, 320, 0.85)
+      setProfilePic(dataUrl)
+      setImgError(false)
+
+      await updateUser(user.uid, { profilePicUrl: dataUrl })
+
+      if (user?.uid) {
+        localStorage.setItem(`sw_profile_pic_${user.uid}`, dataUrl)
+      }
+
       await refreshProfile()
-      console.log('Profile refresh completed')
-      
       toast.success('Profile picture updated successfully!')
     } catch (err) {
       console.error('Upload failed:', err)
-      toast.error('Upload failed: ' + (err.message || 'Unknown error'))
-      // Revert preview on failure
-      const fallbackUrl = profile?.profilePicUrl || localStorage.getItem(`sw_profile_pic_${user.uid}`)
-      setProfilePic(fallbackUrl || null)
-      URL.revokeObjectURL(localUrl)
+      toast.error('Failed to update picture: ' + (err.message || 'Unknown error'))
     } finally {
       setUploadingPic(false)
-      // Reset input so same file can be picked again
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
@@ -514,6 +500,7 @@ function AccountTab({ profile, logout, navigate }) {
     setSaving(true)
     try {
       await updateUser(user.uid, {
+        displayName: name.trim(),
         name: name.trim(),
         bio: bio.trim(),
         country,
@@ -521,44 +508,79 @@ function AccountTab({ profile, logout, navigate }) {
         gender,
       })
       await refreshProfile()
-      toast.success('Profile updated')
-    } catch { toast.error('Failed to save') }
-    finally { setSaving(false) }
+      toast.success('Profile updated successfully!')
+    } catch (err) {
+      toast.error('Failed to save profile: ' + (err.message || 'Unknown error'))
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleChangeEmail = async e => {
+  const handleChangeEmail = async (e) => {
     e.preventDefault()
     if (!newEmail.trim()) return
     setSavingEmail(true)
     try {
-      await user.updateEmail(newEmail.trim())
-      await updateUser(user.uid, { email: newEmail.trim() })
-      toast.success('Email updated')
+      await api.put('/auth/email', { email: newEmail.trim() })
+      await refreshProfile()
+      toast.success('Email updated successfully!')
       setNewEmail('')
     } catch (err) {
-      toast.error(err.message?.includes('requires-recent-login')
-        ? 'Please sign out and sign back in first'
-        : 'Failed to update email')
-    } finally { setSavingEmail(false) }
+      toast.error(err.message || 'Failed to update email')
+    } finally {
+      setSavingEmail(false)
+    }
   }
 
-  const handleChangePassword = async e => {
+  const handleChangePassword = async (e) => {
     e.preventDefault()
-    if (newPass !== confirmPass) { toast.error('Passwords do not match'); return }
-    if (newPass.length < 6) { toast.error('Password must be at least 6 characters'); return }
+    if (newPass !== confirmPass) {
+      toast.error('Passwords do not match')
+      return
+    }
+    if (newPass.length < 6) {
+      toast.error('Password must be at least 6 characters')
+      return
+    }
     setSavingPass(true)
     try {
-      await user.updatePassword(newPass)
-      toast.success('Password updated')
-      setNewPass(''); setConfirmPass('')
+      await api.put('/auth/password', { newPassword: newPass })
+      toast.success('Password updated successfully!')
+      setNewPass('')
+      setConfirmPass('')
     } catch (err) {
-      toast.error(err.message?.includes('requires-recent-login')
-        ? 'Please sign out and sign back in first'
-        : 'Failed to update password')
-    } finally { setSavingPass(false) }
+      toast.error(err.message || 'Failed to update password')
+    } finally {
+      setSavingPass(false)
+    }
   }
 
-  const handleLogout = async () => { await logout(); navigate('/login') }
+  const handleDeleteAccount = async () => {
+    setDeletingAccount(true)
+    try {
+      await api.delete('/auth/account')
+      await logout()
+      toast.success('Your account has been deleted.')
+      navigate('/login')
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete account')
+    } finally {
+      setDeletingAccount(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+      toast.success('Signed out successfully')
+      navigate('/login')
+    } catch (err) {
+      toast.error('Failed to sign out')
+    }
+  }
+
+  const displayName = profile?.displayName || profile?.name || user?.displayName || name || 'User'
+  const displayEmail = profile?.email || user?.email || ''
 
   return (
     <>
@@ -566,13 +588,17 @@ function AccountTab({ profile, logout, navigate }) {
       <Section title="Your Profile">
         <div className="py-5 flex items-center gap-5 border-b border-white/5">
           <div className="relative shrink-0">
-            <div className="w-20 h-20 rounded-full overflow-hidden shadow-lg border-4 border-white/10"
-              style={profilePic ? {} : { background: `linear-gradient(135deg, ${AVATAR_COLORS[avatarColor].split(' ')[1]}, ${AVATAR_COLORS[avatarColor].split(' ')[3]})` }}>
-              {profilePic ? (
-                <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
+            <div className="w-20 h-20 rounded-full overflow-hidden shadow-xl border-4 border-white/10 bg-gradient-to-br from-brand/40 to-brand flex items-center justify-center">
+              {profilePic && !imgError ? (
+                <img
+                  src={profilePic}
+                  alt="Profile"
+                  className="w-full h-full object-cover"
+                  onError={() => setImgError(true)}
+                />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-white">
-                  {profile?.name?.[0]?.toUpperCase() || '?'}
+                <div className="w-full h-full flex items-center justify-center text-3xl font-black text-white">
+                  {(displayName[0] || 'U').toUpperCase()}
                 </div>
               )}
             </div>
@@ -581,24 +607,28 @@ function AccountTab({ profile, logout, navigate }) {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingPic}
-              className="absolute -bottom-1 -right-1 w-7 h-7 bg-[#282828] hover:bg-[#3e3e3e] rounded-full flex items-center justify-center border-2 border-black transition-colors shadow-lg"
+              className="absolute -bottom-1 -right-1 w-7 h-7 bg-[#282828] hover:bg-brand rounded-full flex items-center justify-center border-2 border-black transition-colors shadow-lg group"
               title="Change profile picture"
             >
               {uploadingPic ? (
                 <div className="w-3 h-3 border-2 border-brand border-t-transparent rounded-full animate-spin" />
               ) : (
-                <Camera size={12} className="text-white" />
+                <Camera size={13} className="text-white group-hover:text-black transition-colors" />
               )}
             </button>
             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePicUpload} />
           </div>
           
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-lg">{profile?.name || 'User'}</p>
-            <p className="text-sm text-gray-400">{profile?.email}</p>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="text-xs bg-brand/20 text-brand px-2 py-0.5 rounded-full font-medium">Free Plan</span>
-              <span className="text-xs text-gray-500">Member since {profile?.createdAt ? new Date(profile.createdAt).getFullYear() : '—'}</span>
+            <p className="font-bold text-lg text-white truncate">{displayName}</p>
+            <p className="text-sm text-gray-400 truncate">{displayEmail}</p>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <span className="text-xs bg-brand/20 text-brand px-2.5 py-0.5 rounded-full font-semibold">
+                {profile?.subscriptionTier ? profile.subscriptionTier.toUpperCase() : 'FREE PLAN'}
+              </span>
+              <span className="text-xs text-gray-500">
+                Member since {profile?.createdAt ? new Date(profile.createdAt).getFullYear() : '2026'}
+              </span>
             </div>
           </div>
         </div>
@@ -606,23 +636,32 @@ function AccountTab({ profile, logout, navigate }) {
         {/* Editable fields */}
         <div className="py-4 space-y-4">
           <div>
-            <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1.5">Display Name</label>
-            <input value={name} onChange={e => setName(e.target.value)}
-              placeholder="Your name"
-              className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors" />
+            <label className="text-xs text-gray-400 uppercase tracking-wider font-semibold block mb-1.5">Display Name</label>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Your display name"
+              className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors"
+            />
           </div>
           <div>
-            <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1.5">Bio</label>
-            <textarea value={bio} onChange={e => setBio(e.target.value)}
-              placeholder="Tell people a bit about yourself..."
+            <label className="text-xs text-gray-400 uppercase tracking-wider font-semibold block mb-1.5">Bio</label>
+            <textarea
+              value={bio}
+              onChange={e => setBio(e.target.value)}
+              placeholder="Tell people a bit about your musical taste..."
               rows={3}
-              className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors resize-none" />
+              className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors resize-none"
+            />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1.5">Gender</label>
-              <select value={gender} onChange={e => setGender(e.target.value)}
-                className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand transition-colors">
+              <label className="text-xs text-gray-400 uppercase tracking-wider font-semibold block mb-1.5">Gender</label>
+              <select
+                value={gender}
+                onChange={e => setGender(e.target.value)}
+                className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand transition-colors"
+              >
                 <option value="">Prefer not to say</option>
                 <option value="male">Male</option>
                 <option value="female">Female</option>
@@ -631,9 +670,12 @@ function AccountTab({ profile, logout, navigate }) {
               </select>
             </div>
             <div>
-              <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1.5">Country</label>
-              <select value={country} onChange={e => setCountry(e.target.value)}
-                className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand transition-colors">
+              <label className="text-xs text-gray-400 uppercase tracking-wider font-semibold block mb-1.5">Country</label>
+              <select
+                value={country}
+                onChange={e => setCountry(e.target.value)}
+                className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand transition-colors"
+              >
                 <option value="">Select country</option>
                 {['Sri Lanka','United States','United Kingdom','India','Australia','Canada','Germany','France','Japan','Brazil','South Korea','Singapore'].map(c => (
                   <option key={c} value={c}>{c}</option>
@@ -642,9 +684,12 @@ function AccountTab({ profile, logout, navigate }) {
             </div>
           </div>
           <div>
-            <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1.5">Language</label>
-            <select value={language} onChange={e => setLanguage(e.target.value)}
-              className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand transition-colors">
+            <label className="text-xs text-gray-400 uppercase tracking-wider font-semibold block mb-1.5">Language</label>
+            <select
+              value={language}
+              onChange={e => setLanguage(e.target.value)}
+              className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand transition-colors"
+            >
               {[
                 { v:'en', l:'English' },{ v:'si', l:'Sinhala' },{ v:'ta', l:'Tamil' },
                 { v:'es', l:'Spanish' },{ v:'fr', l:'French' },{ v:'de', l:'German' },
@@ -652,88 +697,125 @@ function AccountTab({ profile, logout, navigate }) {
               ].map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
             </select>
           </div>
-          <button onClick={handleSaveProfile} disabled={saving}
-            className="bg-brand text-black font-bold px-6 py-2.5 rounded-full text-sm hover:bg-brand-dark transition-colors disabled:opacity-50">
-            {saving ? 'Saving...' : 'Save Profile'}
+          <button
+            onClick={handleSaveProfile}
+            disabled={saving}
+            className="bg-brand text-black font-bold px-7 py-2.5 rounded-full text-sm hover:bg-brand-dark transition-all shadow-md shadow-brand/20 disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : 'Save Profile Changes'}
           </button>
         </div>
       </Section>
 
       {/* Subscription */}
-      <Section title="Subscription">
+      <Section title="Subscription Plan">
         <div className="py-4">
-          <div className="bg-gradient-to-r from-brand/20 to-purple-500/20 border border-brand/30 rounded-xl p-5 flex items-center justify-between">
+          <div className="bg-gradient-to-r from-brand/20 via-purple-500/10 to-brand/20 border border-brand/30 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <p className="font-bold">SoundWave Premium</p>
-              <p className="text-xs text-gray-400 mt-1">Ad-free · Offline listening · HQ audio · Unlimited skips</p>
+              <div className="flex items-center gap-2">
+                <p className="font-bold text-lg text-white">SoundWave Premium</p>
+                <span className="text-[10px] uppercase font-bold bg-brand text-black px-2 py-0.5 rounded-full">Active Tier: Free</span>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">Unlimited playback · High bitrate audio · Zero ads · Custom Equalizer</p>
             </div>
-            <button className="bg-brand text-black font-bold px-5 py-2.5 rounded-full text-sm hover:bg-brand-dark transition-colors shrink-0">
-              Upgrade
+            <button
+              onClick={() => toast.success('You are enjoying all unlocked features on SoundWave Free tier!')}
+              className="bg-white/10 hover:bg-white/20 border border-white/20 text-white font-semibold px-5 py-2.5 rounded-full text-sm transition-colors shrink-0"
+            >
+              Manage Plan
             </button>
           </div>
         </div>
       </Section>
 
       {/* Change email */}
-      <Section title="Change Email">
+      <Section title="Account Email">
         <form onSubmit={handleChangeEmail} className="py-4 space-y-3">
-          <p className="text-xs text-gray-500">Current: <span className="text-gray-300">{profile?.email}</span></p>
-          <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)}
-            placeholder="New email address"
-            className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors" />
-          <button type="submit" disabled={savingEmail || !newEmail.trim()}
-            className="bg-surface-3 hover:bg-surface-4 border border-white/10 text-white font-medium px-5 py-2 rounded-full text-sm transition-colors disabled:opacity-50">
-            {savingEmail ? 'Updating...' : 'Update Email'}
+          <p className="text-xs text-gray-500">Current email: <span className="text-gray-300 font-medium">{displayEmail}</span></p>
+          <input
+            type="email"
+            value={newEmail}
+            onChange={e => setNewEmail(e.target.value)}
+            placeholder="Enter new email address"
+            className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors"
+          />
+          <button
+            type="submit"
+            disabled={savingEmail || !newEmail.trim()}
+            className="bg-surface-3 hover:bg-surface-4 border border-white/10 text-white font-medium px-5 py-2 rounded-full text-sm transition-colors disabled:opacity-50"
+          >
+            {savingEmail ? 'Updating...' : 'Update Email Address'}
           </button>
         </form>
       </Section>
 
       {/* Change password */}
-      <Section title="Change Password">
+      <Section title="Security & Password">
         <form onSubmit={handleChangePassword} className="py-4 space-y-3">
-          <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)}
-            placeholder="New password (min 6 characters)"
-            className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors" />
-          <input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)}
+          <input
+            type="password"
+            value={newPass}
+            onChange={e => setNewPass(e.target.value)}
+            placeholder="New password (at least 6 characters)"
+            className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors"
+          />
+          <input
+            type="password"
+            value={confirmPass}
+            onChange={e => setConfirmPass(e.target.value)}
             placeholder="Confirm new password"
-            className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors" />
-          <button type="submit" disabled={savingPass || !newPass || !confirmPass}
-            className="bg-surface-3 hover:bg-surface-4 border border-white/10 text-white font-medium px-5 py-2 rounded-full text-sm transition-colors disabled:opacity-50">
+            className="w-full bg-surface-3 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand transition-colors"
+          />
+          <button
+            type="submit"
+            disabled={savingPass || !newPass || !confirmPass}
+            className="bg-surface-3 hover:bg-surface-4 border border-white/10 text-white font-medium px-5 py-2 rounded-full text-sm transition-colors disabled:opacity-50"
+          >
             {savingPass ? 'Updating...' : 'Update Password'}
           </button>
         </form>
       </Section>
 
       {/* Danger zone */}
-      <Section title="Danger Zone">
+      <Section title="Account Actions">
         <div className="py-3.5 border-b border-white/5">
-          <button onClick={handleLogout}
-            className="flex items-center gap-3 text-red-400 hover:text-red-300 transition-colors text-sm font-medium">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 text-red-400 hover:text-red-300 transition-colors text-sm font-semibold"
+          >
             <LogOut size={16} /> Sign out of SoundWave
           </button>
         </div>
         <div className="py-3.5">
           {!showDeleteConfirm ? (
-            <button onClick={() => setShowDeleteConfirm(true)}
-              className="flex items-center gap-3 text-red-500 hover:text-red-400 transition-colors text-sm font-medium">
-              <Trash2 size={16} /> Delete account
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="flex items-center gap-3 text-red-500 hover:text-red-400 transition-colors text-sm font-medium"
+            >
+              <Trash2 size={16} /> Delete Account
             </button>
           ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-red-400 font-medium">This will permanently delete your account and all data.</p>
-              <p className="text-xs text-gray-500">Type <span className="text-white font-mono">DELETE</span> to confirm</p>
-              <input value={deleteInput} onChange={e => setDeleteInput(e.target.value)}
+            <div className="space-y-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+              <p className="text-sm text-red-400 font-semibold">Warning: This will permanently erase your playlists, listening history, and user profile.</p>
+              <p className="text-xs text-gray-400">Please type <strong className="text-white font-mono bg-black/40 px-2 py-0.5 rounded">DELETE</strong> to confirm.</p>
+              <input
+                value={deleteInput}
+                onChange={e => setDeleteInput(e.target.value)}
                 placeholder="Type DELETE"
-                className="w-full bg-surface-3 border border-red-500/30 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors" />
-              <div className="flex gap-3">
+                className="w-full bg-surface-3 border border-red-500/40 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors font-mono"
+              />
+              <div className="flex gap-3 pt-1">
                 <button
-                  disabled={deleteInput !== 'DELETE'}
-                  onClick={() => toast.error('Account deletion requires backend support')}
-                  className="bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-full text-sm transition-colors disabled:opacity-30">
-                  Delete Forever
+                  disabled={deleteInput !== 'DELETE' || deletingAccount}
+                  onClick={handleDeleteAccount}
+                  className="bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-full text-sm transition-colors disabled:opacity-30"
+                >
+                  {deletingAccount ? 'Deleting...' : 'Delete Forever'}
                 </button>
-                <button onClick={() => { setShowDeleteConfirm(false); setDeleteInput('') }}
-                  className="bg-surface-3 hover:bg-surface-4 text-gray-300 px-5 py-2 rounded-full text-sm transition-colors">
+                <button
+                  onClick={() => { setShowDeleteConfirm(false); setDeleteInput('') }}
+                  className="bg-surface-3 hover:bg-surface-4 text-gray-300 px-5 py-2 rounded-full text-sm transition-colors"
+                >
                   Cancel
                 </button>
               </div>

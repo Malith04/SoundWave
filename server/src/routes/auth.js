@@ -372,6 +372,31 @@ router.put('/password', authenticate, async (req, res) => {
   }
 })
 
+// ── 7. Change Email ─────────────────────────────────────────
+router.put('/email', authenticate, async (req, res) => {
+  try {
+    const { email } = req.body
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'A valid email address is required.' })
+    }
+
+    const cleanEmail = email.trim().toLowerCase()
+
+    // Check if email already in use by another user
+    const existing = await query('SELECT id FROM users WHERE LOWER(email) = $1 AND id != $2', [cleanEmail, req.user.id])
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'This email is already associated with another account.' })
+    }
+
+    await query('UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2', [cleanEmail, req.user.id])
+
+    return res.json({ message: 'Email address updated successfully.', email: cleanEmail })
+  } catch (err) {
+    console.error('Update email error:', err)
+    return res.status(500).json({ error: 'Failed to update email address.' })
+  }
+})
+
 // ── 7. Forgot Password ──────────────────────────────────────
 router.post('/forgot-password', async (req, res) => {
   try {
