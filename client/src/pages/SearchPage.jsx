@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Search, X, Music, Clock } from 'lucide-react'
 import { searchAll } from '../services/musicApi'
+import { getSearchHistory, addToSearchHistory, clearSearchHistory } from '../services/userService'
+import { useAuth } from '../context/AuthContext'
 import SongRow from '../components/SongRow'
 
 const SOURCE_LABELS = {
@@ -8,26 +10,37 @@ const SOURCE_LABELS = {
   jamendo: { label: 'Full Track',  color: 'bg-brand/20 text-brand' },
 }
 
-const HISTORY_KEY = 'sw_search_history'
-const MAX_HISTORY = 8
-
-function loadHistory() {
-  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || [] } catch { return [] }
-}
-
-function saveHistory(term) {
-  const prev = loadHistory().filter(h => h !== term)
-  const next = [term, ...prev].slice(0, MAX_HISTORY)
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
-}
-
 export default function SearchPage() {
+  const { user } = useAuth()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState({ itunes: [], jamendo: [], all: [] })
   const [tab, setTab] = useState('all')
   const [loading, setLoading] = useState(false)
-  const [history, setHistory] = useState(loadHistory)
+  const [history, setHistory] = useState([])
   const debounceRef = useRef(null)
+
+  const historyKey = user?.uid ? `sw_search_history_${user.uid}` : 'sw_search_history_guest'
+
+  // Load user-isolated search history on mount / user change
+  useEffect(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem(historyKey)) || []
+      setHistory(cached)
+    } catch (_) {
+      setHistory([])
+    }
+
+    if (user?.uid) {
+      getSearchHistory().then(backendHistory => {
+        if (Array.isArray(backendHistory) && backendHistory.length > 0) {
+          setHistory(backendHistory)
+          try {
+            localStorage.setItem(historyKey, JSON.stringify(backendHistory))
+          } catch (_) {}
+        }
+      })
+    }
+  }, [user?.uid, historyKey])
 
   useEffect(() => {
     if (query.length < 2) {
@@ -41,21 +54,27 @@ export default function SearchPage() {
       setResults(res)
       setLoading(false)
       if (res.all.length > 0) {
-        saveHistory(query.trim())
-        setHistory(loadHistory())
+        const term = query.trim()
+        addToSearchHistory(term)
+        setHistory(prev => {
+          const next = [term, ...prev.filter(h => h.toLowerCase() !== term.toLowerCase())].slice(0, 10)
+          try { localStorage.setItem(historyKey, JSON.stringify(next)) } catch (_) {}
+          return next
+        })
       }
     }, 500)
     return () => clearTimeout(debounceRef.current)
-  }, [query])
+  }, [query, historyKey])
 
   const removeHistory = (term) => {
     const next = history.filter(h => h !== term)
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
+    try { localStorage.setItem(historyKey, JSON.stringify(next)) } catch (_) {}
     setHistory(next)
   }
 
-  const clearAllHistory = () => {
-    localStorage.removeItem(HISTORY_KEY)
+  const clearAllHistory = async () => {
+    await clearSearchHistory()
+    try { localStorage.removeItem(historyKey) } catch (_) {}
     setHistory([])
   }
 

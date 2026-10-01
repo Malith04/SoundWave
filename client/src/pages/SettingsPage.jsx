@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useAudioSettings, EQ_PRESETS } from '../context/AudioSettingsContext'
 import { useAuth } from '../context/AuthContext'
 import { usePlayer } from '../context/PlayerContext'
-import { updateUser } from '../services/userService'
+import { updateUser, clearSearchHistory, clearRecentlyPlayed } from '../services/userService'
 import { storage } from '../services/firebase'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import {
@@ -273,21 +273,6 @@ function PlaybackTab({ settings, update }) {
           }} />
       </Section>
 
-      {/* Debug section */}
-      <Section title="Debug">
-        <div className="py-3.5">
-          <button 
-            onClick={() => {
-              console.log('🔧 Manual force apply settings triggered')
-              forceApplySettings?.()
-            }}
-            className="px-4 py-2 bg-brand text-black font-medium rounded-lg hover:bg-brand-dark transition-colors"
-          >
-            Force Apply Settings
-          </button>
-          <p className="text-xs text-gray-500 mt-2">Click to manually apply all audio settings to current playback</p>
-        </div>
-      </Section>
     </>
   )
 }
@@ -345,16 +330,22 @@ function DisplayTab({ settings, update }) {
 // ── Privacy Tab ───────────────────────────────────────────────
 function PrivacyTab({ settings, update }) {
   const { user } = useAuth()
-  const handleClearHistory = () => {
-    localStorage.removeItem('sw_search_history')
-    toast.success('Search history cleared')
+  const handleClearHistory = async () => {
+    try {
+      await clearSearchHistory()
+      if (user?.uid) localStorage.removeItem(`sw_search_history_${user.uid}`)
+      localStorage.removeItem('sw_search_history')
+      toast.success('Search history cleared')
+    } catch {
+      toast.error('Failed to clear search history')
+    }
   }
   const handleClearRecent = async () => {
     if (!user) return
     try {
-      await updateUser(user.uid, { recentlyPlayed: [] })
-      toast.success('Recently played cleared')
-    } catch { toast.error('Failed to clear') }
+      await clearRecentlyPlayed()
+      toast.success('Recently played history cleared')
+    } catch { toast.error('Failed to clear recently played') }
   }
   return (
     <>
@@ -762,13 +753,15 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('audio')
 
   const handleReset = () => { reset(); toast.success('Settings reset to defaults') }
+  const activeTabObj = TABS.find(t => t.id === activeTab)
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Sidebar nav */}
-      <div className="w-52 shrink-0 border-r border-white/5 py-6 px-3 overflow-y-auto">
+    <div className="flex flex-col lg:flex-row h-full overflow-hidden">
+
+      {/* ── Desktop sidebar nav ── */}
+      <div className="hidden lg:flex flex-col w-52 shrink-0 border-r border-white/5 py-6 px-3 overflow-y-auto">
         <p className="text-xs font-bold text-gray-500 uppercase tracking-widest px-3 mb-4">Settings</p>
-        <nav className="space-y-0.5">
+        <nav className="space-y-0.5 flex-1">
           {TABS.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
@@ -779,7 +772,7 @@ export default function SettingsPage() {
             </button>
           ))}
         </nav>
-        <div className="mt-6 px-3">
+        <div className="mt-4 px-3">
           <button onClick={handleReset}
             className="flex items-center gap-2 text-xs text-gray-500 hover:text-white transition-colors">
             <RotateCcw size={13} /> Reset all settings
@@ -787,13 +780,38 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      {/* ── Mobile tab bar ── */}
+      <div className="lg:hidden shrink-0 border-b border-white/5 bg-surface-2">
+        <div className="flex overflow-x-auto scrollbar-none px-2 pt-2 gap-1">
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
+                activeTab === t.id
+                  ? 'bg-white/10 text-white border-b-2 border-brand'
+                  : 'text-gray-400 hover:text-white'
+              }`}>
+              <t.icon size={14} />
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Content ── */}
+      <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-5">
         {activeTab === 'audio'    && <AudioTab    settings={settings} update={update} applyPreset={applyPreset} setEqBand={setEqBand} />}
         {activeTab === 'playback' && <PlaybackTab settings={settings} update={update} />}
         {activeTab === 'display'  && <DisplayTab  settings={settings} update={update} />}
         {activeTab === 'privacy'  && <PrivacyTab  settings={settings} update={update} />}
         {activeTab === 'account'  && <AccountTab  profile={profile} logout={logout} navigate={navigate} />}
+
+        {/* Mobile reset button */}
+        <div className="lg:hidden mt-4 pb-4">
+          <button onClick={handleReset}
+            className="flex items-center gap-2 text-xs text-gray-500 hover:text-white transition-colors">
+            <RotateCcw size={13} /> Reset all settings
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -1,10 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Play, Shuffle, Pencil, Trash2, ChevronUp, ChevronDown, X, Music } from 'lucide-react'
-import { doc, getDoc } from 'firebase/firestore'
-import { db } from '../services/firebase'
+import { getPlaylist, deletePlaylist, renamePlaylist, removeSongFromPlaylist, reorderPlaylistSongs } from '../services/playlistService'
 import { getSongById } from '../services/songService'
-import { deletePlaylist, renamePlaylist, removeSongFromPlaylist, reorderPlaylistSongs } from '../services/playlistService'
 import { usePlayer } from '../context/PlayerContext'
 import SongRow from '../components/SongRow'
 import toast from 'react-hot-toast'
@@ -15,8 +13,9 @@ function PlaylistCover({ songs }) {
 
   if (covers.length === 0) {
     return (
-      <div className="w-48 h-48 bg-gradient-to-br from-surface-3 to-surface-4 rounded-xl flex items-center justify-center shrink-0">
-        <Music size={56} className="text-gray-500" />
+      <div className="w-32 h-32 sm:w-48 sm:h-48 bg-gradient-to-br from-surface-3 to-surface-4 rounded-xl flex items-center justify-center shrink-0">
+        <Music size={32} className="sm:hidden text-gray-500" />
+        <Music size={56} className="hidden sm:block text-gray-500" />
       </div>
     )
   }
@@ -24,7 +23,7 @@ function PlaylistCover({ songs }) {
   if (covers.length === 1) {
     return (
       <img src={covers[0]} alt="Playlist cover"
-        className="w-48 h-48 rounded-xl object-cover shrink-0" />
+        className="w-32 h-32 sm:w-48 sm:h-48 rounded-xl object-cover shrink-0" />
     )
   }
 
@@ -32,7 +31,7 @@ function PlaylistCover({ songs }) {
   const grid = [...covers]
   while (grid.length < 4) grid.push(grid[0])
   return (
-    <div className="w-48 h-48 rounded-xl overflow-hidden grid grid-cols-2 shrink-0">
+    <div className="w-32 h-32 sm:w-48 sm:h-48 rounded-xl overflow-hidden grid grid-cols-2 shrink-0">
       {grid.slice(0, 4).map((url, i) => (
         <img key={i} src={url} alt="" className="w-full h-full object-cover" />
       ))}
@@ -51,13 +50,23 @@ export default function PlaylistPage() {
 
   useEffect(() => {
     const load = async () => {
-      const snap = await getDoc(doc(db, 'playlists', id))
-      if (!snap.exists()) { navigate('/library'); return }
-      const pl = { id: snap.id, ...snap.data() }
-      setPlaylist(pl)
-      const loaded = await Promise.all((pl.songIds || []).map(sid => getSongById(sid)))
-      setSongs(loaded.filter(Boolean))
-      setLoading(false)
+      try {
+        const pl = await getPlaylist(id)
+        if (!pl) { navigate('/library'); return }
+        setPlaylist(pl)
+        if (pl.songs && pl.songs.length) {
+          setSongs(pl.songs)
+        } else if (pl.songIds && pl.songIds.length) {
+          const loaded = await Promise.all(pl.songIds.map(sid => getSongById(sid)))
+          setSongs(loaded.filter(Boolean))
+        } else {
+          setSongs([])
+        }
+      } catch (err) {
+        navigate('/library')
+      } finally {
+        setLoading(false)
+      }
     }
     load()
   }, [id])
@@ -112,37 +121,37 @@ export default function PlaylistPage() {
   )
 
   return (
-    <div className="px-6 py-6">
+    <div className="mobile-page-container">
       {/* Header */}
-      <div className="flex items-end gap-6 mb-8">
+      <div className="mobile-playlist-header">
         <PlaylistCover songs={songs} />
         <div className="flex-1 min-w-0">
           <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Playlist</p>
-          <h1 className="text-4xl font-bold mb-2 truncate">{playlist.name}</h1>
+          <h1 className="text-2xl sm:text-4xl font-bold mb-2 break-words">{playlist.name}</h1>
           <p className="text-gray-400 text-sm">{songs.length} songs</p>
-          <div className="flex items-center gap-3 mt-4">
+          <div className="mobile-playlist-controls">
             <button
               onClick={() => handlePlay(false)}
-              className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-black font-bold px-6 py-3 rounded-full transition-all"
+              className="mobile-touch-target flex items-center gap-2 bg-brand hover:bg-brand-dark text-black font-bold px-4 sm:px-6 py-2 sm:py-3 rounded-full transition-all text-sm sm:text-base"
             >
-              <Play size={18} fill="black" /> Play
+              <Play size={16} fill="black" /> Play
             </button>
             <button
               onClick={() => handlePlay(true)}
-              className="flex items-center gap-2 bg-surface-2 hover:bg-surface-3 px-5 py-3 rounded-full text-sm font-medium transition-colors"
+              className="mobile-touch-target flex items-center gap-2 bg-surface-2 hover:bg-surface-3 px-3 sm:px-5 py-2 sm:py-3 rounded-full text-xs sm:text-sm font-medium transition-colors"
             >
-              <Shuffle size={16} /> Shuffle
+              <Shuffle size={14} /> Shuffle
             </button>
-            <button onClick={handleRename} className="p-2 text-gray-400 hover:text-white transition-colors">
-              <Pencil size={18} />
+            <button onClick={handleRename} className="mobile-touch-target p-2 text-gray-400 hover:text-white transition-colors">
+              <Pencil size={16} />
             </button>
-            <button onClick={handleDelete} className="p-2 text-gray-400 hover:text-red-400 transition-colors">
-              <Trash2 size={18} />
+            <button onClick={handleDelete} className="mobile-touch-target p-2 text-gray-400 hover:text-red-400 transition-colors">
+              <Trash2 size={16} />
             </button>
             {songs.length > 1 && (
               <button
                 onClick={() => setReordering(r => !r)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                className={`mobile-touch-target px-3 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-medium transition-colors ${
                   reordering ? 'bg-brand text-black' : 'bg-surface-2 hover:bg-surface-3 text-gray-300'
                 }`}
               >
@@ -155,22 +164,22 @@ export default function PlaylistPage() {
 
       {/* Songs */}
       {songs.length > 0 ? (
-        <div className="space-y-1">
+        <div className="mobile-songs-container">
           {songs.map((song, i) => (
-            <div key={song.id} className="flex items-center gap-2">
+            <div key={song.id} className="mobile-song-row">
               {reordering && (
-                <div className="flex flex-col gap-0.5 shrink-0">
+                <div className="mobile-reorder-controls">
                   <button
                     onClick={() => moveUp(i)}
                     disabled={i === 0}
-                    className="p-1 text-gray-400 hover:text-white disabled:opacity-20 transition-colors"
+                    className="mobile-touch-target p-1 text-gray-400 hover:text-white disabled:opacity-20 transition-colors"
                   >
                     <ChevronUp size={16} />
                   </button>
                   <button
                     onClick={() => moveDown(i)}
                     disabled={i === songs.length - 1}
-                    className="p-1 text-gray-400 hover:text-white disabled:opacity-20 transition-colors"
+                    className="mobile-touch-target p-1 text-gray-400 hover:text-white disabled:opacity-20 transition-colors"
                   >
                     <ChevronDown size={16} />
                   </button>
@@ -188,7 +197,7 @@ export default function PlaylistPage() {
               {reordering && (
                 <button
                   onClick={() => handleRemoveSong(song.id)}
-                  className="p-2 text-gray-500 hover:text-red-400 transition-colors shrink-0"
+                  className="mobile-touch-target p-2 text-gray-500 hover:text-red-400 transition-colors shrink-0"
                 >
                   <X size={16} />
                 </button>

@@ -39,8 +39,10 @@ export default function ProfilePage() {
 
   // Load saved avatar color & profile pic for display only
   useEffect(() => {
-    const saved = localStorage.getItem('sw_avatar_color')
-    if (saved) setAvatarColor(parseInt(saved))
+    if (user?.uid) {
+      const saved = localStorage.getItem(`sw_avatar_color_${user.uid}`)
+      if (saved) setAvatarColor(parseInt(saved))
+    }
     
     // Load cached profile picture for display
     const cachedPic = localStorage.getItem(`sw_profile_pic_${user?.uid}`)
@@ -73,7 +75,9 @@ export default function ProfilePage() {
 
   const handleColorPick = async (id) => {
     setAvatarColor(id)
-    localStorage.setItem('sw_avatar_color', id)
+    if (user?.uid) {
+      localStorage.setItem(`sw_avatar_color_${user.uid}`, id)
+    }
     setShowColorPicker(false)
   }
 
