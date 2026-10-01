@@ -4,13 +4,13 @@ import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDRrei4hQ0jslfqXS_h4xkRGLI0gs2KUjg",
-  authDomain: "spotify-music-app-b8966.firebaseapp.com",
-  projectId: "spotify-music-app-b8966",
-  storageBucket: "spotify-music-app-b8966.firebasestorage.app",
-  messagingSenderId: "1014247265933",
-  appId: "1:1014247265933:web:2a5368e8765f044e6ab4c4",
-  measurementId: "G-FF5D1KH3PV"
+  apiKey: "AIzaSyAzOuJAwyV0VpwNWFXePSAcXB0zATmjhOQ",
+  authDomain: "soundwave-58f19.firebaseapp.com",
+  projectId: "soundwave-58f19",
+  storageBucket: "soundwave-58f19.firebasestorage.app",
+  messagingSenderId: "571859653920",
+  appId: "1:571859653920:web:3d0f55824e1be1e670b345",
+  measurementId: "G-5F2PVQ8Q6M"
 }
 
 const app = initializeApp(firebaseConfig)

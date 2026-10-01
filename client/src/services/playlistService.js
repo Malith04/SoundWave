@@ -1,54 +1,86 @@
-import {
-  collection, addDoc, updateDoc, deleteDoc,
-  doc, getDocs, query, where, arrayUnion, arrayRemove, getDoc
-} from 'firebase/firestore'
-import { db } from './firebase'
-
-const COL = 'playlists'
+import { api } from './api'
 
 export async function getUserPlaylists(uid) {
-  const q = query(collection(db, COL), where('ownerId', '==', uid))
-  const snap = await getDocs(q)
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
-    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+  try {
+    return await api.get('/playlists')
+  } catch (err) {
+    console.warn('getUserPlaylists error:', err.message)
+    return []
+  }
 }
 
 export async function getPlaylist(id) {
-  const snap = await getDoc(doc(db, COL, id))
-  return snap.exists() ? { id: snap.id, ...snap.data() } : null
+  try {
+    if (!id) return null
+    return await api.get(`/playlists/${id}`)
+  } catch (err) {
+    console.error('getPlaylist error:', err.message)
+    return null
+  }
 }
 
 export async function createPlaylist(uid, name, description = '') {
-  const ref = await addDoc(collection(db, COL), {
-    name: typeof name === 'object' ? name.name : name,
-    description,
-    ownerId: uid,
-    songIds: [],
-    createdAt: Date.now(),
-  })
-  return ref.id
+  try {
+    const playlistName = typeof name === 'object' ? name.name : name
+    const playlistDesc = typeof name === 'object' ? (name.description || '') : description
+    const res = await api.post('/playlists', { name: playlistName, description: playlistDesc })
+    return res.id
+  } catch (err) {
+    console.error('createPlaylist error:', err)
+    throw err
+  }
 }
 
 export async function updatePlaylist(id, data) {
-  await updateDoc(doc(db, COL, id), data)
+  try {
+    return await api.put(`/playlists/${id}`, data)
+  } catch (err) {
+    console.error('updatePlaylist error:', err)
+    throw err
+  }
 }
 
 export async function renamePlaylist(id, name) {
-  await updateDoc(doc(db, COL, id), { name })
+  try {
+    return await api.put(`/playlists/${id}`, { name })
+  } catch (err) {
+    console.error('renamePlaylist error:', err)
+    throw err
+  }
 }
 
 export async function deletePlaylist(id) {
-  await deleteDoc(doc(db, COL, id))
+  try {
+    return await api.delete(`/playlists/${id}`)
+  } catch (err) {
+    console.error('deletePlaylist error:', err)
+    throw err
+  }
 }
 
 export async function addSongToPlaylist(playlistId, songId) {
-  await updateDoc(doc(db, COL, playlistId), { songIds: arrayUnion(songId) })
+  try {
+    return await api.post(`/playlists/${playlistId}/songs`, { songId })
+  } catch (err) {
+    console.error('addSongToPlaylist error:', err)
+    throw err
+  }
 }
 
 export async function removeSongFromPlaylist(playlistId, songId) {
-  await updateDoc(doc(db, COL, playlistId), { songIds: arrayRemove(songId) })
+  try {
+    return await api.delete(`/playlists/${playlistId}/songs/${songId}`)
+  } catch (err) {
+    console.error('removeSongFromPlaylist error:', err)
+    throw err
+  }
 }
 
 export async function reorderPlaylistSongs(playlistId, songIds) {
-  await updateDoc(doc(db, COL, playlistId), { songIds })
+  try {
+    return await api.put(`/playlists/${playlistId}/reorder`, { songIds })
+  } catch (err) {
+    console.error('reorderPlaylistSongs error:', err)
+    throw err
+  }
 }
