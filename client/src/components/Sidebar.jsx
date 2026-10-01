@@ -58,9 +58,9 @@ export default function Sidebar({ onNavigate }) {
     }`
 
   return (
-    <aside className="w-64 bg-black flex flex-col shrink-0 overflow-hidden h-full">
-      {/* Logo - hidden on mobile since it's in the header */}
-      <div className="px-6 py-5 hidden lg:block">
+    <aside className="w-64 bg-[#0a0a0a] flex flex-col shrink-0 h-full overflow-hidden border-r border-white/5">
+      {/* Logo - desktop only */}
+      <div className="px-6 py-5 hidden lg:block shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-2xl">🎵</span>
           <span className="text-xl font-bold text-white">SoundWave</span>
@@ -68,7 +68,7 @@ export default function Sidebar({ onNavigate }) {
       </div>
 
       {/* Main nav */}
-      <nav className="px-3 space-y-1 pt-4 lg:pt-0">
+      <nav className="px-3 space-y-1 pt-4 lg:pt-0 shrink-0">
         <NavLink to="/" end className={navClass} onClick={onNavigate}>
           <Home size={20} /> Home
         </NavLink>
@@ -80,10 +80,10 @@ export default function Sidebar({ onNavigate }) {
         </NavLink>
       </nav>
 
-      <div className="mx-3 my-4 border-t border-white/10" />
+      <div className="mx-3 my-3 border-t border-white/10 shrink-0" />
 
       {/* Liked Songs shortcut */}
-      <div className="px-3 mb-2">
+      <div className="px-3 mb-2 shrink-0">
         <NavLink to="/library" onClick={onNavigate}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all">
           <div className="w-6 h-6 rounded bg-gradient-to-br from-indigo-400 to-pink-500 flex items-center justify-center shrink-0">
@@ -93,55 +93,44 @@ export default function Sidebar({ onNavigate }) {
         </NavLink>
       </div>
 
-      {/* Playlists */}
-      <div className="px-3 flex-1 overflow-y-auto">
-        <div className="flex items-center justify-between mb-3 px-1">
+      {/* Playlists — scrollable middle section */}
+      <div className="px-3 flex-1 overflow-y-auto min-h-0">
+        <div className="flex items-center justify-between mb-2 px-1">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Playlists</span>
-          <button
-            onClick={handleCreatePlaylist}
-            className="text-gray-400 hover:text-white transition-colors"
-            title="Create playlist"
-          >
+          <button onClick={handleCreatePlaylist} className="text-gray-400 hover:text-white transition-colors touch-target" title="Create playlist">
             <Plus size={18} />
           </button>
         </div>
-        <div className="space-y-0.5">
+        <div className="space-y-0.5 pb-2">
           {playlists.map(pl => (
-            <NavLink
-              key={pl.id}
-              to={`/playlist/${pl.id}`}
-              onClick={onNavigate}
+            <NavLink key={pl.id} to={`/playlist/${pl.id}`} onClick={onNavigate}
               className={({ isActive }) =>
-                `block px-2 py-2 rounded text-sm truncate transition-all ${
-                  isActive ? 'text-white' : 'text-gray-400 hover:text-white'
-                }`
-              }
-            >
+                `block px-2 py-2 rounded text-sm truncate transition-all ${isActive ? 'text-white' : 'text-gray-400 hover:text-white'}`
+              }>
               {pl.name}
             </NavLink>
           ))}
         </div>
       </div>
 
-      {/* Bottom: profile + settings + logout */}
-      <div className="p-3 border-t border-white/10 space-y-0.5">
-        <NavLink to="/profile" onClick={onNavigate} className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition-all group">
+      {/* Bottom: profile + settings + logout — always visible */}
+      <div className="px-3 py-3 border-t border-white/10 space-y-0.5 shrink-0 bg-[#0a0a0a]">
+        <NavLink to="/profile" onClick={onNavigate}
+          className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition-all group">
           <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center text-brand text-sm font-bold shrink-0 overflow-hidden">
             {profilePic
               ? <img src={profilePic} alt="" className="w-full h-full object-cover" />
               : <User size={14} />
             }
           </div>
-          <span className="text-sm text-gray-300 group-hover:text-white truncate flex-1">Your Library</span>
+          <span className="text-sm text-gray-300 group-hover:text-white truncate flex-1">Profile</span>
         </NavLink>
         <NavLink to="/settings" onClick={onNavigate}
           className={({ isActive }) => `flex items-center gap-3 px-2 py-2 rounded-lg text-sm font-medium transition-all ${isActive ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
           <Settings size={16} /> Settings
         </NavLink>
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-2 py-2 w-full rounded-lg text-sm text-gray-400 hover:text-red-400 hover:bg-red-400/10 transition-all"
-        >
+        <button onClick={handleLogout}
+          className="flex items-center gap-3 px-2 py-2 w-full rounded-lg text-sm text-gray-400 hover:text-red-400 hover:bg-red-400/10 transition-all">
           <LogOut size={16} /> Sign Out
         </button>
       </div>
