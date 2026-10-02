@@ -102,3 +102,21 @@ CREATE INDEX IF NOT EXISTS idx_playlist_songs_playlist_id ON playlist_songs(play
 CREATE INDEX IF NOT EXISTS idx_user_favorites_user_id ON user_favorites(user_id);
 CREATE INDEX IF NOT EXISTS idx_recently_played_user_time ON recently_played(user_id, played_at DESC);
 CREATE INDEX IF NOT EXISTS idx_search_history_user_time ON search_history(user_id, searched_at DESC);
+
+-- ── 8. Email Verifications & One-Time Passcodes (OTP) ────────
+CREATE TABLE IF NOT EXISTS email_verifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email VARCHAR(255) NOT NULL,
+  otp_code VARCHAR(16) NOT NULL,
+  purpose VARCHAR(50) NOT NULL, -- 'signup', 'login', '2fa'
+  expires_at TIMESTAMPTZ NOT NULL,
+  verified BOOLEAN DEFAULT false,
+  attempts INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN DEFAULT false;
+
+CREATE INDEX IF NOT EXISTS idx_email_verifications_lookup ON email_verifications(email, purpose, verified);
+CREATE INDEX IF NOT EXISTS idx_email_verifications_expiry ON email_verifications(expires_at);

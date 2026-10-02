@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import Sidebar from './Sidebar'
 import Player from './Player'
+import SoundWaveLogo from './SoundWaveLogo'
 import { usePlayer } from '../context/PlayerContext'
 import { Menu, X } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -111,15 +112,15 @@ export default function AppLayout() {
       <KeyboardShortcuts />
 
       {/* Mobile top bar */}
-      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-surface-2 border-b border-white/10 shrink-0 z-10">
+      <div className="lg:hidden flex items-center justify-between px-4 py-2.5 bg-surface-2 border-b border-white/10 shrink-0 z-10">
         <button
           onClick={() => setSidebarOpen(v => !v)}
-          className="touch-target p-2 rounded-lg hover:bg-white/10 transition-colors"
+          className="touch-target p-2 rounded-lg hover:bg-white/10 transition-colors text-white"
           aria-label="Toggle menu"
         >
           {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
-        <span className="text-base font-bold text-brand tracking-tight">SoundWave</span>
+        <SoundWaveLogo size={28} showText animated glow textClassName="text-base font-bold tracking-tight" />
         <div className="w-10" />
       </div>
 

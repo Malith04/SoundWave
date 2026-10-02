@@ -2,7 +2,7 @@ import { createContext, useContext, useRef, useState, useCallback, useEffect } f
 import { Howl } from 'howler'
 import { useAuth } from './AuthContext'
 import { addToRecentlyPlayed } from '../services/userService'
-import { searchYouTube } from '../services/musicApi'
+import { searchYouTube, getCachedYouTubeId } from '../services/musicApi'
 import { upsertSong, incrementPlayCount } from '../services/songService'
 import { useAudioSettings } from './AudioSettingsContext'
 
@@ -439,39 +439,41 @@ export function PlayerProvider({ children }) {
   const playWithYouTube = useCallback(async (song, startAt = 0) => {
     console.log('playWithYouTube called for:', song.title, 'by', song.artist)
     
-    // Always try the 30s preview first so there's immediate audio feedback
+    // Check instant cache first (0ms)
+    const query = `${song.artist} - ${song.title}`
+    const cachedVideoId = getCachedYouTubeId(song.id, query)
+
+    // ⚡ Instant Cache Hit:
+    // Skip 30s preview completely! Play full YouTube track directly!
+    if (cachedVideoId) {
+      console.log('⚡ Instant YouTube Play (cached video ID):', cachedVideoId)
+      setEngine('youtube')
+      if (ytReadyRef.current && ytPlayerRef.current) {
+        howlRef.current?.unload()
+        clearInterval(progressInterval.current)
+        setProgress(0); setCurrentTime(0); setDuration(0)
+        setIsLoading(true); setError(null)
+        ytPlayerRef.current.setVolume(mutedRef.current ? 0 : volumeRef.current)
+        ytPlayerRef.current.loadVideoById({ videoId: cachedVideoId, startSeconds: startAt })
+        return
+      } else {
+        pendingYTRef.current = cachedVideoId
+        return
+      }
+    }
+
+    // First time playing: start 30s preview immediately so user hears audio right away with 0 delay
     if (song.audioUrl) {
-      console.log('Playing 30s preview while searching for full track...')
+      console.log('Playing 30s preview while finding full track...')
       playWithHowler(song, song.audioUrl, startAt)
     }
 
-    // Then try to upgrade to full YouTube track in background
-    if (!YT_API_KEY) {
-      console.warn('No YouTube API key configured - staying with preview')
-      return
-    }
-    
     try {
-      // Try multiple search variations for better results
-      const searchQueries = [
-        `${song.title} ${song.artist} official audio`,
-        `${song.title} ${song.artist} official`,
-        `${song.title} ${song.artist}`,
-        `${song.artist} ${song.title}`
-      ]
-      
-      let videoId = null
-      for (const searchQuery of searchQueries) {
-        console.log('Trying YouTube search:', searchQuery)
-        videoId = await searchYouTube(searchQuery)
-        if (videoId) {
-          console.log('Found video with query:', searchQuery)
-          break
-        }
-      }
+      // Find full track via unlimited backend search (with Google API fallback)
+      const videoId = await searchYouTube(`${song.artist} - ${song.title} official audio`, song.id)
       
       if (!videoId) {
-        console.log('No YouTube video found after trying all search variations - staying with preview')
+        console.log('No YouTube video found - continuing with preview')
         return
       }
       
@@ -537,21 +539,21 @@ export function PlayerProvider({ children }) {
         audioUrl: song.audioUrl?.substring(0, 50) + '...'
       })
       
-      // Always prefer Jamendo for full-length playback
+      // Always prefer Jamendo for direct full-length playback
       if (song.source === 'jamendo' && song.audioUrl) {
         console.log('✅ Playing Jamendo track with Howler (FULL LENGTH)')
         playWithHowler(song, song.audioUrl, startAt)
       } 
-      // iTunes tracks: if user has Equalizer or Spatial Audio active, or requested Studio engine:
-      else if (song.source === 'itunes') {
+      // Preview-based tracks (iTunes, Deezer, etc.): attempt YouTube upgrade for full length
+      else if (song.source === 'itunes' || song.source === 'deezer' || settings?.audioEngine === 'youtube') {
         const wantsStudioAudio = settings?.audioEngine === 'studio' || 
           (settings?.audioEngine !== 'youtube' && (settings?.eqEnabled || settings?.bassBoost > 0 || settings?.spatialEnabled))
 
         if (wantsStudioAudio && song.audioUrl) {
-          console.log('🎛️ Equalizer active — playing iTunes track with Studio Web Audio Engine')
+          console.log('🎛️ Equalizer active — playing track with Studio Web Audio Engine')
           playWithHowler(song, song.audioUrl, startAt)
         } else {
-          console.log('⏳ Playing iTunes track - attempting YouTube upgrade for full length')
+          console.log('⏳ Attempting YouTube upgrade for full length playback')
           playWithYouTube(song, startAt)
         }
       } 

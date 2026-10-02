@@ -409,6 +409,11 @@ function DisplayTab({ settings, update }) {
       </Section>
 
       <Section title="Now Playing">
+        <Toggle label="Seek Bar Wave Animation" desc="Show dynamic sound wave motion along the currently playing seek bar"
+          value={settings.seekBarWave !== false} onChange={v => {
+            update('seekBarWave', v)
+            toast.success(v ? 'Seek bar wave animation enabled 🌊' : 'Seek bar wave animation disabled')
+          }} badge="NEW" />
         <Toggle label="Show Song Credits" desc="Display producer, songwriter info when available"
           value={settings.showCredits} onChange={v => update('showCredits', v)} />
         <Toggle label="Canvas / Animated Covers" desc="Show animated visuals behind album art" badge="NEW"

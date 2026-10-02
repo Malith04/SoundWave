@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { X, Play, Pause, Heart, ExternalLink, Music, Video, Clock, Tag, Disc3, Sparkles } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { X, Play, Pause, Heart, ExternalLink, Music, Video, Clock, Tag, Disc3, Sparkles, User } from 'lucide-react'
 import { usePlayer } from '../context/PlayerContext'
 import { useAuth } from '../context/AuthContext'
 import { toggleFavorite, isFavorite } from '../services/userService'
@@ -147,7 +148,15 @@ export default function SongModal({ song, queue, onClose }) {
                 <h1 className="text-xl sm:text-2xl font-extrabold text-white font-display leading-tight mb-1">
                   {song.title}
                 </h1>
-                <p className="text-base text-gray-300 font-medium mb-1">{song.artist}</p>
+                <p className="text-base text-gray-300 font-medium mb-1">
+                  <Link
+                    to={`/artist/${encodeURIComponent(song.artist)}`}
+                    onClick={onClose}
+                    className="hover:underline hover:text-brand transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <span>{song.artist}</span>
+                  </Link>
+                </p>
                 {song.album && (
                   <p className="text-xs text-gray-500 mb-3">{song.album}</p>
                 )}
@@ -173,27 +182,36 @@ export default function SongModal({ song, queue, onClose }) {
                 </div>
 
                 {/* Primary Action Buttons */}
-                <div className="flex items-center justify-center gap-3">
+                <div className="flex flex-wrap items-center justify-center gap-2.5">
                   <button
                     onClick={handleLike}
-                    className={`flex items-center gap-2 px-5 py-2.5 rounded-full border text-sm font-semibold transition-all duration-200 active:scale-95 ${
+                    className={`flex items-center gap-2 px-4 py-2 rounded-full border text-xs sm:text-sm font-semibold transition-all duration-200 active:scale-95 ${
                       liked 
                         ? 'bg-rose-500/20 border-rose-500/50 text-rose-400' 
                         : 'border-white/20 text-gray-300 hover:text-white hover:border-white/40 bg-white/5'
                     }`}
                   >
-                    <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
+                    <Heart size={15} fill={liked ? 'currentColor' : 'none'} />
                     {liked ? 'Liked' : 'Like'}
                   </button>
+
+                  <Link
+                    to={`/artist/${encodeURIComponent(song.artist)}`}
+                    onClick={onClose}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 text-xs sm:text-sm font-semibold transition-all hover:scale-105 active:scale-95"
+                  >
+                    <User size={14} />
+                    <span>View Artist</span>
+                  </Link>
                   
                   {song.source === 'itunes' && (
                     <a
                       href={`https://music.apple.com/search?term=${encodeURIComponent(`${song.title} ${song.artist}`)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-white/20 text-gray-300 hover:text-white hover:border-white/40 bg-white/5 text-sm font-semibold transition-all hover:bg-white/10"
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-white/20 text-gray-300 hover:text-white hover:border-white/40 bg-white/5 text-xs sm:text-sm font-semibold transition-all hover:bg-white/10"
                     >
-                      <ExternalLink size={15} />
+                      <ExternalLink size={14} />
                       Apple Music
                     </a>
                   )}

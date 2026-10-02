@@ -4,6 +4,7 @@ import multer from 'multer'
 import { query } from '../db/index.js'
 import { authenticate, generateToken } from '../middleware/auth.js'
 import { uploadProfileImage } from '../services/storage.js'
+import { generateOtpCode, sendOtpEmail } from '../services/email.js'
 
 const router = Router()
 
@@ -20,10 +21,139 @@ const upload = multer({
   }
 })
 
+// ── 0. Send 8-Digit OTP ───────────────────────────────────────
+router.post('/send-otp', async (req, res) => {
+  try {
+    const { email, purpose = 'signup' } = req.body
+
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'A valid email address is required.' })
+    }
+
+    const cleanEmail = email.trim().toLowerCase()
+
+    if (purpose === 'signup') {
+      const existing = await query('SELECT id, deleted_at, deletion_scheduled_for FROM users WHERE LOWER(email) = $1', [cleanEmail])
+      if (existing.rows.length > 0) {
+        const existingUser = existing.rows[0]
+        if (existingUser.deleted_at) {
+          const scheduledFor = existingUser.deletion_scheduled_for
+            ? new Date(existingUser.deletion_scheduled_for)
+            : new Date(new Date(existingUser.deleted_at).getTime() + 14 * 24 * 60 * 60 * 1000)
+
+          if (new Date() < scheduledFor) {
+            return res.status(400).json({
+              error: 'This account was scheduled for deletion. Please sign in with your password to restore your account within 14 days.'
+            })
+          }
+        } else {
+          return res.status(400).json({ error: 'An account with this email already exists. Please log in instead.' })
+        }
+      }
+    } else if (purpose === 'login') {
+      const existing = await query('SELECT id FROM users WHERE LOWER(email) = $1', [cleanEmail])
+      if (existing.rows.length === 0) {
+        return res.status(404).json({ error: 'No account found with this email address.' })
+      }
+    } else if (purpose === 'google') {
+      // Google verification applies to both new and existing users
+    }
+
+    // Rate limiting: 60-second cooldown per email & purpose
+    const recentOtp = await query(
+      `SELECT created_at FROM email_verifications
+       WHERE LOWER(email) = $1 AND purpose = $2 AND created_at > NOW() - INTERVAL '60 seconds'
+       ORDER BY created_at DESC LIMIT 1`,
+      [cleanEmail, purpose]
+    )
+    if (recentOtp.rows.length > 0) {
+      return res.status(429).json({
+        error: 'A verification code was already sent recently. Please check your inbox or wait 60 seconds before requesting a new code.'
+      })
+    }
+
+    const otp = generateOtpCode()
+
+    await query(
+      `INSERT INTO email_verifications (email, otp_code, purpose, expires_at)
+       VALUES ($1, $2, $3, NOW() + INTERVAL '10 minutes')`,
+      [cleanEmail, otp, purpose]
+    )
+
+    await sendOtpEmail({ email: cleanEmail, otp, purpose })
+
+    return res.json({
+      success: true,
+      message: `An 8-digit verification code has been sent to ${cleanEmail}.`
+    })
+  } catch (err) {
+    console.error('Send OTP error:', err)
+    return res.status(500).json({ error: 'Failed to send verification code. Please try again.' })
+  }
+})
+
+// ── 0.1 Verify 8-Digit OTP ────────────────────────────────────
+router.post('/verify-otp', async (req, res) => {
+  try {
+    const { email, otp, purpose = 'signup' } = req.body
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Email and 8-digit OTP code are required.' })
+    }
+
+    const cleanEmail = email.trim().toLowerCase()
+    const cleanOtp = otp.toString().trim()
+
+    if (cleanOtp.length !== 8) {
+      return res.status(400).json({ error: 'The verification code must be exactly 8 digits.' })
+    }
+
+    const result = await query(
+      `SELECT * FROM email_verifications
+       WHERE LOWER(email) = $1 AND purpose = $2 AND verified = false
+       ORDER BY created_at DESC LIMIT 1`,
+      [cleanEmail, purpose]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'No active verification code found. Please request a new code.' })
+    }
+
+    const verification = result.rows[0]
+
+    if (new Date() > new Date(verification.expires_at)) {
+      return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' })
+    }
+
+    if (verification.attempts >= 5) {
+      return res.status(400).json({ error: 'Too many incorrect attempts. Please request a new verification code.' })
+    }
+
+    if (verification.otp_code !== cleanOtp) {
+      await query('UPDATE email_verifications SET attempts = attempts + 1 WHERE id = $1', [verification.id])
+      const remaining = 4 - verification.attempts
+      return res.status(400).json({
+        error: `Invalid verification code. ${remaining > 0 ? `${remaining} attempts remaining.` : 'Please request a new code.'}`
+      })
+    }
+
+    await query('UPDATE email_verifications SET verified = true WHERE id = $1', [verification.id])
+
+    return res.json({
+      success: true,
+      verified: true,
+      message: 'Code verified successfully.'
+    })
+  } catch (err) {
+    console.error('Verify OTP error:', err)
+    return res.status(500).json({ error: 'Failed to verify code.' })
+  }
+})
+
 // ── 1. Register ─────────────────────────────────────────────
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, name } = req.body
+    const { email, password, name, otp } = req.body
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required.' })
@@ -33,8 +163,45 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters.' })
     }
 
+    const cleanEmail = email.trim().toLowerCase()
+
+    // Enforce 8-digit OTP verification
+    if (!otp) {
+      return res.status(400).json({ error: '8-digit verification code is required. Please verify your email.' })
+    }
+
+    const cleanOtp = otp.toString().trim()
+    if (cleanOtp.length !== 8) {
+      return res.status(400).json({ error: 'The verification code must be exactly 8 digits.' })
+    }
+
+    const otpCheck = await query(
+      `SELECT id, otp_code, expires_at, verified, attempts
+       FROM email_verifications
+       WHERE LOWER(email) = $1 AND purpose = 'signup'
+       ORDER BY created_at DESC LIMIT 1`,
+      [cleanEmail]
+    )
+
+    if (otpCheck.rows.length === 0) {
+      return res.status(400).json({ error: 'No verification code found. Please request a code first.' })
+    }
+
+    const verification = otpCheck.rows[0]
+
+    if (new Date() > new Date(verification.expires_at)) {
+      return res.status(400).json({ error: 'Verification code has expired. Please request a new code.' })
+    }
+
+    if (!verification.verified && verification.otp_code !== cleanOtp) {
+      return res.status(400).json({ error: 'Invalid 8-digit verification code.' })
+    }
+
+    // Mark OTP verified
+    await query('UPDATE email_verifications SET verified = true WHERE id = $1', [verification.id])
+
     // Check if email already exists
-    const existing = await query('SELECT id, deleted_at, deletion_scheduled_for FROM users WHERE LOWER(email) = LOWER($1)', [email.trim()])
+    const existing = await query('SELECT id, deleted_at, deletion_scheduled_for FROM users WHERE LOWER(email) = $1', [cleanEmail])
     if (existing.rows.length > 0) {
       const existingUser = existing.rows[0]
       if (existingUser.deleted_at) {
@@ -59,12 +226,12 @@ router.post('/register', async (req, res) => {
     const salt = await bcrypt.genSalt(10)
     const passwordHash = await bcrypt.hash(password, salt)
 
-    // Insert user
+    // Insert user with email_verified = true
     const result = await query(
-      `INSERT INTO users (email, password_hash, display_name, onboarding_completed)
-       VALUES ($1, $2, $3, false)
-       RETURNING id, email, display_name, profile_pic_url, bio, gender, birth_date, country, language, favorite_genres, listening_vibe, onboarding_completed, subscription_tier, is_admin, created_at`,
-      [email.trim().toLowerCase(), passwordHash, name || '']
+      `INSERT INTO users (email, password_hash, display_name, onboarding_completed, email_verified)
+       VALUES ($1, $2, $3, false, true)
+       RETURNING id, email, display_name, profile_pic_url, bio, gender, birth_date, country, language, favorite_genres, listening_vibe, onboarding_completed, subscription_tier, is_admin, email_verified, created_at`,
+      [cleanEmail, passwordHash, name || '']
     )
 
     const user = result.rows[0]
@@ -87,6 +254,7 @@ router.post('/register', async (req, res) => {
         favoriteGenres: user.favorite_genres || [],
         listeningVibe: user.listening_vibe || '',
         onboardingCompleted: user.onboarding_completed || false,
+        emailVerified: true,
         subscriptionTier: user.subscription_tier,
         isAdmin: user.is_admin,
         createdAt: user.created_at
@@ -98,18 +266,20 @@ router.post('/register', async (req, res) => {
   }
 })
 
-// ── 2. Login ────────────────────────────────────────────────
+// ── 2. Login (with 8-Digit OTP 2FA Security) ───────────────────
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body
+    const { email, password, otp } = req.body
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required.' })
     }
 
+    const cleanEmail = email.trim().toLowerCase()
+
     const result = await query(
-      `SELECT * FROM users WHERE LOWER(email) = LOWER($1)`,
-      [email.trim()]
+      `SELECT * FROM users WHERE LOWER(email) = $1`,
+      [cleanEmail]
     )
 
     if (result.rows.length === 0) {
@@ -117,6 +287,12 @@ router.post('/login', async (req, res) => {
     }
 
     const user = result.rows[0]
+
+    // Check credentials first
+    const valid = await bcrypt.compare(password, user.password_hash)
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid email or password.' })
+    }
 
     // Check if account was scheduled for deletion
     let restored = false
@@ -126,24 +302,95 @@ router.post('/login', async (req, res) => {
         : new Date(new Date(user.deleted_at).getTime() + 14 * 24 * 60 * 60 * 1000)
 
       if (new Date() >= scheduledFor) {
-        // Expired after 14 days! Permanently delete now
         await query('DELETE FROM users WHERE id = $1', [user.id])
         return res.status(401).json({
           error: 'This account was scheduled for deletion and the 14-day backup recovery period has expired. The account has been permanently removed.'
         })
       }
+    }
 
-      // Check password first before restoring
-      const valid = await bcrypt.compare(password, user.password_hash)
-      if (!valid) {
-        return res.status(401).json({ error: 'Invalid email or password.' })
+    // ── 2FA Passcode Verification ──
+    if (!otp) {
+      // Send 8-digit OTP to user's email
+      const recentOtp = await query(
+        `SELECT created_at FROM email_verifications
+         WHERE LOWER(email) = $1 AND purpose = 'login' AND created_at > NOW() - INTERVAL '30 seconds'
+         ORDER BY created_at DESC LIMIT 1`,
+        [cleanEmail]
+      )
+
+      let otpCode
+      if (recentOtp.rows.length > 0) {
+        const active = await query(
+          `SELECT otp_code FROM email_verifications
+           WHERE LOWER(email) = $1 AND purpose = 'login' AND expires_at > NOW() AND verified = false
+           ORDER BY created_at DESC LIMIT 1`,
+          [cleanEmail]
+        )
+        otpCode = active.rows[0]?.otp_code || generateOtpCode()
+      } else {
+        otpCode = generateOtpCode()
+        await query(
+          `INSERT INTO email_verifications (email, otp_code, purpose, expires_at)
+           VALUES ($1, $2, 'login', NOW() + INTERVAL '10 minutes')`,
+          [cleanEmail, otpCode]
+        )
+        await sendOtpEmail({ email: cleanEmail, otp: otpCode, purpose: 'login' })
       }
 
-      // Restore account from backup!
+      return res.json({
+        requiresOtp: true,
+        email: user.email,
+        message: 'Security verification: An 8-digit passcode has been sent to your email.'
+      })
+    }
+
+    // OTP was supplied: Validate it!
+    const cleanOtp = otp.toString().trim()
+    if (cleanOtp.length !== 8) {
+      return res.status(400).json({ error: 'The passcode must be exactly 8 digits.' })
+    }
+
+    const otpCheck = await query(
+      `SELECT id, otp_code, expires_at, verified, attempts
+       FROM email_verifications
+       WHERE LOWER(email) = $1 AND purpose = 'login' AND verified = false
+       ORDER BY created_at DESC LIMIT 1`,
+      [cleanEmail]
+    )
+
+    if (otpCheck.rows.length === 0) {
+      return res.status(400).json({ error: 'No active login passcode found. Please request a new code.' })
+    }
+
+    const verification = otpCheck.rows[0]
+
+    if (new Date() > new Date(verification.expires_at)) {
+      return res.status(400).json({ error: 'Passcode has expired. Please request a new code.' })
+    }
+
+    if (verification.attempts >= 5) {
+      return res.status(400).json({ error: 'Too many incorrect attempts. Please request a new passcode.' })
+    }
+
+    if (verification.otp_code !== cleanOtp) {
+      await query('UPDATE email_verifications SET attempts = attempts + 1 WHERE id = $1', [verification.id])
+      const remaining = 4 - verification.attempts
+      return res.status(400).json({
+        error: `Invalid passcode. ${remaining > 0 ? `${remaining} attempts remaining.` : 'Please request a new passcode.'}`
+      })
+    }
+
+    // Mark OTP as verified
+    await query('UPDATE email_verifications SET verified = true WHERE id = $1', [verification.id])
+
+    // If account was soft-deleted, restore from backup now
+    if (user.deleted_at) {
       await query(
         `UPDATE users
          SET deleted_at = NULL,
              deletion_scheduled_for = NULL,
+             email_verified = true,
              updated_at = NOW()
          WHERE id = $1`,
         [user.id]
@@ -151,11 +398,9 @@ router.post('/login', async (req, res) => {
       restored = true
       user.deleted_at = null
       user.deletion_scheduled_for = null
-    } else {
-      const valid = await bcrypt.compare(password, user.password_hash)
-      if (!valid) {
-        return res.status(401).json({ error: 'Invalid email or password.' })
-      }
+    } else if (!user.email_verified) {
+      await query('UPDATE users SET email_verified = true WHERE id = $1', [user.id])
+      user.email_verified = true
     }
 
     const token = generateToken(user)
@@ -180,6 +425,7 @@ router.post('/login', async (req, res) => {
         favoriteGenres: user.favorite_genres || [],
         listeningVibe: user.listening_vibe || '',
         onboardingCompleted: user.onboarding_completed || false,
+        emailVerified: true,
         subscriptionTier: user.subscription_tier,
         isAdmin: user.is_admin,
         createdAt: user.created_at
@@ -191,32 +437,113 @@ router.post('/login', async (req, res) => {
   }
 })
 
-// ── 3. Google Sign-In / Up ──────────────────────────────────
+// ── 3. Google Sign-In / Up (with Permanent 8-Digit OTP Email Verification) ──
 router.post('/google', async (req, res) => {
   try {
-    const { email, name, photoURL } = req.body
+    const { email, name, photoURL, otp } = req.body
 
     if (!email) {
       return res.status(400).json({ error: 'Google email is required.' })
     }
 
-    let result = await query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email.trim()])
+    const cleanEmail = email.trim().toLowerCase()
+
+    // ── 1. Require 8-Digit Email Verification Code ──
+    if (!otp) {
+      const recentOtp = await query(
+        `SELECT created_at FROM email_verifications
+         WHERE LOWER(email) = $1 AND purpose = 'google' AND created_at > NOW() - INTERVAL '30 seconds'
+         ORDER BY created_at DESC LIMIT 1`,
+        [cleanEmail]
+      )
+
+      let otpCode
+      if (recentOtp.rows.length > 0) {
+        const active = await query(
+          `SELECT otp_code FROM email_verifications
+           WHERE LOWER(email) = $1 AND purpose = 'google' AND expires_at > NOW() AND verified = false
+           ORDER BY created_at DESC LIMIT 1`,
+          [cleanEmail]
+        )
+        otpCode = active.rows[0]?.otp_code || generateOtpCode()
+      } else {
+        otpCode = generateOtpCode()
+        await query(
+          `INSERT INTO email_verifications (email, otp_code, purpose, expires_at)
+           VALUES ($1, $2, 'google', NOW() + INTERVAL '10 minutes')`,
+          [cleanEmail, otpCode]
+        )
+        await sendOtpEmail({ email: cleanEmail, otp: otpCode, purpose: 'google' })
+      }
+
+      return res.json({
+        requiresOtp: true,
+        email: cleanEmail,
+        googleProfile: {
+          email: cleanEmail,
+          name: name || '',
+          photoURL: photoURL || ''
+        },
+        message: 'Security verification: An 8-digit passcode has been sent to your Google email.'
+      })
+    }
+
+    // ── 2. OTP Provided: Validate Code ──
+    const cleanOtp = otp.toString().trim()
+    if (cleanOtp.length !== 8) {
+      return res.status(400).json({ error: 'The verification passcode must be exactly 8 digits.' })
+    }
+
+    const otpCheck = await query(
+      `SELECT id, otp_code, expires_at, verified, attempts
+       FROM email_verifications
+       WHERE LOWER(email) = $1 AND purpose = 'google' AND verified = false
+       ORDER BY created_at DESC LIMIT 1`,
+      [cleanEmail]
+    )
+
+    if (otpCheck.rows.length === 0) {
+      return res.status(400).json({ error: 'No active verification code found for this Google account. Please request a new code.' })
+    }
+
+    const verification = otpCheck.rows[0]
+
+    if (new Date() > new Date(verification.expires_at)) {
+      return res.status(400).json({ error: 'Verification passcode has expired. Please request a new code.' })
+    }
+
+    if (verification.attempts >= 5) {
+      return res.status(400).json({ error: 'Too many incorrect attempts. Please request a new passcode.' })
+    }
+
+    if (verification.otp_code !== cleanOtp) {
+      await query('UPDATE email_verifications SET attempts = attempts + 1 WHERE id = $1', [verification.id])
+      const remaining = 4 - verification.attempts
+      return res.status(400).json({
+        error: `Invalid passcode. ${remaining > 0 ? `${remaining} attempts remaining.` : 'Please request a new passcode.'}`
+      })
+    }
+
+    // Mark OTP verified
+    await query('UPDATE email_verifications SET verified = true WHERE id = $1', [verification.id])
+
+    // ── 3. Find or Create User & Permanently Mark email_verified = true ──
+    let result = await query('SELECT * FROM users WHERE LOWER(email) = $1', [cleanEmail])
     let user
     let isNewUser = false
     let restored = false
 
     if (result.rows.length === 0) {
       isNewUser = true
-      // Create user with a random secure password
       const randomPassword = Math.random().toString(36).slice(-12) + Date.now().toString(36)
       const salt = await bcrypt.genSalt(10)
       const passwordHash = await bcrypt.hash(randomPassword, salt)
 
       const insertRes = await query(
-        `INSERT INTO users (email, password_hash, display_name, profile_pic_url, onboarding_completed)
-         VALUES ($1, $2, $3, $4, false)
+        `INSERT INTO users (email, password_hash, display_name, profile_pic_url, onboarding_completed, email_verified)
+         VALUES ($1, $2, $3, $4, false, true)
          RETURNING *`,
-        [email.trim().toLowerCase(), passwordHash, name || '', photoURL || '']
+        [cleanEmail, passwordHash, name || '', photoURL || '']
       )
       user = insertRes.rows[0]
     } else {
@@ -229,25 +556,26 @@ router.post('/google', async (req, res) => {
           : new Date(new Date(user.deleted_at).getTime() + 14 * 24 * 60 * 60 * 1000)
 
         if (new Date() >= scheduledFor) {
-          // 14 days passed: Hard delete expired account, re-create as new user!
+          // Hard delete expired account, re-create as new user
           await query('DELETE FROM users WHERE id = $1', [user.id])
           isNewUser = true
           const randomPassword = Math.random().toString(36).slice(-12) + Date.now().toString(36)
           const salt = await bcrypt.genSalt(10)
           const passwordHash = await bcrypt.hash(randomPassword, salt)
           const insertRes = await query(
-            `INSERT INTO users (email, password_hash, display_name, profile_pic_url, onboarding_completed)
-             VALUES ($1, $2, $3, $4, false)
+            `INSERT INTO users (email, password_hash, display_name, profile_pic_url, onboarding_completed, email_verified)
+             VALUES ($1, $2, $3, $4, false, true)
              RETURNING *`,
-            [email.trim().toLowerCase(), passwordHash, name || '', photoURL || '']
+            [cleanEmail, passwordHash, name || '', photoURL || '']
           )
           user = insertRes.rows[0]
         } else {
-          // Within 14 days: Restore account from backup!
+          // Within 14 days: Restore account from backup & ensure email_verified = true
           await query(
             `UPDATE users
              SET deleted_at = NULL,
                  deletion_scheduled_for = NULL,
+                 email_verified = true,
                  updated_at = NOW()
              WHERE id = $1`,
             [user.id]
@@ -255,6 +583,13 @@ router.post('/google', async (req, res) => {
           restored = true
           user.deleted_at = null
           user.deletion_scheduled_for = null
+          user.email_verified = true
+        }
+      } else {
+        // Permanently ensure email_verified is true
+        if (!user.email_verified) {
+          await query('UPDATE users SET email_verified = true WHERE id = $1', [user.id])
+          user.email_verified = true
         }
       }
 
@@ -288,6 +623,7 @@ router.post('/google', async (req, res) => {
         favoriteGenres: user.favorite_genres || [],
         listeningVibe: user.listening_vibe || '',
         onboardingCompleted: user.onboarding_completed || false,
+        emailVerified: true,
         subscriptionTier: user.subscription_tier,
         isAdmin: user.is_admin,
         createdAt: user.created_at

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import CustomDatePicker from '../components/CustomDatePicker'
+import SoundWaveLogo from '../components/SoundWaveLogo'
 
 const GENRE_OPTIONS = [
   { id: 'pop',        name: 'Pop',         emoji: '🎤', color: 'from-pink-500 to-rose-600' },
@@ -113,10 +114,8 @@ export default function OnboardingPage() {
         {/* Header / Stepper */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand to-emerald-400 flex items-center justify-center shadow-md shadow-brand/30">
-                <Music2 size={16} className="text-black" />
-              </div>
+            <div className="flex items-center gap-2.5">
+              <SoundWaveLogo size={30} animated glow />
               <span className="font-display font-bold text-sm tracking-wide text-white/90">SoundWave Setup</span>
             </div>
             <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-white/10 text-brand border border-brand/30">

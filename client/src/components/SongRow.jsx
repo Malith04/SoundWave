@@ -1,4 +1,5 @@
-import { Play, Pause, Heart, MoreHorizontal, ListPlus, Trash2, PlusCircle, ListMusic, X, Plus, Info } from 'lucide-react'
+import { Play, Pause, Heart, MoreHorizontal, ListPlus, Trash2, PlusCircle, ListMusic, X, Plus, Info, User } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 import { usePlayer } from '../context/PlayerContext'
 import { useAuth } from '../context/AuthContext'
 import { useState, useRef, useEffect } from 'react'
@@ -203,6 +204,15 @@ function SongMenu({ song, queue, onRemove, onClose, anchorRef, onAddToPlaylist, 
         View Song Details & Video
       </button>
 
+      <Link
+        to={`/artist/${encodeURIComponent(song.artist)}`}
+        onClick={e => { e.stopPropagation(); onClose() }}
+        className="w-full flex items-center gap-3 px-3.5 py-2 text-xs font-semibold text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left"
+      >
+        <User size={15} className="text-purple-400" />
+        Go to Artist Page
+      </Link>
+
       <button
         onClick={handleFavorite}
         className={`w-full flex items-center gap-3 px-3.5 py-2 text-xs font-semibold hover:bg-white/10 transition-colors text-left ${
@@ -311,7 +321,15 @@ export default function SongRow({ song, index, queue, onRemove, showIndex = true
           <p className={`text-sm font-semibold truncate ${isActive ? 'text-brand' : 'text-white'}`}>
             {song.title}
           </p>
-          <p className="text-xs text-gray-400 truncate mt-0.5">{song.artist}</p>
+          <p className="text-xs text-gray-400 truncate mt-0.5">
+            <Link
+              to={`/artist/${encodeURIComponent(song.artist)}`}
+              onClick={e => e.stopPropagation()}
+              className="hover:underline hover:text-white transition-colors"
+            >
+              {song.artist}
+            </Link>
+          </p>
         </div>
 
         <p className="text-xs text-gray-500 truncate hidden lg:block w-32 xl:w-40">{song.album}</p>

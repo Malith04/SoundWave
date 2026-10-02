@@ -10,6 +10,8 @@ import { getTopChart, getJamendoTrending, getJamendoNew, getJamendoByGenre } fro
 import { getRecommendations, getMoodPlaylist } from '../services/recommendationService'
 import SectionRow from '../components/SectionRow'
 import MoodSelector from '../components/MoodSelector'
+import SoundWaveLogo from '../components/SoundWaveLogo'
+import ArtistCard from '../components/ArtistCard'
 import { usePlayer } from '../context/PlayerContext'
 import { useAudioSettings } from '../context/AudioSettingsContext'
 import { getUser } from '../services/userService'
@@ -45,7 +47,16 @@ const QUICK_MOODS = [
   { id: 'ambient',   name: 'Sleep',     icon: Moon,   color: 'from-purple-500 to-indigo-700',  tag: 'Peaceful Ambient' },
 ]
 
-const CATEGORY_TABS = ['All', 'Spotlight', 'Moods', 'Mixes', 'Charts', 'Genres']
+const POPULAR_ARTISTS = [
+  { id: 'dz_12246', name: 'Taylor Swift', picture: 'https://cdn-images.dzcdn.net/images/artist/cc2495870fe1a792ad0cdb05501ad5ec/500x500-000000-80-0-0.jpg', fanCount: 12738289, genre: 'Pop' },
+  { id: 'dz_58169', name: 'The Weeknd', picture: 'https://cdn-images.dzcdn.net/images/artist/581693b4724a7fcfa754455101e13a44/500x500-000000-80-0-0.jpg', fanCount: 14715455, genre: 'R&B/Soul' },
+  { id: 'dz_24e03', name: 'Drake', picture: 'https://cdn-images.dzcdn.net/images/artist/24e030a21051fa69d4c72170366eb50e/500x500-000000-80-0-0.jpg', fanCount: 10450000, genre: 'Hip-Hop' },
+  { id: 'dz_5256e', name: 'Ed Sheeran', picture: 'https://cdn-images.dzcdn.net/images/artist/5256e29712ee80f76022e1b10bd112ee/500x500-000000-80-0-0.jpg', fanCount: 11200000, genre: 'Pop' },
+  { id: 'dz_11c29', name: 'Billie Eilish', picture: 'https://cdn-images.dzcdn.net/images/artist/11c29668ec739e802058b4ecaa0802c0/500x500-000000-80-0-0.jpg', fanCount: 9500000, genre: 'Alternative' },
+  { id: 'dz_066b5', name: 'Coldplay', picture: 'https://cdn-images.dzcdn.net/images/artist/066b579cfeb174f1f516ec221379f824/500x500-000000-80-0-0.jpg', fanCount: 8800000, genre: 'Rock' }
+]
+
+const CATEGORY_TABS = ['All', 'Spotlight', 'Artists', 'Moods', 'Mixes', 'Charts', 'Genres']
 
 function getGreetingContext() {
   const h = new Date().getHours()
@@ -78,8 +89,8 @@ function MixCard({ mix, songs, onPlay, isCurrentPlaying }) {
           ) : covers.length > 0 ? (
             <img src={covers[0]} alt="" className="w-16 h-16 rounded-xl object-cover shadow-lg border border-white/15" />
           ) : (
-            <div className="w-16 h-16 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center text-2xl border border-white/10">
-              🎵
+            <div className="w-16 h-16 rounded-xl bg-white/5 backdrop-blur-md flex items-center justify-center border border-white/10">
+              <SoundWaveLogo size={32} animated={false} glow={false} />
             </div>
           )}
 
@@ -491,6 +502,32 @@ export default function HomePage() {
           subtitle="The most streamed tracks worldwide right now"
           songs={chart} 
         />
+      )}
+
+      {/* ── Popular & Trending Artists ── */}
+      {(activeTab === 'All' || activeTab === 'Artists') && (
+        <section className="mb-8 lg:mb-10 animate-fade-in">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl lg:text-2xl font-bold text-white font-display flex items-center gap-2">
+                <span>🌟</span> Popular Artists
+              </h2>
+              <p className="text-xs text-gray-400 mt-0.5">Explore full discographies, albums, and top tracks</p>
+            </div>
+            <Link
+              to="/search"
+              className="text-xs font-bold text-brand hover:underline flex items-center gap-1"
+            >
+              <span>Search Artists</span>
+              <ChevronRight size={14} />
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+            {POPULAR_ARTISTS.map(art => (
+              <ArtistCard key={art.name} artist={art} />
+            ))}
+          </div>
+        </section>
       )}
 
       {/* ── Your Daily Mixes ── */}

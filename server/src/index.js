@@ -10,6 +10,8 @@ import songsRoutes from './routes/songs.js'
 import playlistsRoutes from './routes/playlists.js'
 import usersRoutes from './routes/users.js'
 import adminRoutes from './routes/admin.js'
+import artistsRoutes from './routes/artists.js'
+import youtubeRoutes from './routes/youtube.js'
 
 dotenv.config()
 
@@ -34,8 +36,8 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')))
 app.get('/api/health', async (req, res) => {
   let dbStatus = 'disconnected'
   try {
-    const { pool } = await import('./db/index.js')
-    await pool.query('SELECT 1')
+    const { query } = await import('./db/index.js')
+    await query('SELECT 1')
     dbStatus = 'connected'
   } catch (err) {
     dbStatus = `disconnected (${err.message})`
@@ -55,6 +57,8 @@ app.use('/api/songs', songsRoutes)
 app.use('/api/playlists', playlistsRoutes)
 app.use('/api/users', usersRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/artists', artistsRoutes)
+app.use('/api/youtube', youtubeRoutes)
 
 // ── 404 Handler ──
 app.use('/api/*', (req, res) => {

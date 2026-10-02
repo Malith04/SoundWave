@@ -32,7 +32,8 @@ async function request(endpoint, options = {}) {
   }
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 6000)
+  const timeoutMs = options.timeout || 12000
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
   const config = {
     ...options,

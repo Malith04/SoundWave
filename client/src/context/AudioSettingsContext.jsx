@@ -25,6 +25,7 @@ export const DEFAULT = {
   accent: '#1DB954',
   animatedArt: true,
   particles: true,
+  seekBarWave: true,
   showCredits: false,
   canvas: false,
   autoLyrics: false,

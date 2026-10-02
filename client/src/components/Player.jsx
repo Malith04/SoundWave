@@ -1,12 +1,14 @@
 import { usePlayer } from '../context/PlayerContext'
 import { useAudioSettings } from '../context/AudioSettingsContext'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
+import WaveSeekBar from './WaveSeekBar'
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
   Volume2, VolumeX, Volume1, Heart, ListMusic, X, Music, Mic2,
   ChevronDown, Maximize2, Timer
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { toggleFavorite, isFavorite } from '../services/userService'
 import toast from 'react-hot-toast'
@@ -229,7 +231,7 @@ function QueuePanel({ queue, queueIndex, onClose, onPlay, expanded = false }) {
 function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duration, volume, isMuted,
   isShuffled, repeatMode, isLoading, error, engine, queue, queueIndex, liked, onLike, onClose,
   togglePlay, seek, next, previous, setVolume, toggleMute, toggleShuffle, cycleRepeat, play,
-  showParticles, settings, switchEngine }) {
+  showParticles, settings, switchEngine, onToggleWave }) {
   const [panel, setPanel] = useState(() => (settings?.autoLyrics ? 'lyrics' : null))
   const [viewMode, setViewMode] = useState('audio')
   const [videoId, setVideoId] = useState(null)
@@ -309,7 +311,15 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
             {/* Song info */}
             <div className="text-center w-full">
               <p className="text-xl font-bold leading-tight mb-1 truncate">{currentSong.title}</p>
-              <p className="text-gray-400 text-sm truncate">{currentSong.artist}</p>
+              <p className="text-gray-400 text-sm truncate">
+                <Link
+                  to={`/artist/${encodeURIComponent(currentSong.artist)}`}
+                  onClick={() => onClose()}
+                  className="hover:underline hover:text-white transition-colors"
+                >
+                  {currentSong.artist}
+                </Link>
+              </p>
               {currentSong.album && <p className="text-xs text-gray-600 mt-0.5 truncate">{currentSong.album}</p>}
               {settings?.showCredits && (
                 <p className="text-[11px] text-gray-500 mt-1">Source: {currentSong.source} {currentSong.genre ? `• ${currentSong.genre}` : ''}</p>
@@ -333,16 +343,18 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
               <AudioBars isPlaying={isPlaying} size="lg" />
             </div>
 
-            {/* Seek bar */}
+            {/* Seek bar with dynamic sound wave animation */}
             <div className="w-full">
-              <input type="range" min={0} max={1} step={0.001} value={progress}
-                onChange={e => seek(parseFloat(e.target.value))}
-                className="w-full mobile-seek-bar seek-bar cursor-pointer"
-                style={{ '--progress': `${progress * 100}%` }} />
-              <div className="flex justify-between mt-2">
-                <span className="text-xs text-gray-400 tabular-nums">{formatTime(currentTime)}</span>
-                <span className="text-xs text-gray-400 tabular-nums">{formatTime(duration)}</span>
-              </div>
+              <WaveSeekBar
+                progress={progress}
+                currentTime={currentTime}
+                duration={duration}
+                seek={seek}
+                isPlaying={isPlaying}
+                waveEnabled={settings?.seekBarWave !== false}
+                onToggleWave={onToggleWave}
+                showTimes={true}
+              />
               {error && <p className="text-xs text-orange-400 text-center mt-1">{error}</p>}
             </div>
 
@@ -423,8 +435,15 @@ export default function Player() {
     play, togglePlay, seek, next, previous, setVolume, toggleMute, toggleShuffle, cycleRepeat, switchEngine
   } = usePlayer()
   const { user } = useAuth()
-  const { settings } = useAudioSettings()
+  const { settings, update } = useAudioSettings()
   useKeyboardShortcuts()
+
+  const waveEnabled = settings?.seekBarWave !== false
+  const handleToggleWave = () => {
+    const nextVal = !waveEnabled
+    update?.('seekBarWave', nextVal)
+    toast.success(nextVal ? 'Seek bar wave animation enabled 🌊' : 'Seek bar wave animation disabled')
+  }
 
   const [liked, setLiked] = useState(false)
   const [showQueue, setShowQueue] = useState(false)
@@ -504,6 +523,7 @@ export default function Player() {
           showParticles={settings?.particles !== false}
           settings={settings}
           switchEngine={switchEngine}
+          onToggleWave={handleToggleWave}
         />
       )}
 
@@ -556,12 +576,18 @@ export default function Player() {
 
         {/* Mobile layout: stacked seek bar on top, controls below */}
         <div className="sm:hidden">
-          {/* Seek bar strip — thick and always visible */}
+          {/* Seek bar strip — with dynamic sound wave animation */}
           <div className="px-0">
-            <input type="range" min={0} max={1} step={0.001} value={progress}
-              onChange={e => seek(parseFloat(e.target.value))}
-              className="w-full seek-bar cursor-pointer"
-              style={{ '--progress': `${progress * 100}%`, height: '3px', display: 'block' }} />
+            <WaveSeekBar
+              progress={progress}
+              currentTime={currentTime}
+              duration={duration}
+              seek={seek}
+              isPlaying={isPlaying}
+              waveEnabled={waveEnabled}
+              showTimes={false}
+              className="px-0"
+            />
           </div>
           {/* Mobile controls row */}
           <div className="flex items-center gap-2 px-3 py-2">
@@ -572,7 +598,14 @@ export default function Player() {
             </button>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold truncate leading-tight">{currentSong.title}</p>
-              <p className="text-xs text-gray-400 truncate">{currentSong.artist}</p>
+              <p className="text-xs text-gray-400 truncate">
+                <Link
+                  to={`/artist/${encodeURIComponent(currentSong.artist)}`}
+                  className="hover:underline hover:text-white transition-colors"
+                >
+                  {currentSong.artist}
+                </Link>
+              </p>
             </div>
             <button onClick={handleLike} className={`touch-target shrink-0 ${liked ? 'text-brand' : 'text-gray-500'}`}>
               <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
@@ -610,7 +643,14 @@ export default function Player() {
             </button>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold truncate leading-tight">{currentSong.title}</p>
-              <p className="text-xs text-gray-400 truncate">{currentSong.artist}</p>
+              <p className="text-xs text-gray-400 truncate">
+                <Link
+                  to={`/artist/${encodeURIComponent(currentSong.artist)}`}
+                  className="hover:underline hover:text-white transition-colors"
+                >
+                  {currentSong.artist}
+                </Link>
+              </p>
               {currentSong.source === 'itunes' && (
                 <button
                   type="button"
@@ -650,15 +690,17 @@ export default function Player() {
                 <RepeatIcon size={15} />
               </button>
             </div>
-            {/* Seek bar — always visible */}
-            <div className="flex items-center gap-2 w-full">
-              <span className="text-xs text-gray-500 tabular-nums shrink-0 w-9 text-right">{formatTime(currentTime)}</span>
-              <input type="range" min={0} max={1} step={0.001} value={progress}
-                onChange={e => seek(parseFloat(e.target.value))}
-                className="flex-1 seek-bar unified-seek-bar cursor-pointer"
-                style={{ '--progress': `${progress * 100}%` }} />
-              <span className="text-xs text-gray-500 tabular-nums shrink-0 w-9">{formatTime(duration)}</span>
-            </div>
+            {/* Seek bar — always visible with wave animation & quick toggle */}
+            <WaveSeekBar
+              progress={progress}
+              currentTime={currentTime}
+              duration={duration}
+              seek={seek}
+              isPlaying={isPlaying}
+              waveEnabled={waveEnabled}
+              onToggleWave={handleToggleWave}
+              showTimes={true}
+            />
             {error && <p className="text-xs text-orange-400 truncate">{error}</p>}
           </div>
 

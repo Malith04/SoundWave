@@ -1,5 +1,6 @@
 import { Play, Pause } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { usePlayer } from '../context/PlayerContext'
 import SongModal from './SongModal'
 
@@ -87,7 +88,13 @@ export default function SongCard({ song, queue }) {
             {song.title}
           </p>
           <p className="text-xs text-gray-400 truncate mt-1">
-            {song.artist}
+            <Link
+              to={`/artist/${encodeURIComponent(song.artist)}`}
+              onClick={e => e.stopPropagation()}
+              className="hover:underline hover:text-white transition-colors"
+            >
+              {song.artist}
+            </Link>
           </p>
         </div>
       </div>

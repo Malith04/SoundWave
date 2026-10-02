@@ -4,6 +4,7 @@ import { PlayerProvider } from './context/PlayerContext'
 import { AudioSettingsProvider } from './context/AudioSettingsContext'
 import AppLayout from './components/AppLayout'
 import InstallPrompt from './components/InstallPrompt'
+import { InstallProvider } from './context/InstallContext'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
@@ -15,6 +16,7 @@ import GenrePage from './pages/GenrePage'
 import ProfilePage from './pages/ProfilePage'
 import SettingsPage from './pages/SettingsPage'
 import OnboardingPage from './pages/OnboardingPage'
+import ArtistPage from './pages/ArtistPage'
 
 // Full-screen spinner shown while resolving auth state
 function Spinner() {
@@ -68,6 +70,7 @@ function AppRoutes() {
       >
         <Route index element={<HomePage />} />
         <Route path="search" element={<SearchPage />} />
+        <Route path="artist/:name" element={<ArtistPage />} />
         <Route path="library" element={<LibraryPage />} />
         <Route path="playlist/:id" element={<PlaylistPage />} />
         <Route path="genre/:genre" element={<GenrePage />} />
@@ -83,8 +86,10 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
-      <InstallPrompt />
+      <InstallProvider>
+        <AppRoutes />
+        <InstallPrompt />
+      </InstallProvider>
     </AuthProvider>
   )
 }

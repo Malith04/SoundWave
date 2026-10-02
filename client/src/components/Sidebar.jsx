@@ -1,13 +1,16 @@
-import { NavLink, useNavigate } from 'react-router-dom'
-import { Home, Search, Library, Plus, LogOut, User, Settings, Heart } from 'lucide-react'
+import { NavLink, Link, useNavigate } from 'react-router-dom'
+import { Home, Search, Library, Plus, LogOut, User, Settings, Heart, Download } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { useInstall } from '../context/InstallContext'
 import { useState, useEffect, useRef } from 'react'
 import { getUserPlaylists, createPlaylist } from '../services/playlistService'
 import CreatePlaylistModal from './CreatePlaylistModal'
+import SoundWaveLogo from './SoundWaveLogo'
 import toast from 'react-hot-toast'
 
 export default function Sidebar({ onNavigate }) {
   const { user, profile, logout } = useAuth()
+  const { isInstalled, promptInstall } = useInstall()
   const navigate = useNavigate()
   const [playlists, setPlaylists] = useState([])
   const [imgError, setImgError] = useState(false)
@@ -60,11 +63,10 @@ export default function Sidebar({ onNavigate }) {
   return (
     <aside className="w-64 bg-[#0a0a0a] flex flex-col shrink-0 h-full overflow-hidden border-r border-white/5">
       {/* Logo - desktop only */}
-      <div className="px-6 py-5 hidden lg:block shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">🎵</span>
-          <span className="text-xl font-bold text-white">SoundWave</span>
-        </div>
+      <div className="px-5 py-5 hidden lg:block shrink-0">
+        <Link to="/" className="inline-block hover:opacity-90 transition-opacity">
+          <SoundWaveLogo size={34} showText animated glow textClassName="text-xl tracking-tight font-extrabold" />
+        </Link>
       </div>
 
       {/* Main nav */}
@@ -120,6 +122,25 @@ export default function Sidebar({ onNavigate }) {
 
       {/* Bottom: profile + settings + logout — always visible */}
       <div className="px-3 py-3 border-t border-white/10 space-y-0.5 shrink-0 bg-[#0a0a0a]">
+        {!isInstalled && (
+          <button
+            onClick={() => {
+              promptInstall()
+              onNavigate?.()
+            }}
+            className="flex items-center gap-3 px-2 py-2 w-full rounded-lg text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-all text-left group mb-1"
+            title="Install SoundWave App"
+          >
+            <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 group-hover:text-brand group-hover:bg-brand/10 transition-colors">
+              <Download size={15} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-sm font-medium block leading-tight text-gray-300 group-hover:text-white">Install App</span>
+              <span className="text-[10px] text-gray-500 block">Desktop & Offline</span>
+            </div>
+          </button>
+        )}
+
         <NavLink to="/profile" onClick={onNavigate}
           className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition-all group">
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand/40 to-brand/80 flex items-center justify-center text-white text-xs font-bold shrink-0 overflow-hidden ring-1 ring-white/20 shadow-sm">

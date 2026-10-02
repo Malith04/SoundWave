@@ -1,196 +1,120 @@
-import { useState, useEffect } from 'react'
-import { Download, X, Smartphone, Monitor } from 'lucide-react'
-import toast from 'react-hot-toast'
+import { useLocation } from 'react-router-dom'
+import { Download, X, Share2 } from 'lucide-react'
+import { useInstall } from '../context/InstallContext'
+import SoundWaveLogo from './SoundWaveLogo'
 
 export default function InstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = useState(null)
-  const [showPrompt, setShowPrompt] = useState(false)
-  const [isIOS, setIsIOS] = useState(false)
-  const [isStandalone, setIsStandalone] = useState(false)
+  const {
+    isInstalled,
+    showBanner,
+    showIOSModal,
+    setShowIOSModal,
+    promptInstall,
+    dismissBanner,
+  } = useInstall()
 
-  useEffect(() => {
-    // Check if running as installed PWA
-    const isStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || 
-                            window.navigator.standalone === true
+  const location = useLocation()
 
-    // Check if iOS
-    const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-    
-    setIsStandalone(isStandaloneMode)
-    setIsIOS(iOS)
+  // Suppress on auth & onboarding routes
+  const isAuthRoute = [
+    '/login',
+    '/signup',
+    '/forgot-password',
+    '/onboarding',
+  ].includes(location.pathname)
 
-    // Don't show prompt if already installed
-    if (isStandaloneMode) {
-      console.log('PWA: Already installed, not showing prompt')
-      return
-    }
-
-    console.log('PWA: Setting up install prompt listeners')
-
-    // Listen for install prompt event (Android/Desktop)
-    const handleBeforeInstallPrompt = (e) => {
-      console.log('PWA: beforeinstallprompt event fired')
-      e.preventDefault()
-      setDeferredPrompt(e)
-      
-      // Show our custom prompt immediately for testing
-      setTimeout(() => {
-        const dismissed = localStorage.getItem('pwa-install-dismissed')
-        if (!dismissed) {
-          console.log('PWA: Showing install prompt')
-          setShowPrompt(true)
-        }
-      }, 3000) // Reduced to 3 seconds for testing
-    }
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-
-    // For iOS, show manual instructions
-    if (iOS && !isStandaloneMode) {
-      setTimeout(() => {
-        const dismissed = localStorage.getItem('pwa-install-dismissed-ios')
-        if (!dismissed) {
-          console.log('PWA: Showing iOS install prompt')
-          setShowPrompt(true)
-        }
-      }, 5000) // Show after 5 seconds on iOS
-    }
-
-    // Force show prompt for testing (remove in production)
-    if (!iOS && !isStandaloneMode) {
-      setTimeout(() => {
-        console.log('PWA: Force showing prompt for testing')
-        setShowPrompt(true)
-      }, 8000) // Force show after 8 seconds for testing
-    }
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-    }
-  }, [])
-
-  const handleInstall = async () => {
-    if (!deferredPrompt) {
-      console.log('PWA: No deferred prompt available')
-      return
-    }
-
-    try {
-      console.log('PWA: Triggering install prompt')
-      deferredPrompt.prompt()
-      const { outcome } = await deferredPrompt.userChoice
-      
-      console.log('PWA: User choice:', outcome)
-      if (outcome === 'accepted') {
-        toast.success('🎉 SoundWave installed successfully!')
-      } else {
-        toast('Maybe next time! 😊')
-      }
-      
-      setDeferredPrompt(null)
-      setShowPrompt(false)
-    } catch (error) {
-      console.error('PWA: Install failed:', error)
-      toast.error('Installation failed. Please try again.')
-    }
-  }
-
-  const handleDismiss = () => {
-    console.log('PWA: User dismissed install prompt')
-    setShowPrompt(false)
-    const key = isIOS ? 'pwa-install-dismissed-ios' : 'pwa-install-dismissed'
-    localStorage.setItem(key, 'true')
-    toast('You can always install later from your browser menu! 📱')
-  }
-
-  // Don't show if already installed
-  if (isStandalone) {
-    console.log('PWA: App is standalone, not showing prompt')
+  if (isInstalled || isAuthRoute) {
     return null
   }
-  
-  if (!showPrompt) {
-    return null
-  }
-
-  console.log('PWA: Rendering install prompt', { isIOS, deferredPrompt: !!deferredPrompt })
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 max-w-sm mx-auto">
-      <div className="bg-gradient-to-r from-brand/90 to-green-600/90 backdrop-blur-md rounded-2xl p-4 shadow-2xl border border-white/20">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center shrink-0">
-            {isIOS ? <Smartphone size={20} className="text-white" /> : <Download size={20} className="text-white" />}
-          </div>
-          
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-white text-sm mb-1">
-              Install SoundWave App
-            </h3>
-            
-            {isIOS ? (
-              <div className="text-xs text-white/90 space-y-1">
-                <p>Add to your home screen for the best experience:</p>
-                <div className="flex items-center gap-1">
-                  <span>1. Tap</span>
-                  <div className="w-4 h-4 bg-white/30 rounded flex items-center justify-center">
-                    <span className="text-xs">⬆️</span>
-                  </div>
-                  <span>Share button</span>
-                </div>
-                <p>2. Select "Add to Home Screen"</p>
+    <>
+      {/* Simplified, elegant floating install banner in top-right area (never obstructs audio player) */}
+      {showBanner && (
+        <div className="fixed top-4 right-4 sm:top-5 sm:right-6 z-50 max-w-[360px] w-full animate-slide-down">
+          <div className="bg-[#121217]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-3 sm:p-3.5 shadow-2xl shadow-black/80 flex items-center gap-3">
+            {/* App Icon */}
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand/20 to-brand/40 border border-brand/30 flex items-center justify-center shrink-0 shadow-inner">
+              <SoundWaveLogo size={22} animated={false} />
+            </div>
+
+            {/* Details */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-white tracking-tight">SoundWave App</span>
+                <span className="text-[10px] bg-brand/20 text-brand px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider">Free</span>
               </div>
-            ) : (
-              <p className="text-xs text-white/90">
-                Get the full app experience with offline support, faster loading, and native feel.
+              <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                Fast, offline & native desktop speed
               </p>
-            )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={promptInstall}
+                className="bg-brand hover:bg-brand-dark active:scale-95 text-black font-bold text-xs px-3 py-1.5 rounded-full transition-all flex items-center gap-1 shadow-md shadow-brand/20"
+                title="Install SoundWave App"
+              >
+                <Download size={13} strokeWidth={2.5} />
+                <span>Install</span>
+              </button>
+              <button
+                onClick={() => dismissBanner(true)}
+                className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                title="Dismiss"
+                aria-label="Dismiss install prompt"
+              >
+                <X size={15} />
+              </button>
+            </div>
           </div>
-          
-          <button 
-            onClick={handleDismiss}
-            className="text-white/70 hover:text-white transition-colors shrink-0"
-          >
-            <X size={16} />
-          </button>
         </div>
-        
-        {!isIOS && (
-          <div className="flex gap-2 mt-3">
+      )}
+
+      {/* iOS Safari Home Screen Guide Modal */}
+      {showIOSModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#16161d] border border-white/15 rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center space-y-4">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-brand/20 to-brand/40 border border-brand/30 flex items-center justify-center">
+              <SoundWaveLogo size={32} animated={false} />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-bold text-white">Install SoundWave on iOS</h3>
+              <p className="text-xs text-gray-400 mt-1">Add to your Home Screen for the full native app experience</p>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-left space-y-3 text-xs text-gray-300">
+              <div className="flex items-center gap-3">
+                <span className="w-6 h-6 rounded-full bg-brand/20 text-brand font-bold flex items-center justify-center shrink-0">1</span>
+                <span>Tap the <strong>Share</strong> button <Share2 size={13} className="inline text-blue-400 ml-0.5" /> in Safari</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="w-6 h-6 rounded-full bg-brand/20 text-brand font-bold flex items-center justify-center shrink-0">2</span>
+                <span>Scroll down and tap <strong>Add to Home Screen</strong></span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="w-6 h-6 rounded-full bg-brand/20 text-brand font-bold flex items-center justify-center shrink-0">3</span>
+                <span>Tap <strong>Add</strong> in the top-right corner</span>
+              </div>
+            </div>
+
             <button
-              onClick={deferredPrompt ? handleInstall : handleDismiss}
-              className="flex-1 bg-white text-green-600 font-bold py-2 px-4 rounded-lg text-sm hover:bg-white/90 transition-colors"
+              onClick={() => setShowIOSModal(false)}
+              className="w-full bg-brand hover:bg-brand-dark text-black font-bold py-2.5 rounded-xl text-sm transition-all shadow-md shadow-brand/20"
             >
-              {deferredPrompt ? 'Install Now' : 'Add to Home Screen'}
-            </button>
-            <button
-              onClick={handleDismiss}
-              className="px-4 py-2 text-white/80 hover:text-white text-sm transition-colors"
-            >
-              Later
+              Got it
             </button>
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </>
   )
 }
 
-// Hook to check if app is installed
+// Backward-compatible hook
 export function useIsInstalled() {
-  const [isInstalled, setIsInstalled] = useState(false)
-  
-  useEffect(() => {
-    const checkInstalled = () => {
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
-                          window.navigator.standalone === true
-      setIsInstalled(isStandalone)
-    }
-    
-    checkInstalled()
-    window.addEventListener('resize', checkInstalled)
-    return () => window.removeEventListener('resize', checkInstalled)
-  }, [])
-  
+  const { isInstalled } = useInstall()
   return isInstalled
 }

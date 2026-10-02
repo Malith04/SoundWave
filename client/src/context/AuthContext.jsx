@@ -41,40 +41,54 @@ export function AuthProvider({ children }) {
     initAuth()
   }, [])
 
-  const login = async (email, password) => {
-    const data = await api.post('/auth/login', { email, password })
+  const login = async (email, password, otp = undefined) => {
+    const data = await api.post('/auth/login', { email, password, otp })
+    // If backend requires 2FA / OTP verification, return challenge info directly
+    if (data.requiresOtp) {
+      return data
+    }
     setAuthToken(data.token)
     setUser(data.user)
     setProfile(data.user)
     return { ...data.user, restored: data.restored, message: data.message }
   }
 
-  const signup = async (email, password, name) => {
-    const data = await api.post('/auth/register', { email, password, name })
+  const signup = async (email, password, name, otp) => {
+    const data = await api.post('/auth/register', { email, password, name, otp })
     setAuthToken(data.token)
     setUser(data.user)
     setProfile(data.user)
     return data.user
   }
 
-  const loginWithGoogle = async () => {
-    let googleUser
+  const sendOtp = async (email, purpose = 'signup') => {
+    return api.post('/auth/send-otp', { email, purpose })
+  }
 
-    if (isGISConfigured()) {
-      // 1. Pure Native Google Identity Services (Direct accounts.google.com, zero Firebase)
-      googleUser = await requestGoogleProfile()
-    } else {
-      // 2. Fallback to Firebase popup if VITE_GOOGLE_CLIENT_ID is not configured
-      const provider = new GoogleAuthProvider()
-      provider.setCustomParameters({
-        prompt: 'select_account'
-      })
-      const result = await signInWithPopup(auth, provider)
-      if (result?.user) {
-        googleUser = {
-          email: result.user.email,
-          name: result.user.displayName,
-          photoURL: result.user.photoURL || ''
+  const verifyOtp = async (email, otp, purpose = 'signup') => {
+    return api.post('/auth/verify-otp', { email, otp, purpose })
+  }
+
+  const loginWithGoogle = async (otp = undefined, pendingProfile = null) => {
+    let googleUser = pendingProfile
+
+    if (!googleUser) {
+      if (isGISConfigured()) {
+        // 1. Pure Native Google Identity Services
+        googleUser = await requestGoogleProfile()
+      } else {
+        // 2. Fallback to Firebase popup if VITE_GOOGLE_CLIENT_ID is not configured
+        const provider = new GoogleAuthProvider()
+        provider.setCustomParameters({
+          prompt: 'select_account'
+        })
+        const result = await signInWithPopup(auth, provider)
+        if (result?.user) {
+          googleUser = {
+            email: result.user.email,
+            name: result.user.displayName,
+            photoURL: result.user.photoURL || ''
+          }
         }
       }
     }
@@ -83,8 +97,20 @@ export function AuthProvider({ children }) {
       const data = await api.post('/auth/google', {
         email: googleUser.email,
         name: googleUser.name,
-        photoURL: googleUser.photoURL || ''
+        photoURL: googleUser.photoURL || '',
+        otp
       })
+
+      // If backend requires 8-digit OTP verification for this Google sign-in
+      if (data.requiresOtp) {
+        return {
+          requiresOtp: true,
+          email: data.email,
+          googleProfile: data.googleProfile || googleUser,
+          message: data.message
+        }
+      }
+
       setAuthToken(data.token)
       setUser(data.user)
       setProfile(data.user)
@@ -126,7 +152,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, profile, loading,
-      login, signup, loginWithGoogle, completeOnboarding,
+      login, signup, sendOtp, verifyOtp, loginWithGoogle, completeOnboarding,
       logout, resetPassword, refreshProfile
     }}>
       {children}

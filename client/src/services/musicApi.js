@@ -72,9 +72,56 @@ window.testMoodRecommendations = async function(mood = 'happy') {
 const JAMENDO_CLIENT_ID = '2a9b4f1e'
 const JAMENDO_BASE = 'https://api.jamendo.com/v3.0'
 
-// ── YouTube ───────────────────────────────────────────────────
-// Get a free key at: https://console.cloud.google.com → YouTube Data API v3
+// ── YouTube Caching & Hybrid Unlimited Search ──────────────────
 const YT_API_KEY = import.meta.env.VITE_YT_API_KEY || ''
+const ytMemoryCache = new Map()
+
+/**
+ * Check if a YouTube videoId is already cached in memory or localStorage.
+ * Returns videoId or null immediately (0ms).
+ */
+export function getCachedYouTubeId(songId, query) {
+  if (songId) {
+    const mem = ytMemoryCache.get(`id_${songId}`)
+    if (mem) return mem
+    try {
+      const local = localStorage.getItem(`sw_yt_id_${songId}`)
+      if (local) {
+        ytMemoryCache.set(`id_${songId}`, local)
+        return local
+      }
+    } catch (_) {}
+  }
+  if (query) {
+    const key = query.toLowerCase().trim()
+    const mem = ytMemoryCache.get(`q_${key}`)
+    if (mem) return mem
+    try {
+      const local = localStorage.getItem(`sw_yt_q_${key}`)
+      if (local) {
+        ytMemoryCache.set(`q_${key}`, local)
+        return local
+      }
+    } catch (_) {}
+  }
+  return null
+}
+
+/**
+ * Persist a discovered YouTube videoId to memory and localStorage.
+ */
+export function setCachedYouTubeId(songId, query, videoId) {
+  if (!videoId) return
+  if (songId) {
+    ytMemoryCache.set(`id_${songId}`, videoId)
+    try { localStorage.setItem(`sw_yt_id_${songId}`, videoId) } catch (_) {}
+  }
+  if (query) {
+    const key = query.toLowerCase().trim()
+    ytMemoryCache.set(`q_${key}`, videoId)
+    try { localStorage.setItem(`sw_yt_q_${key}`, videoId) } catch (_) {}
+  }
+}
 
 // Test function - call from browser console: window.testYouTubeAPI('Blinding Lights The Weeknd')
 window.testYouTubeAPI = async function(query) {
@@ -84,53 +131,60 @@ window.testYouTubeAPI = async function(query) {
   return result
 }
 
-export async function searchYouTube(query) {
-  if (!YT_API_KEY) {
-    console.warn('No YouTube API key configured')
-    return null
+/**
+ * Multi-layer hybrid search:
+ * 1. Instant Cache (0ms)
+ * 2. Unlimited Node.js Backend Search (No daily quota limit)
+ * 3. Fallback to Google YouTube Data API v3 (if key present)
+ */
+export async function searchYouTube(query, songId = null) {
+  if (!query?.trim()) return null
+
+  // Layer 1: Instant cache (0ms)
+  const cached = getCachedYouTubeId(songId, query)
+  if (cached) {
+    console.log('⚡ YouTube Cache HIT (0ms):', cached)
+    return cached
   }
-  
+
+  // Layer 2: Unlimited Backend Search (No quota limits)
   try {
-    console.log('YouTube API: Searching for:', query)
-    const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=1&q=${encodeURIComponent(query + ' official audio')}&key=${YT_API_KEY}`
-    console.log('YouTube API: Request URL:', searchUrl.replace(YT_API_KEY, 'API_KEY_HIDDEN'))
-    
-    const res = await fetchWithTimeout(
-      searchUrl,
-      10000,
-      { 'Referer': window.location.origin }
-    )
-    
-    if (!res.ok) {
-      console.error('YouTube API: HTTP error:', res.status, res.statusText)
-      return null
-    }
-    
-    const data = await res.json()
-    console.log('YouTube API: Response:', data)
-    
-    if (data.error) { 
-      console.warn('YouTube API error:', data.error.message, 'Code:', data.error.code)
-      if (data.error.code === 403) {
-        console.warn('YouTube API: Quota exceeded or API key invalid')
+    const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(query)}`, {
+      headers: { 'Accept': 'application/json' }
+    })
+    if (res.ok) {
+      const data = await res.json()
+      if (data.success && data.videoId) {
+        console.log(`🎬 YouTube Backend Search [${data.source}]:`, data.videoId, data.title)
+        setCachedYouTubeId(songId, query, data.videoId)
+        return data.videoId
       }
-      return null 
     }
-    
-    const item = data.items?.[0]
-    const videoId = item?.id?.videoId
-    
-    if (videoId) {
-      console.log('YouTube API: Found video:', videoId, 'Title:', item.snippet?.title)
-    } else {
-      console.log('YouTube API: No videos found for query:', query)
-    }
-    
-    return videoId || null
-  } catch (e) {
-    console.warn('YouTube search failed:', e.message)
-    return null
+  } catch (backendErr) {
+    console.warn('Backend YouTube search endpoint unreachable, falling back:', backendErr.message)
   }
+
+  // Layer 3: Fallback to Google YouTube Data API v3
+  if (YT_API_KEY) {
+    try {
+      console.log('YouTube Google API fallback search:', query)
+      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=1&q=${encodeURIComponent(query + ' official audio')}&key=${YT_API_KEY}`
+      const res = await fetchWithTimeout(searchUrl, 6000, { 'Referer': window.location.origin }, 1)
+      if (res.ok) {
+        const data = await res.json()
+        const videoId = data.items?.[0]?.id?.videoId
+        if (videoId) {
+          console.log('YouTube Google API found video:', videoId)
+          setCachedYouTubeId(songId, query, videoId)
+          return videoId
+        }
+      }
+    } catch (e) {
+      console.warn('Google YouTube API fallback failed:', e.message)
+    }
+  }
+
+  return null
 }
 
 // Fetch with timeout and retry
