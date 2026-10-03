@@ -63,6 +63,37 @@ body {
 .hover\:bg-brand-dark:hover { background-color: var(--brand-dark) !important; }
 .focus\:border-brand:focus  { border-color: var(--brand) !important; }
 
+/* ── Form inputs & OTP autofill styling override ── */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #ffffff !important;
+  -webkit-box-shadow: 0 0 0px 1000px #14151f inset !important;
+  box-shadow: 0 0 0px 1000px #14151f inset !important;
+  caret-color: #1DB954 !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+}
+
+/* Ensure OTP input fields never inherit white backgrounds from browsers */
+.otp-digit-input {
+  background-color: #13141d !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #1DB954 !important;
+}
+
+.otp-digit-input:focus {
+  background-color: #181a24 !important;
+  border-color: #1DB954 !important;
+}
+
+.otp-digit-input.filled {
+  background-color: #161a22 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
