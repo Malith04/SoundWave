@@ -1,4 +1,4 @@
-import { NavLink, Link, useNavigate } from 'react-router-dom'
+import { NavLink, Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { Home, Search, Library, Plus, LogOut, User, Settings, Heart, Download, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useInstall } from '../context/InstallContext'
@@ -12,6 +12,8 @@ export default function Sidebar({ onNavigate }) {
   const { user, profile, logout } = useAuth()
   const { isInstalled, promptInstall } = useInstall()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
   const [playlists, setPlaylists] = useState([])
   const [imgError, setImgError] = useState(false)
   const activeAvatar = profile?.profilePicUrl || user?.profilePicUrl || user?.photoURL || localStorage.getItem(`sw_profile_pic_${user?.uid}`) || null
@@ -84,7 +86,15 @@ export default function Sidebar({ onNavigate }) {
         <NavLink to="/search" className={navClass} onClick={onNavigate}>
           <Search size={20} /> Search
         </NavLink>
-        <NavLink to="/library" className={navClass} onClick={onNavigate}>
+        <NavLink
+          to="/library"
+          onClick={onNavigate}
+          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            location.pathname === '/library' && searchParams.get('tab') !== 'liked'
+              ? 'text-white bg-white/10'
+              : 'text-gray-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
           <Library size={20} /> Your Library
         </NavLink>
       </nav>
@@ -93,8 +103,15 @@ export default function Sidebar({ onNavigate }) {
 
       {/* Liked Songs shortcut */}
       <div className="px-3 mb-2 shrink-0">
-        <NavLink to="/library" onClick={onNavigate}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all">
+        <NavLink
+          to="/library?tab=liked"
+          onClick={onNavigate}
+          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            location.pathname === '/library' && searchParams.get('tab') === 'liked'
+              ? 'text-white bg-white/10'
+              : 'text-gray-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
           <div className="w-6 h-6 rounded bg-gradient-to-br from-indigo-400 to-pink-500 flex items-center justify-center shrink-0">
             <Heart size={12} fill="white" className="text-white" />
           </div>

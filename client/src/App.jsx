@@ -72,6 +72,8 @@ function AppRoutes() {
         <Route path="search" element={<SearchPage />} />
         <Route path="artist/:name" element={<ArtistPage />} />
         <Route path="library" element={<LibraryPage />} />
+        <Route path="collection/tracks" element={<Navigate to="/library?tab=liked" replace />} />
+        <Route path="library/liked" element={<Navigate to="/library?tab=liked" replace />} />
         <Route path="playlist/:id" element={<PlaylistPage />} />
         <Route path="genre/:genre" element={<GenrePage />} />
         <Route path="profile" element={<ProfilePage />} />

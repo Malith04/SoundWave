@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Plus, Heart, Music, X, Clock, Play, LayoutGrid, List } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePlayer } from '../context/PlayerContext'
 import { getUserPlaylists, createPlaylist } from '../services/playlistService'
@@ -37,7 +37,9 @@ function PlaylistCover({ songIds }) {
 export default function LibraryPage() {
   const { user } = useAuth()
   const { play } = usePlayer()
-  const [tab, setTab] = useState('playlists')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlTab = searchParams.get('tab')
+  const [tab, setTab] = useState(() => (urlTab && ['playlists', 'liked', 'recent'].includes(urlTab) ? urlTab : 'playlists'))
   const [view, setView] = useState('grid') // 'grid' | 'list'
   const [playlists, setPlaylists] = useState([])
   const [favSongs, setFavSongs] = useState([])
@@ -45,6 +47,25 @@ export default function LibraryPage() {
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [songsLoading, setSongsLoading] = useState(false)
+
+  // Sync tab with URL query parameter changes (e.g. clicking Liked Songs in sidebar)
+  useEffect(() => {
+    const qTab = searchParams.get('tab')
+    if (qTab && ['playlists', 'liked', 'recent'].includes(qTab)) {
+      setTab(qTab)
+    } else if (!qTab) {
+      setTab('playlists')
+    }
+  }, [searchParams])
+
+  const handleTabChange = (newTab) => {
+    setTab(newTab)
+    if (newTab === 'playlists') {
+      setSearchParams({})
+    } else {
+      setSearchParams({ tab: newTab })
+    }
+  }
 
   const loadPlaylists = useCallback(async () => {
     if (!user) return
@@ -108,7 +129,7 @@ export default function LibraryPage() {
 
       <div className="flex gap-2 mb-6 overflow-x-auto no-scrollbar pb-1">
         {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          <button key={t.id} onClick={() => handleTabChange(t.id)}
             className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${tab === t.id ? 'bg-white text-black font-semibold shadow-sm' : 'bg-surface-2 text-gray-300 hover:bg-white/10'}`}>
             {t.label}
           </button>
