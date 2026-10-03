@@ -12,6 +12,7 @@
     "server": "cd server && npm start",
     "server:dev": "cd server && npm run dev",
     "install-server": "cd server && npm install",
+    "admin:dev": "cd admin-dashboard && npm run dev",
     "docker:db": "docker compose up -d"
   },
   "dependencies": {

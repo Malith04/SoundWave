@@ -1,5 +1,5 @@
 import { NavLink, Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
-import { Home, Search, Library, Plus, LogOut, User, Settings, Heart, Download, X } from 'lucide-react'
+import { Home, Search, Library, Plus, LogOut, User, Settings, Heart, Download, X, ShieldCheck, ExternalLink } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useInstall } from '../context/InstallContext'
 import { useState, useEffect, useRef } from 'react'
@@ -187,6 +187,17 @@ export default function Sidebar({ onNavigate }) {
           className={({ isActive }) => `flex items-center gap-3 px-2 py-2 rounded-lg text-sm font-medium transition-all ${isActive ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
           <Settings size={16} /> Settings
         </NavLink>
+        <a
+          href="http://localhost:3002"
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-3 px-2 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-brand hover:bg-brand/10 transition-all group"
+          title="Open Admin Dashboard"
+        >
+          <ShieldCheck size={16} className="text-brand group-hover:scale-110 transition-transform" />
+          <span className="flex-1">Admin Panel</span>
+          <ExternalLink size={12} className="opacity-40 group-hover:opacity-100 transition-opacity" />
+        </a>
         <button onClick={handleLogout}
           className="flex items-center gap-3 px-2 py-2 w-full rounded-lg text-sm text-gray-400 hover:text-red-400 hover:bg-red-400/10 transition-all text-left">
           <LogOut size={16} /> Sign Out
