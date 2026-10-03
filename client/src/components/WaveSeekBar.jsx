@@ -23,16 +23,14 @@ export default function WaveSeekBar({
   const canvasRef = useRef(null)
   const [isHovered, setIsHovered] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
-  const [scrubValue, setScrubValue] = useState(null)
+  const [scrubFraction, setScrubFraction] = useState(null)
 
   const phaseRef = useRef(0)
-  const animFrameRef = useRef(null)
   const sizeRef = useRef({ width: 300, height: 28 })
 
-  // Effective progress accounts for live scrubbing
-  const effectiveProgress = scrubValue !== null ? scrubValue : Math.min(Math.max(progress || 0, 0), 1)
+  // Effective progress accounts for active mouse/touch scrubbing
+  const effectiveProgress = scrubFraction !== null ? scrubFraction : Math.min(Math.max(progress || 0, 0), 1)
 
-  // Keep latest mutable state in ref to avoid re-binding the 60fps animation loop
   const stateRef = useRef({
     progress: effectiveProgress,
     isPlaying,
@@ -51,7 +49,7 @@ export default function WaveSeekBar({
     }
   }, [effectiveProgress, isPlaying, isHovered, isDragging, waveEnabled])
 
-  // Canvas drawing routine
+  // Canvas drawing routine for the fluid wave track (theme color matched to SoundWave brand)
   const draw = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -61,57 +59,60 @@ export default function WaveSeekBar({
     const { width: W, height: H } = sizeRef.current
     if (W <= 0 || H <= 0) return
 
-    const { progress: p, isHovered: hov, isDragging: drag, waveEnabled: waveOn } = stateRef.current
+    const { progress: p, waveEnabled: waveOn } = stateRef.current
 
     // Clear canvas
     ctx.clearRect(0, 0, W, H)
 
     const Y_base = H - 8 // baseline aligned near bottom
     const X_thumb = Math.min(Math.max(p * W, 0), W)
-    const H_max = 14 // max height of fluid wave
+    const H_max = 14 // wave crest height
 
-    // ── 1. Unplayed Track (Right side) ──
+    // ── 1. Unplayed Track (Right of thumb) ──
     ctx.save()
     ctx.beginPath()
     ctx.moveTo(X_thumb, Y_base)
     ctx.lineTo(W, Y_base)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)'
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.20)'
     ctx.lineWidth = 2.5
     ctx.lineCap = 'round'
     ctx.stroke()
     ctx.restore()
 
-    // ── 2. Played Section with Undulating Fluid Sound Wave ──
+    // ── 2. Played Section with Undulating Theme-Colored Liquid Sound Wave ──
     if (X_thumb > 1) {
       if (waveOn && X_thumb > 8) {
         const phase = phaseRef.current
-        const ampMult = Math.min(1, X_thumb / 40) // smoothly grows as track progresses
+        const ampMult = Math.min(1, X_thumb / 40) // smoothly grows as song progresses
 
-        // 3 overlapping translucent liquid layers (golden-peach, warm coral, vibrant red)
+        // 3 overlapping translucent liquid layers using SoundWave's vibrant signature theme colors
         const layers = [
+          // Layer 1: Back (Luminous soft mint)
           {
             speed: 1.6,
             freq: 2.2,
             amp: H_max * 0.72 * ampMult,
             offset: 0,
-            gradTop: 'rgba(255, 175, 95, 0.45)',
-            gradBot: 'rgba(255, 120, 50, 0.05)',
+            gradTop: 'rgba(110, 231, 183, 0.45)', // emerald-300
+            gradBot: 'rgba(29, 185, 84, 0.04)',
           },
+          // Layer 2: Middle (Radiant emerald)
           {
             speed: 2.3,
             freq: 2.9,
             amp: H_max * 0.88 * ampMult,
             offset: 1.8,
-            gradTop: 'rgba(255, 115, 65, 0.68)',
-            gradBot: 'rgba(255, 70, 45, 0.12)',
+            gradTop: 'rgba(52, 211, 153, 0.68)', // emerald-400
+            gradBot: 'rgba(16, 185, 129, 0.10)',
           },
+          // Layer 3: Front (Signature SoundWave brand green)
           {
             speed: 3.1,
             freq: 2.6,
             amp: H_max * 1.0 * ampMult,
             offset: 3.5,
-            gradTop: 'rgba(255, 75, 55, 0.90)',
-            gradBot: 'rgba(235, 55, 40, 0.32)',
+            gradTop: 'rgba(29, 185, 84, 0.92)', // brand green #1DB954
+            gradBot: 'rgba(16, 185, 129, 0.30)',
           },
         ]
 
@@ -124,10 +125,10 @@ export default function WaveSeekBar({
           for (let x = 0; x <= X_thumb; x += step) {
             const u = x / X_thumb // normalized [0, 1]
 
-            // Fluid envelope: starts at 0 at x=0, rises smoothly, and dips right into thumb
+            // Fluid envelope: starts at 0 at x=0, peaks smoothly, and swoops right into the thumb center
             const envelope = Math.pow(Math.sin(Math.PI * u), 1.15) * (0.85 + 0.25 * Math.sin(Math.PI * u))
 
-            // Undulating wave harmonics
+            // Dual sine harmonics for natural fluid liquid motion
             const wave =
               Math.sin(u * layer.freq * Math.PI * 2 - phase * layer.speed + layer.offset) * 0.65 +
               Math.sin(u * (layer.freq * 1.7) * Math.PI * 2 - phase * (layer.speed * 0.75) + layer.offset * 1.4) * 0.35
@@ -148,46 +149,22 @@ export default function WaveSeekBar({
         })
       }
 
-      // Crisp coral/red baseline connecting 0 to the thumb
+      // Crisp SoundWave brand baseline under the wave connecting 0 to thumb
       ctx.save()
       ctx.beginPath()
       ctx.moveTo(0, Y_base)
       ctx.lineTo(X_thumb, Y_base)
-      ctx.strokeStyle = '#ff4242'
+      ctx.strokeStyle = '#1DB954'
       ctx.lineWidth = 2.5
       ctx.lineCap = 'round'
+      ctx.shadowColor = 'rgba(29, 185, 84, 0.6)'
+      ctx.shadowBlur = 6
       ctx.stroke()
       ctx.restore()
     }
-
-    // ── 3. The Ring Thumb (White Outer Ring + Solid Coral Center Dot) ──
-    ctx.save()
-    const activeThumb = hov || drag
-    const outerRadius = activeThumb ? 7.5 : 6.5
-    const innerRadius = activeThumb ? 4.2 : 3.5
-
-    // Soft glowing drop shadow
-    ctx.shadowColor = 'rgba(255, 66, 66, 0.75)'
-    ctx.shadowBlur = activeThumb ? 12 : 7
-
-    // Outer white circle
-    ctx.beginPath()
-    ctx.arc(X_thumb, Y_base, outerRadius, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(24, 24, 24, 0.95)'
-    ctx.fill()
-    ctx.lineWidth = 2.2
-    ctx.strokeStyle = '#ffffff'
-    ctx.stroke()
-
-    // Inner coral dot
-    ctx.beginPath()
-    ctx.arc(X_thumb, Y_base, innerRadius, 0, Math.PI * 2)
-    ctx.fillStyle = '#ff4242'
-    ctx.fill()
-    ctx.restore()
   }, [])
 
-  // Resize handling with high-DPI canvas backing
+  // Resize observer with high-DPI canvas backing
   useEffect(() => {
     const container = containerRef.current
     const canvas = canvasRef.current
@@ -200,8 +177,10 @@ export default function WaveSeekBar({
       const h = Math.max(rect.height, 24)
 
       sizeRef.current = { width: w, height: h }
-      canvas.width = w * dpr
-      canvas.height = h * dpr
+      canvas.width = Math.floor(w * dpr)
+      canvas.height = Math.floor(h * dpr)
+      canvas.style.width = `${w}px`
+      canvas.style.height = `${h}px`
 
       const ctx = canvas.getContext('2d')
       if (ctx) {
@@ -237,43 +216,97 @@ export default function WaveSeekBar({
     return () => cancelAnimationFrame(animId)
   }, [draw])
 
-  // Scrubbing interactions
-  const handleRangeInput = (e) => {
+  // ── Robust Direct Pointer Seeking Handler (Click & Drag) ──
+  const handlePointerDown = (e) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return
+    e.preventDefault()
+    e.stopPropagation()
+
+    const updateSeek = (clientX) => {
+      const container = containerRef.current
+      if (!container) return
+      const rect = container.getBoundingClientRect()
+      if (rect.width <= 0) return
+      const clickX = clientX - rect.left
+      const frac = Math.max(0, Math.min(1, clickX / rect.width))
+      setScrubFraction(frac)
+      seek?.(frac)
+    }
+
     setIsDragging(true)
-    setScrubValue(parseFloat(e.target.value))
+    updateSeek(e.clientX)
+
+    const onPointerMove = (moveEvent) => {
+      moveEvent.preventDefault()
+      updateSeek(moveEvent.clientX)
+    }
+
+    const onPointerUp = (upEvent) => {
+      const container = containerRef.current
+      if (container) {
+        const rect = container.getBoundingClientRect()
+        if (rect.width > 0) {
+          const finalX = upEvent.clientX - rect.left
+          const finalFrac = Math.max(0, Math.min(1, finalX / rect.width))
+          seek?.(finalFrac)
+        }
+      }
+      setIsDragging(false)
+      setScrubFraction(null)
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
   }
 
-  const handleRangeChange = (e) => {
-    const val = parseFloat(e.target.value)
-    setIsDragging(false)
-    setScrubValue(null)
-    seek?.(val)
-  }
+  // Percent position for vector thumb
+  const percent = Math.min(Math.max(effectiveProgress * 100, 0), 100)
+  const isThumbActive = isHovered || isDragging
 
-  // ── Render Track Element ──
+  // ── Render Track Element (Vector Thumb + Canvas Wave) ──
   const trackElement = (
     <div
       ref={containerRef}
-      className="relative w-full h-7 flex items-center select-none cursor-pointer group"
+      onPointerDown={handlePointerDown}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => {
-        setIsHovered(false)
-        setIsDragging(false)
+        if (!isDragging) setIsHovered(false)
       }}
+      className="relative w-full h-7 flex items-center select-none cursor-pointer group touch-none"
     >
-      <canvas ref={canvasRef} className="w-full h-full pointer-events-none block" />
-      {/* Invisible native range slider for accessible keyboard, mouse, and touch scrubbing */}
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.001}
-        value={effectiveProgress}
-        onInput={handleRangeInput}
-        onChange={handleRangeChange}
-        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-        aria-label="Seek track position"
-      />
+      <canvas ref={canvasRef} className="pointer-events-none block" />
+
+      {/* ── Unique, Ultra-Sharp Vector Thumb (Theme Matching) ── */}
+      <div
+        className="absolute top-[13px] -translate-x-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-100 ease-out z-20"
+        style={{ left: `${percent}%` }}
+      >
+        <div
+          className={`relative rounded-full transition-all duration-150 flex items-center justify-center ${
+            isThumbActive ? 'scale-125' : 'scale-100'
+          }`}
+        >
+          {/* Ambient Theme Glow Aura */}
+          <div
+            className={`absolute -inset-1.5 rounded-full bg-brand/35 blur-md transition-opacity duration-200 pointer-events-none ${
+              isThumbActive ? 'opacity-100' : isPlaying ? 'opacity-70 animate-pulse' : 'opacity-40'
+            }`}
+          />
+
+          {/* Unique Multi-Layer Ring: Pure crisp vector borders */}
+          <div className="w-3.5 h-3.5 rounded-full bg-black/80 border-2 border-white flex items-center justify-center shadow-[0_2px_8px_rgba(0,0,0,0.8),0_0_10px_rgba(29,185,84,0.6)]">
+            {/* Inner Theme Gem / Audio Node */}
+            <div className="w-1.5 h-1.5 rounded-full bg-brand shadow-[0_0_4px_var(--brand)] relative">
+              {/* Specular light highlight */}
+              <div className="absolute top-0 right-0 w-0.5 h-0.5 rounded-full bg-white/90" />
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 

@@ -5,12 +5,14 @@ import WaveSeekBar from './WaveSeekBar'
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
   Volume2, VolumeX, Volume1, Heart, ListMusic, X, Music, Mic2,
-  ChevronDown, Maximize2, Timer
+  ChevronDown, Maximize2, Timer, PlusCircle, ListPlus, Info
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { toggleFavorite, isFavorite } from '../services/userService'
+import AddToPlaylistModal from './AddToPlaylistModal'
+import SongModal from './SongModal'
 import toast from 'react-hot-toast'
 
 function formatTime(secs) {
@@ -231,7 +233,7 @@ function QueuePanel({ queue, queueIndex, onClose, onPlay, expanded = false }) {
 function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duration, volume, isMuted,
   isShuffled, repeatMode, isLoading, error, engine, queue, queueIndex, liked, onLike, onClose,
   togglePlay, seek, next, previous, setVolume, toggleMute, toggleShuffle, cycleRepeat, play,
-  showParticles, settings, switchEngine }) {
+  showParticles, settings, switchEngine, onOpenQuickAdd }) {
   const [panel, setPanel] = useState(() => (settings?.autoLyrics ? 'lyrics' : null))
   const [viewMode, setViewMode] = useState('audio')
   const [videoId, setVideoId] = useState(null)
@@ -340,7 +342,13 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
                 }`}>
                 {currentSong.source === 'jamendo' ? 'Full Track (Studio EQ)' : engine === 'youtube' ? 'Full Track (YouTube)' : 'Studio EQ Audio'}
               </button>
-              <AudioBars isPlaying={isPlaying} size="lg" />
+              <button
+                onClick={() => onOpenQuickAdd?.()}
+                className="touch-target p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-all active:scale-90"
+                title="Add to playlist, queue, or liked"
+              >
+                <PlusCircle size={22} />
+              </button>
             </div>
 
             {/* Seek bar with fluid undulating wave animation */}
@@ -444,10 +452,31 @@ export default function Player() {
   const [showQueue, setShowQueue] = useState(false)
   const [showLyrics, setShowLyrics] = useState(false)
   const [showSleepTimer, setShowSleepTimer] = useState(false)
+  const [showQuickAdd, setShowQuickAdd] = useState(false)
+  const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false)
+  const [showSongModal, setShowSongModal] = useState(false)
+  const quickAddBtnRef = useRef(null)
+  const quickAddMenuRef = useRef(null)
   const [expanded, setExpanded] = useState(false)
   const [sleepTimer, setSleepTimer] = useState(null)
   const [sleepTimeLeft, setSleepTimeLeft] = useState(0)
   const sleepRef = useRef(null)
+
+  useEffect(() => {
+    if (!showQuickAdd) return
+    const handleClickOutside = (e) => {
+      if (
+        quickAddMenuRef.current &&
+        !quickAddMenuRef.current.contains(e.target) &&
+        quickAddBtnRef.current &&
+        !quickAddBtnRef.current.contains(e.target)
+      ) {
+        setShowQuickAdd(false)
+      }
+    }
+    window.addEventListener('mousedown', handleClickOutside)
+    return () => window.removeEventListener('mousedown', handleClickOutside)
+  }, [showQuickAdd])
 
   const nextSong = queue && queue.length > queueIndex + 1 ? queue[queueIndex + 1] : null
   const timeLeft = duration > 0 ? duration - currentTime : 999
@@ -518,6 +547,7 @@ export default function Player() {
           showParticles={settings?.particles !== false}
           settings={settings}
           switchEngine={switchEngine}
+          onOpenQuickAdd={() => setShowQuickAdd(true)}
         />
       )}
 
@@ -700,8 +730,86 @@ export default function Player() {
           </div>
 
           {/* Right: volume + extras */}
-          <div className="flex items-center gap-2 lg:gap-2.5 shrink-0 w-60 lg:w-72 justify-end">
-            <AudioBars isPlaying={isPlaying} />
+          <div className="flex items-center gap-2 lg:gap-2.5 shrink-0 w-60 lg:w-72 justify-end relative">
+            {/* Quick Actions Plus Button replacing equalizer bars */}
+            <div className="relative">
+              <button
+                ref={quickAddBtnRef}
+                onClick={() => setShowQuickAdd(q => !q)}
+                className={`p-2 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 flex items-center justify-center shrink-0 ${
+                  showQuickAdd ? 'bg-brand text-black shadow-lg shadow-brand/30' : 'text-gray-400 hover:text-white hover:bg-white/10'
+                }`}
+                title="Add to playlist, queue, or liked"
+                aria-label="Add options"
+              >
+                <PlusCircle size={18} />
+              </button>
+
+              {/* Quick Add Popover Menu */}
+              {showQuickAdd && (
+                <div
+                  ref={quickAddMenuRef}
+                  className="absolute right-0 bottom-full mb-3 w-56 glass-modal rounded-2xl p-1.5 shadow-2xl border border-white/15 animate-pop-in z-50 overflow-hidden"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="px-3 py-2 border-b border-white/10">
+                    <p className="text-xs font-bold text-white truncate">{currentSong.title}</p>
+                    <p className="text-[11px] text-gray-400 truncate">{currentSong.artist}</p>
+                  </div>
+
+                  <div className="py-1">
+                    <button
+                      onClick={() => {
+                        setShowQuickAdd(false)
+                        setShowAddToPlaylistModal(true)
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left"
+                    >
+                      <ListPlus size={16} className="text-brand" />
+                      Add to Playlist
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setShowQuickAdd(false)
+                        if (currentSong) {
+                          setQueue(prev => [...prev, currentSong])
+                          toast.success(`Added "${currentSong.title}" to queue`)
+                        }
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left"
+                    >
+                      <ListMusic size={16} className="text-purple-400" />
+                      Add to Queue
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setShowQuickAdd(false)
+                        handleLike()
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left"
+                    >
+                      <Heart size={16} fill={liked ? 'currentColor' : 'none'} className={liked ? 'text-rose-500' : 'text-gray-400'} />
+                      {liked ? 'Remove from Liked Songs' : 'Add to Liked Songs'}
+                    </button>
+
+                    <div className="border-t border-white/10 my-1" />
+
+                    <button
+                      onClick={() => {
+                        setShowQuickAdd(false)
+                        setShowSongModal(true)
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-200 hover:text-white hover:bg-white/10 transition-colors text-left"
+                    >
+                      <Info size={16} className="text-blue-400" />
+                      Song Details & Video
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             <button onClick={() => { setShowLyrics(l => !l); setShowQueue(false); setShowSleepTimer(false) }}
               className={`p-2 rounded-full hover:bg-white/10 transition-colors hidden lg:flex items-center justify-center shrink-0 ${showLyrics ? 'text-brand' : 'text-gray-400 hover:text-white'}`}
               title="Lyrics">
@@ -730,6 +838,23 @@ export default function Player() {
           </div>
         </div>
       </div>
+
+      {/* Quick Add to Playlist Modal */}
+      {showAddToPlaylistModal && currentSong && (
+        <AddToPlaylistModal
+          song={currentSong}
+          onClose={() => setShowAddToPlaylistModal(false)}
+        />
+      )}
+
+      {/* Song Details Modal */}
+      {showSongModal && currentSong && (
+        <SongModal
+          song={currentSong}
+          queue={queue}
+          onClose={() => setShowSongModal(false)}
+        />
+      )}
     </>
   )
 }
