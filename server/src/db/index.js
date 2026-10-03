@@ -1,14 +1,11 @@
 import pg from 'pg'
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
 
 dotenv.config()
 
 const { Pool } = pg
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
 
 const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/soundwave'
 
@@ -48,8 +45,13 @@ export async function initDb() {
     const client = await pool.connect()
     console.log('✅ PostgreSQL connected successfully!')
 
-    const schemaPath = path.join(__dirname, 'schema.sql')
-    if (fs.existsSync(schemaPath)) {
+    const possiblePaths = [
+      path.join(process.cwd(), 'server', 'src', 'db', 'schema.sql'),
+      path.join(process.cwd(), 'src', 'db', 'schema.sql'),
+      path.join(process.cwd(), 'schema.sql')
+    ]
+    const schemaPath = possiblePaths.find(p => fs.existsSync(p))
+    if (schemaPath) {
       const sql = fs.readFileSync(schemaPath, 'utf8')
       console.log('⚡ Initializing database schema...')
       await client.query(sql)
