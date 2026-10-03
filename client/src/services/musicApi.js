@@ -1,3 +1,5 @@
+import { BASE_URL } from './api'
+
 // Test API connectivity - call from browser console: window.testAPIConnectivity()
 window.testAPIConnectivity = async function() {
   console.log('🌐 Testing API connectivity...')
@@ -149,7 +151,7 @@ export async function searchYouTube(query, songId = null) {
 
   // Layer 2: Unlimited Backend Search (No quota limits)
   try {
-    const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(query)}`, {
+    const res = await fetch(`${BASE_URL}/youtube/search?q=${encodeURIComponent(query)}`, {
       headers: { 'Accept': 'application/json' }
     })
     if (res.ok) {

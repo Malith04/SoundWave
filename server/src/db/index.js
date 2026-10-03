@@ -20,6 +20,9 @@ const isRemoteDb = connectionString.includes('supabase.co') ||
 export const pool = new Pool({
   connectionString,
   ssl: isRemoteDb ? { rejectUnauthorized: false } : false,
+  max: 5,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
 })
 
 // Query helper with logging

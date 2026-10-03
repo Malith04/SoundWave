@@ -1,10 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { api, setAuthToken, getAuthToken } from '../services/api'
-import {
-  GoogleAuthProvider, signInWithPopup
-} from 'firebase/auth'
-import { auth } from '../services/firebase'
-import { isGISConfigured, requestGoogleProfile } from '../services/googleAuth'
+import { requestGoogleProfile } from '../services/googleAuth'
 
 const AuthContext = createContext(null)
 
@@ -73,24 +69,8 @@ export function AuthProvider({ children }) {
     let googleUser = pendingProfile
 
     if (!googleUser) {
-      if (isGISConfigured()) {
-        // 1. Pure Native Google Identity Services
-        googleUser = await requestGoogleProfile()
-      } else {
-        // 2. Fallback to Firebase popup if VITE_GOOGLE_CLIENT_ID is not configured
-        const provider = new GoogleAuthProvider()
-        provider.setCustomParameters({
-          prompt: 'select_account'
-        })
-        const result = await signInWithPopup(auth, provider)
-        if (result?.user) {
-          googleUser = {
-            email: result.user.email,
-            name: result.user.displayName,
-            photoURL: result.user.photoURL || ''
-          }
-        }
-      }
+      // Pure Native Google Identity Services OAuth
+      googleUser = await requestGoogleProfile()
     }
 
     if (googleUser?.email) {
@@ -126,9 +106,6 @@ export function AuthProvider({ children }) {
   }
 
   const logout = async () => {
-    try {
-      await auth.signOut()
-    } catch (_) {}
     setAuthToken(null)
     setUser(null)
     setProfile(null)

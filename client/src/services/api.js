@@ -1,6 +1,6 @@
 // SoundWave Centralized API Client for PostgreSQL Backend
 
-const BASE_URL = import.meta.env.VITE_API_URL || '/api'
+export const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 const TOKEN_KEY = 'sw_auth_token'
 
 export function getAuthToken() {

@@ -1,4 +1,4 @@
-import { api } from './api'
+import { api, BASE_URL } from './api'
 
 export async function getUser(uid) {
   try {
@@ -29,7 +29,7 @@ export async function uploadProfilePicture(file) {
   formData.append('image', file)
 
   const token = localStorage.getItem('sw_auth_token')
-  const res = await fetch('/api/auth/profile-picture', {
+  const res = await fetch(`${BASE_URL}/auth/profile-picture`, {
     method: 'POST',
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {})

@@ -1,7 +1,7 @@
 // Native Google Identity Services (GIS) Client
 // Direct Google OAuth 2.0 without Firebase proxy domains
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '856096802639-fga3jl6vg8cec62lm7dqe94a094mj23g.apps.googleusercontent.com'
 
 export function isGISConfigured() {
   return !!GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID.length > 10

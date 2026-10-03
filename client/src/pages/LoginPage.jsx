@@ -139,8 +139,12 @@ export default function LoginPage() {
         'auth/user-cancelled'
       ].includes(err.code)
       if (!isCancelled) {
-        const cleanMsg = err.message?.replace(/^Firebase:\s*/i, '').replace(/\s*\(auth\/[^)]+\)\.?/i, '')
-        toast.error(cleanMsg || 'Google sign-in could not be completed')
+        if (err.code === 'auth/unauthorized-domain' || err.message?.includes('origin_mismatch')) {
+          toast.error('Domain not authorized. Please add soundwave-official.netlify.app to Google Cloud Console authorized origins.')
+        } else {
+          const cleanMsg = err.message?.replace(/^Firebase:\s*/i, '').replace(/\s*\(auth\/[^)]+\)\.?/i, '').trim()
+          toast.error(cleanMsg && cleanMsg !== 'Error' ? cleanMsg : 'Google sign-in could not be completed. Check authorized domains.')
+        }
       }
     } finally {
       setLoading(false)

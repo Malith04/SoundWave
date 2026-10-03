@@ -1,10 +1,23 @@
-# Netlify Configuration for SoundWave (Root)
+# Netlify Configuration for SoundWave (Full-Stack Frontend + Serverless API)
 
 [build]
-  base = "client"
-  publish = "dist"
-  command = "npm run build"
+  command = "npm --prefix client run build"
+  publish = "client/dist"
+  functions = "netlify/functions"
 
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["pg", "pg-native"]
+  included_files = ["server/src/db/schema.sql"]
+
+# ── API Proxy to Netlify Serverless Functions ──
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
+
+# ── SPA Fallback for React Router ──
 [[redirects]]
   from = "/*"
   to = "/index.html"
