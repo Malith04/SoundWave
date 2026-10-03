@@ -231,7 +231,7 @@ function QueuePanel({ queue, queueIndex, onClose, onPlay, expanded = false }) {
 function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duration, volume, isMuted,
   isShuffled, repeatMode, isLoading, error, engine, queue, queueIndex, liked, onLike, onClose,
   togglePlay, seek, next, previous, setVolume, toggleMute, toggleShuffle, cycleRepeat, play,
-  showParticles, settings, switchEngine, onToggleWave }) {
+  showParticles, settings, switchEngine }) {
   const [panel, setPanel] = useState(() => (settings?.autoLyrics ? 'lyrics' : null))
   const [viewMode, setViewMode] = useState('audio')
   const [videoId, setVideoId] = useState(null)
@@ -343,7 +343,7 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
               <AudioBars isPlaying={isPlaying} size="lg" />
             </div>
 
-            {/* Seek bar with dynamic sound wave animation */}
+            {/* Seek bar with fluid undulating wave animation */}
             <div className="w-full">
               <WaveSeekBar
                 progress={progress}
@@ -352,7 +352,7 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
                 seek={seek}
                 isPlaying={isPlaying}
                 waveEnabled={settings?.seekBarWave !== false}
-                onToggleWave={onToggleWave}
+                layout="stacked"
                 showTimes={true}
               />
               {error && <p className="text-xs text-orange-400 text-center mt-1">{error}</p>}
@@ -439,11 +439,6 @@ export default function Player() {
   useKeyboardShortcuts()
 
   const waveEnabled = settings?.seekBarWave !== false
-  const handleToggleWave = () => {
-    const nextVal = !waveEnabled
-    update?.('seekBarWave', nextVal)
-    toast.success(nextVal ? 'Seek bar wave animation enabled 🌊' : 'Seek bar wave animation disabled')
-  }
 
   const [liked, setLiked] = useState(false)
   const [showQueue, setShowQueue] = useState(false)
@@ -523,7 +518,6 @@ export default function Player() {
           showParticles={settings?.particles !== false}
           settings={settings}
           switchEngine={switchEngine}
-          onToggleWave={handleToggleWave}
         />
       )}
 
@@ -691,7 +685,7 @@ export default function Player() {
                 <RepeatIcon size={15} />
               </button>
             </div>
-            {/* Seek bar — always visible with wave animation & quick toggle */}
+            {/* Seek bar — always visible with fluid wave animation */}
             <WaveSeekBar
               progress={progress}
               currentTime={currentTime}
@@ -699,7 +693,7 @@ export default function Player() {
               seek={seek}
               isPlaying={isPlaying}
               waveEnabled={waveEnabled}
-              onToggleWave={handleToggleWave}
+              layout="inline"
               showTimes={true}
             />
             {error && <p className="text-xs text-orange-400 truncate">{error}</p>}
