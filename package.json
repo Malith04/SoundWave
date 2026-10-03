@@ -4,7 +4,7 @@
   "description": "SoundWave - AI-Powered Music Streaming Platform",
   "main": "index.js",
   "scripts": {
-    "build": "cd client && npm run build",
+    "build": "npm --prefix client install && npm --prefix client run build",
     "start": "cd client && npm run preview",
     "dev": "cd client && npm run dev",
     "install-client": "cd client && npm install",

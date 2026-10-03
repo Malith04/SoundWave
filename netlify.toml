@@ -1,7 +1,7 @@
 # Netlify Configuration for SoundWave (Full-Stack Frontend + Serverless API)
 
 [build]
-  command = "npm --prefix client run build"
+  command = "npm run build"
   publish = "client/dist"
   functions = "netlify/functions"
 
