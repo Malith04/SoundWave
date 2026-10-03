@@ -1,5 +1,4 @@
 import { Router } from 'express'
-import ytSearch from 'yt-search'
 
 const router = Router()
 
@@ -21,47 +20,44 @@ router.get('/search', async (req, res) => {
       source: 'cache',
       videoId: cached.videoId,
       title: cached.title,
-      duration: cached.duration,
-      thumbnail: cached.thumbnail,
     })
   }
 
   try {
-    const searchFn = typeof ytSearch === 'function' ? ytSearch : (ytSearch.search || ytSearch.default)
-    const r = await searchFn(query)
-    const videos = r?.videos || []
-
-    if (!videos.length) {
-      return res.json({ success: false, videoId: null, message: 'No video found' })
-    }
-
-    // Pick best match: prefer videos under 10 minutes (music tracks, not 1-hour loops or full albums)
-    const best = videos.find(v => v.seconds > 30 && v.seconds < 600) || videos[0]
-
-    const result = {
-      videoId: best.videoId,
-      title: best.title,
-      duration: best.seconds,
-      thumbnail: best.thumbnail,
-    }
-
-    // Cache the result
-    searchCache.set(cacheKey, {
-      ...result,
-      timestamp: Date.now()
+    const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query + ' audio')}`
+    const response = await fetch(ytUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      }
     })
 
-    // Limit cache size to prevent memory bloat
-    if (searchCache.size > 2000) {
-      const oldestKey = searchCache.keys().next().value
-      searchCache.delete(oldestKey)
+    let videoId = null
+    if (response.ok) {
+      const html = await response.text()
+      const match = html.match(/\/watch\?v=([a-zA-Z0-9_-]{11})/) || html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/)
+      if (match && match[1]) {
+        videoId = match[1]
+      }
     }
 
-    return res.json({
-      success: true,
-      source: 'youtube',
-      ...result
-    })
+    if (videoId) {
+      const result = {
+        videoId,
+        title: query,
+      }
+      searchCache.set(cacheKey, { ...result, timestamp: Date.now() })
+      if (searchCache.size > 2000) {
+        searchCache.delete(searchCache.keys().next().value)
+      }
+      return res.json({
+        success: true,
+        source: 'youtube-web',
+        ...result
+      })
+    }
+
+    return res.json({ success: false, videoId: null, message: 'No video found' })
   } catch (err) {
     console.error('Backend YouTube search error:', err.message)
     return res.status(500).json({

@@ -18,8 +18,7 @@
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^10.0.13",
     "pg": "^8.11.5",
-    "serverless-http": "^4.0.0",
-    "yt-search": "^2.13.1"
+    "serverless-http": "^4.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
