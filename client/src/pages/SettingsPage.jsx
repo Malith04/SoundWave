@@ -170,26 +170,28 @@ function AudioTab({ settings, update, applyPreset, setEqBand }) {
 
         {/* EQ vertical sliders */}
         <div className={`pb-4 transition-opacity ${settings.eqEnabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-          <div className="flex items-end justify-between gap-1 h-44 bg-surface-3 rounded-xl px-4 py-4">
-            {EQ_BANDS.map((freq, i) => {
-              const gain = settings.eq[freq] ?? 0
-              return (
-                <div key={freq} className="flex flex-col items-center gap-1 flex-1">
-                  <span className="text-xs text-brand font-mono tabular-nums" style={{ fontSize: '10px' }}>{gain > 0 ? `+${gain}` : gain}</span>
-                  <input
-                    type="range"
-                    min={-12}
-                    max={12}
-                    step={1}
-                    value={gain}
-                    onChange={e => setEqBand(freq, parseInt(e.target.value))}
-                    className="eq-slider"
-                    style={{ height: '80px', cursor: 'pointer', accentColor: 'var(--brand)' }}
-                  />
-                  <span className="text-gray-500" style={{ fontSize: '10px' }}>{EQ_LABELS[i]}</span>
-                </div>
-              )
-            })}
+          <div className="overflow-x-auto no-scrollbar -mx-1 px-1">
+            <div className="flex items-end justify-between gap-1 min-w-[270px] h-44 bg-surface-3 rounded-xl px-2.5 sm:px-4 py-4">
+              {EQ_BANDS.map((freq, i) => {
+                const gain = settings.eq[freq] ?? 0
+                return (
+                  <div key={freq} className="flex flex-col items-center gap-1 flex-1">
+                    <span className="text-xs text-brand font-mono tabular-nums" style={{ fontSize: '10px' }}>{gain > 0 ? `+${gain}` : gain}</span>
+                    <input
+                      type="range"
+                      min={-12}
+                      max={12}
+                      step={1}
+                      value={gain}
+                      onChange={e => setEqBand(freq, parseInt(e.target.value))}
+                      className="eq-slider"
+                      style={{ height: '80px', cursor: 'pointer', accentColor: 'var(--brand)' }}
+                    />
+                    <span className="text-gray-500" style={{ fontSize: '10px' }}>{EQ_LABELS[i]}</span>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
       </Section>
@@ -1007,7 +1009,7 @@ export default function SettingsPage() {
 
       {/* ── Mobile tab bar ── */}
       <div className="lg:hidden shrink-0 border-b border-white/5 bg-surface-2">
-        <div className="flex overflow-x-auto scrollbar-none px-2 pt-2 gap-1">
+        <div className="flex overflow-x-auto no-scrollbar px-2 pt-2 gap-1">
           {TABS.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
@@ -1023,7 +1025,7 @@ export default function SettingsPage() {
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-5">
+      <div className="flex-1 overflow-y-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-5 pb-16">
         {activeTab === 'audio'    && <AudioTab    settings={settings} update={update} applyPreset={applyPreset} setEqBand={setEqBand} />}
         {activeTab === 'playback' && <PlaybackTab settings={settings} update={update} />}
         {activeTab === 'display'  && <DisplayTab  settings={settings} update={update} />}

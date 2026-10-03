@@ -590,41 +590,42 @@ export default function Player() {
             />
           </div>
           {/* Mobile controls row */}
-          <div className="flex items-center gap-2 px-3 py-2">
-            <button onClick={() => setExpanded(true)} className="relative shrink-0 touch-target">
+          <div className="flex items-center gap-1.5 xs:gap-2 px-2.5 xs:px-3 py-2">
+            <button onClick={() => setExpanded(true)} className="relative shrink-0 touch-target" aria-label="Expand player">
               <img src={currentSong.coverUrl} alt={currentSong.title}
                 className={`w-10 h-10 rounded-lg object-cover ${isPlaying ? 'ring-2 ring-brand/60' : ''}`} />
               {isPlaying && <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-brand rounded-full border-2 border-black animate-pulse" />}
             </button>
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setExpanded(true)}>
               <p className="text-sm font-semibold truncate leading-tight">{currentSong.title}</p>
               <p className="text-xs text-gray-400 truncate">
                 <Link
                   to={`/artist/${encodeURIComponent(currentSong.artist)}`}
+                  onClick={e => e.stopPropagation()}
                   className="hover:underline hover:text-white transition-colors"
                 >
                   {currentSong.artist}
                 </Link>
               </p>
             </div>
-            <button onClick={handleLike} className={`touch-target shrink-0 ${liked ? 'text-brand' : 'text-gray-500'}`}>
-              <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
+            <button onClick={handleLike} className={`touch-target shrink-0 p-1.5 ${liked ? 'text-brand' : 'text-gray-500 hover:text-white'}`} aria-label={liked ? 'Unlike' : 'Like'}>
+              <Heart size={18} fill={liked ? 'currentColor' : 'none'} />
             </button>
-            <button onClick={previous} className="touch-target text-gray-300">
+            <button onClick={previous} className="touch-target text-gray-300 hidden min-[360px]:inline-flex p-1.5 shrink-0" aria-label="Previous">
               <SkipBack size={18} fill="currentColor" />
             </button>
-            <button onClick={togglePlay} disabled={isLoading}
-              className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-black active:scale-95 transition-transform disabled:opacity-50 shadow-md touch-target">
+            <button onClick={togglePlay} disabled={isLoading} aria-label={isPlaying ? 'Pause' : 'Play'}
+              className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-black active:scale-95 transition-transform disabled:opacity-50 shadow-md touch-target shrink-0">
               {isLoading
                 ? <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
                 : isPlaying ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" className="ml-0.5" />}
             </button>
-            <button onClick={next} className="touch-target text-gray-300">
+            <button onClick={next} className="touch-target text-gray-300 p-1.5 shrink-0" aria-label="Next">
               <SkipForward size={18} fill="currentColor" />
             </button>
-            <button onClick={() => { setShowQueue(q => !q); setShowLyrics(false) }}
-              className={`touch-target ${showQueue ? 'text-brand' : 'text-gray-400'}`}>
-              <ListMusic size={16} />
+            <button onClick={() => { setShowQueue(q => !q); setShowLyrics(false) }} aria-label="Queue"
+              className={`touch-target p-1.5 shrink-0 hidden min-[410px]:inline-flex ${showQueue ? 'text-brand' : 'text-gray-400'}`}>
+              <ListMusic size={17} />
             </button>
           </div>
         </div>

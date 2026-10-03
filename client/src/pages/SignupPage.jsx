@@ -141,7 +141,7 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-surface flex items-center justify-center p-4 sm:p-8 overflow-hidden">
+    <div className="relative min-h-screen bg-surface flex items-center justify-center p-3.5 sm:p-8 overflow-hidden">
       {/* ── Ambient Aurora Background ── */}
       <div className="absolute top-[-10%] right-[-10%] w-[520px] h-[520px] bg-brand/15 rounded-full blur-[130px] pointer-events-none animate-aurora" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[550px] h-[550px] bg-indigo-600/15 rounded-full blur-[140px] pointer-events-none animate-aurora" style={{ animationDelay: '-5s' }} />
@@ -154,7 +154,7 @@ export default function SignupPage() {
       <div className="absolute w-[520px] h-[520px] bg-brand/[0.08] rounded-full blur-[140px] pointer-events-none" />
 
       {/* ── Main Professional Container ── */}
-      <div className="relative z-10 w-full max-w-[495px] bg-[#121216]/90 backdrop-blur-2xl rounded-3xl p-7 sm:p-10 md:p-11 shadow-[0_25px_70px_-15px_rgba(0,0,0,0.85),0_0_50px_rgba(29,185,84,0.08)] border border-white/[0.12] animate-pop-in overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent">
+      <div className="relative z-10 w-full max-w-[495px] bg-[#121216]/90 backdrop-blur-2xl rounded-2xl sm:rounded-3xl p-5 sm:p-10 md:p-11 shadow-[0_25px_70px_-15px_rgba(0,0,0,0.85),0_0_50px_rgba(29,185,84,0.08)] border border-white/[0.12] animate-pop-in overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent">
         
         {/* Soft top inner glow */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-24 bg-brand/10 blur-2xl pointer-events-none rounded-full" />
@@ -162,9 +162,9 @@ export default function SignupPage() {
         {step === 'details' ? (
           <>
             {/* Header with animated SoundWave logo */}
-            <div className="text-center mb-8 relative flex flex-col items-center">
-              <SoundWaveLogo size={64} animated glow className="mb-4" />
-              <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight font-display bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
+            <div className="text-center mb-6 sm:mb-8 relative flex flex-col items-center">
+              <SoundWaveLogo size={52} animated glow className="mb-3 sm:mb-4" />
+              <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight font-display bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
                 Create Account
               </h1>
               <p className="text-gray-400 text-xs sm:text-sm mt-1.5 flex items-center justify-center gap-1.5">

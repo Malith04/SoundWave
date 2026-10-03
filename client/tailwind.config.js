@@ -20,6 +20,9 @@ export default {
         'surface-3': 'var(--bg3, #2A2A2A)',
         'surface-4': 'var(--bg4, #333333)',
       },
+      screens: {
+        xs: '420px',
+      },
       animation: {
         'spin-slow':  'spin 8s linear infinite',
         'pulse-slow': 'pulse 3s ease-in-out infinite',

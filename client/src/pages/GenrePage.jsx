@@ -38,39 +38,39 @@ export default function GenrePage() {
   }
 
   return (
-    <div>
+    <div className="animate-fade-in pb-16">
       {/* Hero */}
-      <div className={`bg-gradient-to-b ${GENRE_COLORS[genre] || 'from-gray-700'} to-surface px-6 pt-16 pb-6`}>
-        <p className="text-sm font-medium text-white/70 mb-1">Genre</p>
-        <h1 className="text-5xl font-black mb-5">{genre}</h1>
-        <div className="flex gap-3">
+      <div className={`bg-gradient-to-b ${GENRE_COLORS[genre] || 'from-gray-700'} to-surface px-4 sm:px-6 pt-10 sm:pt-16 pb-6`}>
+        <p className="text-xs sm:text-sm font-medium text-white/70 mb-1 uppercase tracking-wider">Genre</p>
+        <h1 className="text-3xl sm:text-5xl font-black mb-4 sm:mb-5 tracking-tight">{genre}</h1>
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           <button
             onClick={() => handlePlay(false)}
-            className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-black font-bold px-6 py-3 rounded-full transition-all"
+            className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-black font-bold px-5 sm:px-6 py-2.5 sm:py-3 rounded-full transition-all text-xs xs:text-sm sm:text-base active:scale-95 shadow-md shadow-brand/20"
           >
-            <Play size={18} fill="black" /> Play All
+            <Play size={16} fill="black" /> Play All
           </button>
           <button
             onClick={() => handlePlay(true)}
-            className="flex items-center gap-2 bg-black/30 hover:bg-black/50 px-5 py-3 rounded-full text-sm font-medium transition-colors"
+            className="flex items-center gap-2 bg-black/30 hover:bg-black/50 px-4 sm:px-5 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-medium transition-colors active:scale-95"
           >
-            <Shuffle size={16} /> Shuffle
+            <Shuffle size={14} /> Shuffle
           </button>
         </div>
       </div>
 
-      <div className="px-6 py-4">
+      <div className="px-3.5 sm:px-6 py-4">
         {/* Tabs */}
-        <div className="flex gap-2 mb-5">
+        <div className="flex gap-2 mb-5 overflow-x-auto no-scrollbar pb-1">
           <button
             onClick={() => setTab('full')}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${tab === 'full' ? 'bg-white text-black' : 'bg-surface-2 text-gray-300 hover:bg-surface-3'}`}
+            className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${tab === 'full' ? 'bg-white text-black font-semibold' : 'bg-surface-2 text-gray-300 hover:bg-surface-3'}`}
           >
             🎵 Full Tracks ({songs.full?.length || 0})
           </button>
           <button
             onClick={() => setTab('preview')}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${tab === 'preview' ? 'bg-white text-black' : 'bg-surface-2 text-gray-300 hover:bg-surface-3'}`}
+            className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${tab === 'preview' ? 'bg-white text-black font-semibold' : 'bg-surface-2 text-gray-300 hover:bg-surface-3'}`}
           >
             🎧 iTunes Previews ({songs.preview?.length || 0})
           </button>

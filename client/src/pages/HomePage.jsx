@@ -124,7 +124,7 @@ function SpotlightBillboard({ song, queue, onPlay, isPlaying, currentSong }) {
   const isCurrentActive = currentSong?.id === song.id
 
   return (
-    <div className="relative rounded-3xl overflow-hidden mb-8 lg:mb-10 glass-panel border border-white/10 p-5 sm:p-7 shadow-2xl">
+    <div className="relative rounded-3xl overflow-hidden mb-6 sm:mb-8 lg:mb-10 glass-panel border border-white/10 p-4 sm:p-7 shadow-2xl">
       {/* Background blurred aura */}
       <div 
         className="absolute inset-0 bg-cover bg-center opacity-25 filter blur-3xl scale-125 pointer-events-none transition-all duration-1000"
@@ -132,10 +132,10 @@ function SpotlightBillboard({ song, queue, onPlay, isPlaying, currentSong }) {
       />
       <div className="absolute inset-0 bg-gradient-to-r from-surface-2 via-surface-2/80 to-transparent pointer-events-none" />
 
-      <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-center gap-5 sm:gap-6">
+      <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
+        <div className="flex items-center gap-3.5 sm:gap-6 min-w-0">
           {/* Glowing Album Art with Play Button */}
-          <div className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-2xl overflow-hidden shadow-2xl shrink-0 group border border-white/15">
+          <div className="relative w-20 h-20 xs:w-24 xs:h-24 sm:w-32 sm:h-32 rounded-2xl overflow-hidden shadow-2xl shrink-0 group border border-white/15">
             <img 
               src={song.coverUrl || 'https://via.placeholder.com/200'} 
               alt={song.title} 
@@ -146,41 +146,41 @@ function SpotlightBillboard({ song, queue, onPlay, isPlaying, currentSong }) {
               aria-label="Play spotlight track"
               className="absolute inset-0 bg-black/40 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all duration-200"
             >
-              <div className="w-12 h-12 rounded-full bg-brand text-black flex items-center justify-center shadow-lg hover:scale-105 active:scale-95">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-brand text-black flex items-center justify-center shadow-lg hover:scale-105 active:scale-95">
                 {isCurrentActive && isPlaying ? (
-                  <Pause size={20} fill="black" />
+                  <Pause size={18} fill="black" />
                 ) : (
-                  <Play size={20} fill="black" className="ml-0.5" />
+                  <Play size={18} fill="black" className="ml-0.5" />
                 )}
               </div>
             </button>
           </div>
 
-          <div className="min-w-0">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand/20 border border-brand/40 text-brand text-xs font-bold uppercase tracking-wider mb-2">
-              <Sparkles size={12} className="animate-spin-slow" />
-              Spotlight of the Day
+          <div className="min-w-0 flex-1">
+            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-brand/20 border border-brand/40 text-brand text-[10px] xs:text-xs font-bold uppercase tracking-wider mb-1.5">
+              <Sparkles size={11} className="animate-spin-slow shrink-0" />
+              <span>Spotlight</span>
             </div>
-            <h2 className="text-xl sm:text-3xl font-extrabold text-white tracking-tight font-display truncate">
+            <h2 className="text-lg xs:text-xl sm:text-3xl font-extrabold text-white tracking-tight font-display truncate">
               {song.title}
             </h2>
-            <p className="text-sm sm:text-base text-gray-300 font-medium truncate mt-0.5">
+            <p className="text-xs sm:text-base text-gray-300 font-medium truncate mt-0.5">
               {song.artist}
             </p>
-            <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+            <div className="flex items-center gap-2 mt-1.5 text-[11px] sm:text-xs text-gray-400">
               <span className="bg-white/10 px-2 py-0.5 rounded-md font-medium text-white/80">
                 {song.source === 'jamendo' ? 'Full Track' : 'Preview'}
               </span>
-              {song.genre && <span>• {song.genre}</span>}
+              {song.genre && <span className="truncate">• {song.genre}</span>}
             </div>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-3 self-start md:self-center">
+        <div className="flex items-center gap-3 self-start md:self-center shrink-0">
           <button
             onClick={() => onPlay(song, queue, 0)}
-            className="flex items-center gap-2.5 bg-gradient-to-r from-brand to-emerald-400 hover:from-brand-dark hover:to-emerald-500 text-black font-extrabold px-6 py-3.5 rounded-full shadow-lg shadow-brand/25 transition-all duration-300 hover:scale-105 active:scale-95 text-sm"
+            className="flex items-center gap-2 bg-gradient-to-r from-brand to-emerald-400 hover:from-brand-dark hover:to-emerald-500 text-black font-extrabold px-5 sm:px-6 py-2.5 sm:py-3.5 rounded-full shadow-lg shadow-brand/25 transition-all duration-300 hover:scale-105 active:scale-95 text-xs sm:text-sm"
           >
             {isCurrentActive && isPlaying ? (
               <>
@@ -308,7 +308,7 @@ export default function HomePage() {
   const spotlightSong = chart[0] || trending[0]
 
   return (
-    <div className="px-4 sm:px-6 lg:px-8 py-5 sm:py-7 pb-12 max-w-7xl mx-auto animate-fade-in">
+    <div className="px-3.5 sm:px-6 lg:px-8 py-4 sm:py-7 pb-16 max-w-7xl mx-auto animate-fade-in">
       
       {/* ── Top Header & Greeting Bar ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 lg:mb-8">
@@ -317,13 +317,13 @@ export default function HomePage() {
             <span>{greetingInfo.icon}</span>
             <span>{greetingInfo.vibe}</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight font-display text-white">
+          <h1 className="text-xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight font-display text-white">
             {greetingInfo.text}, <span className="bg-gradient-to-r from-brand to-emerald-300 bg-clip-text text-transparent">{displayName}</span>
           </h1>
         </div>
 
         {/* Category Pill Filters */}
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
           {CATEGORY_TABS.map(tab => (
             <button
               key={tab}

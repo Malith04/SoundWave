@@ -208,9 +208,9 @@ export default function SearchPage() {
   const displayed = tab === 'all' ? results.all : results[tab] || []
 
   return (
-    <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-20 max-w-7xl mx-auto animate-fade-in">
+    <div className="px-3.5 sm:px-6 lg:px-8 py-4 sm:py-8 pb-20 max-w-7xl mx-auto animate-fade-in">
       <div className="mb-6">
-        <h1 className="text-2xl sm:text-4xl font-black mb-2 tracking-tight text-white font-display">
+        <h1 className="text-xl sm:text-4xl font-black mb-1.5 sm:mb-2 tracking-tight text-white font-display">
           Search & Discover
         </h1>
         <p className="text-xs sm:text-sm text-gray-400">

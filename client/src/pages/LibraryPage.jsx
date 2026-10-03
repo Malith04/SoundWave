@@ -84,20 +84,21 @@ export default function LibraryPage() {
   ]
 
   return (
-    <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-16 max-w-7xl mx-auto animate-fade-in">
+    <div className="px-3.5 sm:px-6 lg:px-8 py-5 sm:py-8 pb-16 max-w-7xl mx-auto animate-fade-in">
       <CreatePlaylistModal isOpen={showModal} onClose={() => setShowModal(false)} onCreate={handleCreate} />
 
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold">Your Library</h1>
-        <div className="flex items-center gap-2">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Your Library</h1>
+        <div className="flex items-center gap-1.5 xs:gap-2">
           {tab === 'playlists' && (
             <>
               <button onClick={() => setView(v => v === 'grid' ? 'list' : 'grid')}
-                className="mobile-touch-target p-2 text-gray-400 hover:text-white transition-colors">
+                className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors"
+                title={view === 'grid' ? 'List view' : 'Grid view'}>
                 {view === 'grid' ? <List size={18} /> : <LayoutGrid size={18} />}
               </button>
               <button onClick={() => setShowModal(true)}
-                className="mobile-touch-target flex items-center gap-2 bg-brand text-black font-semibold px-3 sm:px-4 py-2 rounded-full text-xs sm:text-sm hover:bg-brand-dark transition-colors">
+                className="flex items-center gap-1.5 xs:gap-2 bg-brand text-black font-semibold px-3 xs:px-4 py-2 rounded-full text-xs sm:text-sm hover:bg-brand-dark transition-all active:scale-95 shadow-md shadow-brand/20">
                 <Plus size={14} /> <span className="hidden sm:inline">New Playlist</span><span className="sm:hidden">New</span>
               </button>
             </>
@@ -105,10 +106,10 @@ export default function LibraryPage() {
         </div>
       </div>
 
-      <div className="flex gap-2 mb-6 overflow-x-auto mobile-scroll">
+      <div className="flex gap-2 mb-6 overflow-x-auto no-scrollbar pb-1">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`mobile-touch-target px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${tab === t.id ? 'bg-white text-black' : 'bg-surface-2 text-gray-300 hover:bg-white/10'}`}>
+            className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${tab === t.id ? 'bg-white text-black font-semibold shadow-sm' : 'bg-surface-2 text-gray-300 hover:bg-white/10'}`}>
             {t.label}
           </button>
         ))}

@@ -1,5 +1,5 @@
 import { NavLink, Link, useNavigate } from 'react-router-dom'
-import { Home, Search, Library, Plus, LogOut, User, Settings, Heart, Download } from 'lucide-react'
+import { Home, Search, Library, Plus, LogOut, User, Settings, Heart, Download, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useInstall } from '../context/InstallContext'
 import { useState, useEffect, useRef } from 'react'
@@ -61,12 +61,19 @@ export default function Sidebar({ onNavigate }) {
     }`
 
   return (
-    <aside className="w-64 bg-[#0a0a0a] flex flex-col shrink-0 h-full overflow-hidden border-r border-white/5">
-      {/* Logo - desktop only */}
-      <div className="px-5 py-5 hidden lg:block shrink-0">
-        <Link to="/" className="inline-block hover:opacity-90 transition-opacity">
-          <SoundWaveLogo size={34} showText animated glow textClassName="text-xl tracking-tight font-extrabold" />
+    <aside className="w-full lg:w-64 bg-[#0a0a0a] flex flex-col shrink-0 h-full overflow-hidden border-r border-white/5">
+      {/* Logo & mobile close button */}
+      <div className="px-4 sm:px-5 py-4 sm:py-5 flex items-center justify-between shrink-0 border-b border-white/5 lg:border-b-0">
+        <Link to="/" onClick={onNavigate} className="inline-block hover:opacity-90 transition-opacity">
+          <SoundWaveLogo size={32} showText animated glow textClassName="text-lg lg:text-xl tracking-tight font-extrabold" />
         </Link>
+        <button
+          onClick={onNavigate}
+          className="lg:hidden touch-target p-1.5 rounded-lg text-gray-400 hover:text-white transition-colors"
+          aria-label="Close menu"
+        >
+          <X size={18} />
+        </button>
       </div>
 
       {/* Main nav */}

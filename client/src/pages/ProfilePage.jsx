@@ -91,10 +91,10 @@ export default function ProfilePage() {
   const memberYear = user?.createdAt ? new Date(user.createdAt).getFullYear() : '2026'
 
   return (
-    <div className="px-6 py-6 pb-12 max-w-7xl mx-auto">
+    <div className="px-3.5 sm:px-6 py-4 sm:py-6 pb-16 max-w-7xl mx-auto animate-fade-in">
 
       {/* ── Hero banner ── */}
-      <div className="relative flex flex-col sm:flex-row items-start sm:items-end gap-6 mb-8 p-6 md:p-8 rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
+      <div className="relative flex flex-col sm:flex-row items-center sm:items-end gap-4 sm:gap-6 mb-6 sm:mb-8 p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl overflow-hidden border border-white/10 shadow-2xl text-center sm:text-left">
         {/* Gradient bg from avatar color */}
         <div className="absolute inset-0 opacity-30" style={colorStyle} />
         <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/80 to-transparent" />
@@ -102,7 +102,7 @@ export default function ProfilePage() {
         {/* Avatar */}
         <div className="relative shrink-0 z-10">
           <div
-            className="w-28 h-28 sm:w-36 sm:h-36 rounded-full overflow-hidden shadow-2xl border-4 border-white/20 flex items-center justify-center"
+            className="w-24 h-24 sm:w-36 sm:h-36 rounded-full overflow-hidden shadow-2xl border-2 sm:border-4 border-white/20 flex items-center justify-center"
             style={activeAvatar && !imgError ? {} : colorStyle}
           >
             {activeAvatar && !imgError ? (
@@ -113,7 +113,7 @@ export default function ProfilePage() {
                 onError={() => setImgError(true)}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-5xl font-black text-white">
+              <div className="w-full h-full flex items-center justify-center text-4xl sm:text-5xl font-black text-white">
                 {(displayName[0] || 'U').toUpperCase()}
               </div>
             )}
@@ -122,7 +122,7 @@ export default function ProfilePage() {
 
         {/* User Details & Music Stats */}
         <div className="relative z-10 flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-brand/20 text-brand border border-brand/30 uppercase tracking-widest">
               Profile
             </span>
@@ -133,11 +133,11 @@ export default function ProfilePage() {
             )}
           </div>
 
-          <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight mb-2 truncate">
+          <h1 className="text-2xl sm:text-5xl font-black text-white tracking-tight mb-2 truncate">
             {displayName}
           </h1>
 
-          <div className="flex flex-wrap items-center gap-y-2 gap-x-5 text-sm text-gray-300 mb-3">
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-y-1.5 gap-x-3 sm:gap-x-5 text-xs sm:text-sm text-gray-300 mb-3">
             <span><strong className="text-white font-bold">{playlists.length}</strong> Playlists</span>
             <span><strong className="text-white font-bold">{likedSongs.length}</strong> Liked Songs</span>
             <span><strong className="text-white font-bold">{recentSongs.length}</strong> Songs Played</span>

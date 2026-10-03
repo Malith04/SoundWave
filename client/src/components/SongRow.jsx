@@ -284,7 +284,7 @@ export default function SongRow({ song, index, queue, onRemove, showIndex = true
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        className={`mobile-song-row-container flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-2.5 rounded-xl group cursor-pointer transition-all duration-200 ${
+        className={`mobile-song-row-container flex items-center gap-2 xs:gap-3 sm:gap-4 px-2 xs:px-3 sm:px-4 py-2 xs:py-2.5 rounded-xl group cursor-pointer transition-all duration-200 ${
           isActive 
             ? 'bg-white/10 border border-brand/30 shadow-sm' 
             : 'hover:bg-white/[0.06] border border-transparent'
@@ -292,7 +292,7 @@ export default function SongRow({ song, index, queue, onRemove, showIndex = true
         onClick={handlePlay}
       >
         {showIndex && (
-          <div className="w-5 text-center shrink-0">
+          <div className="w-4 xs:w-5 text-center shrink-0">
             {hovered || isActive ? (
               isActive && isPlaying ? (
                 <div className="flex items-end justify-center gap-0.5 h-3.5">
@@ -301,10 +301,10 @@ export default function SongRow({ song, index, queue, onRemove, showIndex = true
                   <span className="w-0.5 bg-brand rounded-full audio-bar-3" />
                 </div>
               ) : (
-                <Play size={14} className="text-white mx-auto" fill="currentColor" />
+                <Play size={13} className="text-white mx-auto" fill="currentColor" />
               )
             ) : (
-              <span className={`text-xs font-semibold ${isActive ? 'text-brand' : 'text-gray-500'}`}>
+              <span className={`text-[11px] xs:text-xs font-semibold ${isActive ? 'text-brand' : 'text-gray-500'}`}>
                 {index + 1}
               </span>
             )}
@@ -314,14 +314,14 @@ export default function SongRow({ song, index, queue, onRemove, showIndex = true
         <img
           src={song.coverUrl || 'https://via.placeholder.com/40'}
           alt={song.title}
-          className="w-10 h-10 rounded-lg object-cover shadow-sm shrink-0"
+          className="w-9 h-9 xs:w-10 xs:h-10 rounded-lg object-cover shadow-sm shrink-0"
         />
 
         <div className="flex-1 min-w-0">
-          <p className={`text-sm font-semibold truncate ${isActive ? 'text-brand' : 'text-white'}`}>
+          <p className={`text-xs xs:text-sm font-semibold truncate ${isActive ? 'text-brand' : 'text-white'}`}>
             {song.title}
           </p>
-          <p className="text-xs text-gray-400 truncate mt-0.5">
+          <p className="text-[11px] xs:text-xs text-gray-400 truncate mt-0.5">
             <Link
               to={`/artist/${encodeURIComponent(song.artist)}`}
               onClick={e => e.stopPropagation()}
@@ -333,7 +333,7 @@ export default function SongRow({ song, index, queue, onRemove, showIndex = true
         </div>
 
         <p className="text-xs text-gray-500 truncate hidden lg:block w-32 xl:w-40">{song.album}</p>
-        <span className="text-xs text-gray-400 w-10 text-right shrink-0">{formatTime(song.duration)}</span>
+        <span className="text-[11px] xs:text-xs text-gray-400 w-8 xs:w-10 text-right shrink-0">{formatTime(song.duration)}</span>
 
         <div className="relative shrink-0 flex items-center gap-1" onClick={e => e.stopPropagation()}>
           <button

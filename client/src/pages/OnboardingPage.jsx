@@ -100,7 +100,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-[#121212] text-white flex flex-col justify-center items-center p-4 sm:p-6 overflow-hidden">
+    <div className="relative min-h-screen bg-[#121212] text-white flex flex-col justify-center items-center p-3 xs:p-4 sm:p-6 overflow-hidden">
       {/* ── Ambient Aurora Lighting ── */}
       <div className="absolute top-[-15%] left-[-15%] w-[500px] h-[500px] bg-brand/15 rounded-full blur-[140px] pointer-events-none animate-aurora" />
       <div className="absolute bottom-[-15%] right-[-15%] w-[550px] h-[550px] bg-purple-600/15 rounded-full blur-[160px] pointer-events-none animate-aurora" style={{ animationDelay: '-7s' }} />
@@ -109,16 +109,16 @@ export default function OnboardingPage() {
       <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
 
       {/* ── Main Container ── */}
-      <div className="relative z-10 w-full max-w-xl glass-modal rounded-3xl p-6 sm:p-10 shadow-2xl border border-white/10 animate-pop-in">
+      <div className="relative z-10 w-full max-w-xl glass-modal rounded-2xl sm:rounded-3xl p-4 xs:p-6 sm:p-10 shadow-2xl border border-white/10 animate-pop-in">
         
         {/* Header / Stepper */}
-        <div className="mb-8">
+        <div className="mb-6 sm:mb-8">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2.5">
-              <SoundWaveLogo size={30} animated glow />
-              <span className="font-display font-bold text-sm tracking-wide text-white/90">SoundWave Setup</span>
+            <div className="flex items-center gap-2 xs:gap-2.5">
+              <SoundWaveLogo size={28} animated glow />
+              <span className="font-display font-bold text-xs xs:text-sm tracking-wide text-white/90">SoundWave Setup</span>
             </div>
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-white/10 text-brand border border-brand/30">
+            <span className="text-[11px] xs:text-xs font-semibold px-2 xs:px-2.5 py-0.5 xs:py-1 rounded-full bg-white/10 text-brand border border-brand/30">
               Step {step} of 3
             </span>
           </div>
@@ -134,12 +134,12 @@ export default function OnboardingPage() {
 
         {/* ── STEP 1: Basic Profile ── */}
         {step === 1 && (
-          <div className="space-y-6 animate-fade-in">
+          <div className="space-y-5 sm:space-y-6 animate-fade-in">
             <div>
-              <h2 className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
+              <h2 className="text-xl xs:text-2xl sm:text-3xl font-extrabold font-display tracking-tight bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
                 Let's get to know you
               </h2>
-              <p className="text-sm text-gray-400 mt-1">
+              <p className="text-xs xs:text-sm text-gray-400 mt-1">
                 Tell us a bit about yourself to personalize your SoundWave journey.
               </p>
             </div>
@@ -157,7 +157,7 @@ export default function OnboardingPage() {
                     value={displayName}
                     onChange={e => setDisplayName(e.target.value)}
                     placeholder="Your name or handle"
-                    className="w-full glass-input rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none"
+                    className="w-full glass-input rounded-xl pl-10 pr-4 py-2.5 xs:py-3 text-sm text-white placeholder-gray-500 focus:outline-none"
                     required
                   />
                 </div>
@@ -191,7 +191,7 @@ export default function OnboardingPage() {
                         key={g.id}
                         type="button"
                         onClick={() => setGender(g.id)}
-                        className={`py-2.5 px-3 rounded-xl text-xs font-semibold border transition-all text-center ${
+                        className={`py-2 xs:py-2.5 px-2 xs:px-3 rounded-xl text-xs font-semibold border transition-all text-center ${
                           isSelected
                             ? 'bg-brand/20 border-brand text-brand shadow-sm shadow-brand/20'
                             : 'glass-input text-gray-300 hover:bg-white/10 hover:border-white/20'
@@ -209,13 +209,13 @@ export default function OnboardingPage() {
 
         {/* ── STEP 2: Favorite Genres ── */}
         {step === 2 && (
-          <div className="space-y-6 animate-fade-in">
+          <div className="space-y-5 sm:space-y-6 animate-fade-in">
             <div>
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-xl xs:text-2xl sm:text-3xl font-extrabold font-display tracking-tight bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
                   Pick your favorite genres
                 </h2>
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                <span className={`text-[11px] xs:text-xs font-bold px-2.5 py-1 rounded-full border shrink-0 ${
                   selectedGenres.length >= 3 
                     ? 'bg-brand/20 text-brand border-brand/40' 
                     : 'bg-white/10 text-gray-400 border-white/10'
@@ -223,12 +223,12 @@ export default function OnboardingPage() {
                   {selectedGenres.length} / 3 required
                 </span>
               </div>
-              <p className="text-sm text-gray-400 mt-1">
+              <p className="text-xs xs:text-sm text-gray-400 mt-1">
                 Choose at least 3 sounds you love. We'll build your personal daily mix.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[340px] overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 xs:gap-2.5 max-h-[340px] overflow-y-auto pr-1">
               {GENRE_OPTIONS.map(g => {
                 const isSelected = selectedGenres.includes(g.id)
                 return (
@@ -236,19 +236,19 @@ export default function OnboardingPage() {
                     key={g.id}
                     type="button"
                     onClick={() => toggleGenre(g.id)}
-                    className={`relative p-3 rounded-2xl border text-left transition-all duration-200 flex items-center justify-between ${
+                    className={`relative p-2.5 xs:p-3 rounded-xl xs:rounded-2xl border text-left transition-all duration-200 flex items-center justify-between ${
                       isSelected
                         ? 'bg-gradient-to-br ' + g.color + ' border-white/30 text-white shadow-lg scale-[1.02]'
                         : 'glass-input border-white/10 text-gray-300 hover:border-white/25 hover:bg-white/10'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-xl">{g.emoji}</span>
-                      <span className="text-xs font-bold tracking-tight">{g.name}</span>
+                    <div className="flex items-center gap-2 xs:gap-2.5 min-w-0">
+                      <span className="text-base xs:text-xl shrink-0">{g.emoji}</span>
+                      <span className="text-[11px] xs:text-xs font-bold tracking-tight truncate">{g.name}</span>
                     </div>
                     {isSelected && (
-                      <div className="w-5 h-5 rounded-full bg-white text-black flex items-center justify-center shrink-0">
-                        <Check size={12} strokeWidth={3} />
+                      <div className="w-4 h-4 xs:w-5 xs:h-5 rounded-full bg-white text-black flex items-center justify-center shrink-0 ml-1">
+                        <Check size={11} strokeWidth={3} />
                       </div>
                     )}
                   </button>
@@ -260,17 +260,17 @@ export default function OnboardingPage() {
 
         {/* ── STEP 3: Listening Vibe & Launch ── */}
         {step === 3 && (
-          <div className="space-y-6 animate-fade-in">
+          <div className="space-y-5 sm:space-y-6 animate-fade-in">
             <div>
-              <h2 className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
+              <h2 className="text-xl xs:text-2xl sm:text-3xl font-extrabold font-display tracking-tight bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
                 What's your listening vibe?
               </h2>
-              <p className="text-sm text-gray-400 mt-1">
+              <p className="text-xs xs:text-sm text-gray-400 mt-1">
                 Pick your primary groove so we can queue your first recommendations.
               </p>
             </div>
 
-            <div className="space-y-2.5">
+            <div className="space-y-2 xs:space-y-2.5">
               {VIBE_OPTIONS.map(v => {
                 const isSelected = selectedVibe === v.id
                 const Icon = v.icon
@@ -279,21 +279,21 @@ export default function OnboardingPage() {
                     key={v.id}
                     type="button"
                     onClick={() => setSelectedVibe(v.id)}
-                    className={`w-full p-3.5 rounded-2xl border text-left transition-all duration-200 flex items-center gap-3.5 ${
+                    className={`w-full p-2.5 xs:p-3.5 rounded-xl xs:rounded-2xl border text-left transition-all duration-200 flex items-center gap-2.5 xs:gap-3.5 ${
                       isSelected
                         ? 'bg-white/10 border-brand shadow-md shadow-brand/20 ring-1 ring-brand'
                         : 'glass-input border-white/10 text-gray-300 hover:border-white/25 hover:bg-white/5'
                     }`}
                   >
-                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${v.gradient} flex items-center justify-center text-white shrink-0 shadow-md`}>
-                      <Icon size={20} />
+                    <div className={`w-9 h-9 xs:w-10 xs:h-10 rounded-xl bg-gradient-to-br ${v.gradient} flex items-center justify-center text-white shrink-0 shadow-md`}>
+                      <Icon size={18} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-bold text-white tracking-tight">{v.name}</h4>
-                      <p className="text-xs text-gray-400">{v.desc}</p>
+                      <h4 className="text-xs xs:text-sm font-bold text-white tracking-tight">{v.name}</h4>
+                      <p className="text-[11px] xs:text-xs text-gray-400 truncate">{v.desc}</p>
                     </div>
                     {isSelected && (
-                      <div className="w-5 h-5 rounded-full bg-brand text-black flex items-center justify-center shrink-0">
+                      <div className="w-4 h-4 xs:w-5 xs:h-5 rounded-full bg-brand text-black flex items-center justify-center shrink-0">
                         <Check size={12} strokeWidth={3} />
                       </div>
                     )}
@@ -303,9 +303,9 @@ export default function OnboardingPage() {
             </div>
 
             {/* Ready Card Preview */}
-            <div className="glass-card rounded-2xl p-4 border border-white/10 flex items-center gap-3 bg-brand/5">
-              <Headphones size={22} className="text-brand shrink-0" />
-              <div className="text-xs text-gray-300">
+            <div className="glass-card rounded-xl xs:rounded-2xl p-3 xs:p-4 border border-white/10 flex items-center gap-2.5 xs:gap-3 bg-brand/5">
+              <Headphones size={20} className="text-brand shrink-0" />
+              <div className="text-[11px] xs:text-xs text-gray-300">
                 <span className="font-semibold text-white">Starter Mix Ready:</span> Personalized with your{' '}
                 <span className="text-brand font-semibold">{selectedGenres.length} selected genres</span> and current vibe!
               </div>
@@ -314,12 +314,12 @@ export default function OnboardingPage() {
         )}
 
         {/* ── Action Buttons ── */}
-        <div className="flex items-center justify-between gap-3 mt-8 pt-6 border-t border-white/10">
+        <div className="flex items-center justify-between gap-3 mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-white/10">
           {step > 1 ? (
             <button
               type="button"
               onClick={() => setStep(s => s - 1)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl glass-input text-xs font-semibold text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+              className="flex items-center gap-1.5 xs:gap-2 px-3 xs:px-4 py-2 xs:py-2.5 rounded-xl glass-input text-xs font-semibold text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
             >
               <ArrowLeft size={14} /> Back
             </button>
@@ -331,7 +331,7 @@ export default function OnboardingPage() {
             <button
               type="button"
               onClick={handleNext}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-brand text-black text-xs font-bold hover:bg-brand-dark transition-all duration-200 hover:scale-105 active:scale-95 shadow-md shadow-brand/30 ml-auto"
+              className="flex items-center gap-1.5 xs:gap-2 px-4 xs:px-6 py-2 xs:py-2.5 rounded-xl bg-brand text-black text-xs font-bold hover:bg-brand-dark transition-all duration-200 hover:scale-105 active:scale-95 shadow-md shadow-brand/30 ml-auto"
             >
               Continue <ArrowRight size={14} />
             </button>
@@ -340,10 +340,10 @@ export default function OnboardingPage() {
               type="button"
               onClick={handleFinish}
               disabled={submitting}
-              className="flex items-center gap-2 px-7 py-3 rounded-xl bg-gradient-to-r from-brand to-emerald-400 text-black text-sm font-extrabold hover:opacity-95 transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-brand/40 ml-auto disabled:opacity-50"
+              className="flex items-center gap-1.5 xs:gap-2 px-4 xs:px-7 py-2.5 xs:py-3 rounded-xl bg-gradient-to-r from-brand to-emerald-400 text-black text-xs xs:text-sm font-extrabold hover:opacity-95 transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-brand/40 ml-auto disabled:opacity-50"
             >
               <Sparkles size={16} />
-              {submitting ? 'Setting up your groove...' : 'Enter SoundWave'}
+              {submitting ? 'Setting up...' : 'Enter SoundWave'}
             </button>
           )}
         </div>

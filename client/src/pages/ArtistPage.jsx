@@ -232,11 +232,11 @@ export default function ArtistPage() {
           </button>
         </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-8 pt-14 sm:pt-14 md:pt-12 pb-6 sm:pb-7">
+        <div className="relative z-10 max-w-7xl mx-auto px-3.5 sm:px-8 pt-12 sm:pt-14 md:pt-12 pb-5 sm:pb-7">
           {/* Hero Content: Avatar + Artist Info */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-5 sm:gap-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 sm:gap-6">
             {/* Circular high-res Artist Avatar */}
-            <div className="relative shrink-0 w-24 h-24 sm:w-36 sm:h-36 md:w-44 md:h-44 rounded-full overflow-hidden bg-surface-3 border-4 border-white/15 shadow-[0_15px_35px_rgba(0,0,0,0.8)] group">
+            <div className="relative shrink-0 w-20 h-20 xs:w-24 xs:h-24 sm:w-36 sm:h-36 md:w-44 md:h-44 rounded-full overflow-hidden bg-surface-3 border-2 sm:border-4 border-white/15 shadow-[0_15px_35px_rgba(0,0,0,0.8)] group">
               {artist.picture ? (
                 <img
                   src={artist.picture}
@@ -253,20 +253,20 @@ export default function ArtistPage() {
             {/* Artist Typography & Details */}
             <div className="flex-1 min-w-0">
               {/* Verified pill */}
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/15 text-xs font-semibold text-white mb-2 shadow-sm">
-                <CheckCircle2 size={14} className="text-brand fill-brand/20" />
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/15 text-[11px] sm:text-xs font-semibold text-white mb-1.5 sm:mb-2 shadow-sm">
+                <CheckCircle2 size={13} className="text-brand fill-brand/20" />
                 <span>Verified Artist</span>
               </div>
 
               {/* Artist Name */}
-              <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white tracking-tight truncate drop-shadow-lg leading-tight">
+              <h1 className="text-xl xs:text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white tracking-tight truncate drop-shadow-lg leading-tight">
                 {artist.name}
               </h1>
 
               {/* Listeners & Catalog Info */}
-              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs sm:text-sm text-gray-300 mt-2 font-medium">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm text-gray-300 mt-1.5 sm:mt-2 font-medium">
                 <span className="flex items-center gap-1.5 text-white font-semibold">
-                  <Flame size={15} className="text-amber-400 shrink-0" />
+                  <Flame size={14} className="text-amber-400 shrink-0" />
                   {artist.monthlyListeners} monthly listeners
                 </span>
                 <span className="w-1 h-1 rounded-full bg-gray-500" />
@@ -288,52 +288,52 @@ export default function ArtistPage() {
       </div>
 
       {/* ── 2. Action Controls & Dedicated In-Page Search Bar ── */}
-      <div className="px-4 sm:px-8 max-w-7xl mx-auto mt-6">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pb-6 border-b border-white/[0.08]">
+      <div className="px-3.5 sm:px-8 max-w-7xl mx-auto mt-4 sm:mt-6">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pb-5 sm:pb-6 border-b border-white/[0.08]">
           {/* Play, Shuffle, Follow, Share Action Buttons */}
-          <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+          <div className="flex items-center flex-wrap gap-2.5 sm:gap-4 shrink-0">
             {/* Big Play / Pause Button */}
             <button
               onClick={() => (isArtistTrackPlaying ? togglePlay() : handlePlayAll(false))}
-              className="w-14 h-14 rounded-full bg-brand hover:bg-brand-dark text-black flex items-center justify-center shadow-[0_10px_25px_rgba(29,185,84,0.4)] hover:scale-105 active:scale-95 transition-all duration-200"
+              className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-brand hover:bg-brand-dark text-black flex items-center justify-center shadow-[0_10px_25px_rgba(29,185,84,0.4)] hover:scale-105 active:scale-95 transition-all duration-200"
               title={isArtistTrackPlaying ? 'Pause' : `Play ${artist.name}`}
             >
               {isArtistTrackPlaying ? (
-                <Pause size={24} fill="black" />
+                <Pause size={20} className="sm:w-6 sm:h-6" fill="black" />
               ) : (
-                <Play size={24} fill="black" className="translate-x-0.5" />
+                <Play size={20} className="sm:w-6 sm:h-6 translate-x-0.5" fill="black" />
               )}
             </button>
 
             {/* Shuffle Button */}
             <button
               onClick={() => handlePlayAll(true)}
-              className="w-11 h-11 rounded-full bg-surface-2 hover:bg-surface-3 border border-white/10 hover:border-white/20 flex items-center justify-center text-gray-300 hover:text-white transition-all hover:scale-105 active:scale-95"
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-surface-2 hover:bg-surface-3 border border-white/10 hover:border-white/20 flex items-center justify-center text-gray-300 hover:text-white transition-all hover:scale-105 active:scale-95"
               title="Shuffle Play"
             >
-              <Shuffle size={18} />
+              <Shuffle size={17} />
             </button>
 
             {/* Follow / Following Toggle Button */}
             <button
               onClick={handleFollowToggle}
-              className={`px-5 py-2.5 rounded-full text-xs sm:text-sm font-bold border transition-all duration-200 flex items-center gap-2 hover:scale-105 active:scale-95 ${
+              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold border transition-all duration-200 flex items-center gap-1.5 sm:gap-2 hover:scale-105 active:scale-95 ${
                 isFollowing
                   ? 'bg-brand/15 border-brand text-brand shadow-[0_0_15px_rgba(29,185,84,0.25)]'
                   : 'bg-transparent border-white/20 hover:border-white text-white'
               }`}
             >
-              <Heart size={15} fill={isFollowing ? 'currentColor' : 'none'} />
+              <Heart size={14} fill={isFollowing ? 'currentColor' : 'none'} />
               <span>{isFollowing ? 'Following' : 'Follow'}</span>
             </button>
 
             {/* Share Button */}
             <button
               onClick={handleShare}
-              className="w-11 h-11 rounded-full bg-surface-2 hover:bg-surface-3 border border-white/10 hover:border-white/20 flex items-center justify-center text-gray-300 hover:text-white transition-all hover:scale-105 active:scale-95"
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-surface-2 hover:bg-surface-3 border border-white/10 hover:border-white/20 flex items-center justify-center text-gray-300 hover:text-white transition-all hover:scale-105 active:scale-95"
               title="Share Artist"
             >
-              <Share2 size={16} />
+              <Share2 size={15} />
             </button>
           </div>
 

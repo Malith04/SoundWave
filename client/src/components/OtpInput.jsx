@@ -120,8 +120,8 @@ export default function OtpInput({
   }
 
   return (
-    <div className="w-full">
-      <div className="flex items-center justify-center gap-1.5 sm:gap-2">
+    <div className="w-full overflow-hidden">
+      <div className="flex items-center justify-center gap-1 xs:gap-1.5 sm:gap-2">
         {Array.from({ length }).map((_, index) => {
           const digit = digits[index] || ''
           const isFilled = digit !== ''
@@ -130,7 +130,7 @@ export default function OtpInput({
           return (
             <div key={index} className="flex items-center">
               {isDivider && (
-                <div className="w-1.5 sm:w-2 h-0.5 bg-white/20 mr-1.5 sm:mr-2 -ml-0.5 sm:-ml-1 rounded-full shrink-0" />
+                <div className="w-1 xs:w-1.5 sm:w-2 h-0.5 bg-white/20 mr-1 xs:mr-1.5 sm:mr-2 -ml-0.5 sm:-ml-1 rounded-full shrink-0" />
               )}
               <input
                 ref={el => (inputsRef.current[index] = el)}
@@ -153,7 +153,7 @@ export default function OtpInput({
                   color: '#ffffff',
                   caretColor: '#1DB954'
                 }}
-                className={`otp-digit-input w-9 sm:w-11 h-12 sm:h-13 text-center text-lg sm:text-xl font-mono font-bold rounded-xl border transition-all duration-200 outline-none
+                className={`otp-digit-input w-7 xs:w-8.5 sm:w-11 h-10 xs:h-12 sm:h-13 text-center text-sm xs:text-lg sm:text-xl font-mono font-bold rounded-lg xs:rounded-xl border transition-all duration-200 outline-none
                   ${
                     error
                       ? 'border-red-500 bg-red-500/10 text-red-300 ring-2 ring-red-500/30'

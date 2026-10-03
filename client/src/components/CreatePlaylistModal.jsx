@@ -91,7 +91,7 @@ export default function CreatePlaylistModal({
   return createPortal(
     <div
       className={`fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px] animate-fade-in ${
-        coords ? '' : 'flex items-center justify-center p-4'
+        coords ? '' : 'flex items-center justify-center p-3 xs:p-4'
       }`}
       onClick={onClose}
     >
@@ -107,8 +107,8 @@ export default function CreatePlaylistModal({
             : undefined
         }
         className={`relative ${
-          coords ? 'w-[340px]' : 'w-full max-w-md'
-        } bg-[#16161a] border border-white/10 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.95),0_0_35px_rgba(29,185,84,0.12)] animate-pop-in overflow-visible`}
+          coords ? 'w-[340px]' : 'w-full max-w-sm sm:max-w-md'
+        } bg-[#16161a] border border-white/10 rounded-2xl sm:rounded-3xl p-4 xs:p-5 sm:p-6 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.95),0_0_35px_rgba(29,185,84,0.12)] animate-pop-in overflow-visible`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Pointer arrow pointing towards the anchor button when in sideways popover mode */}
