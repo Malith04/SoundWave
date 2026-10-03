@@ -1,97 +1,220 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { usePlayer } from '../context/PlayerContext'
 import toast from 'react-hot-toast'
 
 export function useKeyboardShortcuts() {
-  const { 
-    togglePlay, 
-    next, 
-    previous, 
-    setVolume, 
-    volume, 
-    toggleMute, 
-    toggleShuffle, 
+  const {
+    currentSong,
+    isPlaying,
+    togglePlay,
+    next,
+    previous,
+    setVolume,
+    volume,
+    toggleMute,
+    isMuted,
+    toggleShuffle,
+    isShuffled,
     cycleRepeat,
+    repeatMode,
     seek,
     progress,
-    duration
+    duration,
   } = usePlayer()
+
+  // Keep a ref of live values to avoid re-binding the event listener on every progress tick (250ms)
+  const stateRef = useRef({
+    currentSong,
+    isPlaying,
+    volume,
+    isMuted,
+    isShuffled,
+    repeatMode,
+    progress,
+    duration,
+  })
+
+  useEffect(() => {
+    stateRef.current = {
+      currentSong,
+      isPlaying,
+      volume,
+      isMuted,
+      isShuffled,
+      repeatMode,
+      progress,
+      duration,
+    }
+  })
 
   useEffect(() => {
     const handleKeyPress = (e) => {
-      // Don't trigger shortcuts when typing in inputs
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
-      
-      // Prevent default for our shortcuts
-      const shortcuts = ['Space', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'KeyM', 'KeyS', 'KeyR']
-      if (shortcuts.includes(e.code)) {
-        e.preventDefault()
+      // Don't trigger shortcuts when typing in inputs or contenteditable elements
+      const tag = document.activeElement?.tagName
+      if (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        document.activeElement?.isContentEditable
+      ) {
+        return
       }
 
+      // Ignore auto-repeat key events for toggle actions so holding Space doesn't flicker
+      if (e.repeat && ['Space', 'KeyM', 'KeyS', 'KeyR'].includes(e.code)) {
+        return
+      }
+
+      const {
+        currentSong: song,
+        isPlaying: playing,
+        volume: vol,
+        isMuted: muted,
+        isShuffled: shuffled,
+        repeatMode: repeat,
+        progress: curProgress,
+        duration: totalDuration,
+      } = stateRef.current
+
       switch (e.code) {
-        case 'Space':
-          togglePlay()
-          toast.success(e.shiftKey ? '⏸️ Paused' : '▶️ Playing', { duration: 1000 })
+        case 'Space': {
+          e.preventDefault()
+          if (!song) {
+            toast('No track selected', {
+              id: 'soundwave-player-status',
+              icon: '🎵',
+              duration: 1000,
+            })
+            break
+          }
+
+          const res = togglePlay()
+          const nowPlaying = typeof res === 'boolean' ? res : !playing
+          toast(nowPlaying ? 'Playing' : 'Paused', {
+            id: 'soundwave-player-status',
+            icon: nowPlaying ? '▶️' : '⏸️',
+            duration: 1000,
+          })
           break
-          
-        case 'ArrowRight':
-          if (e.shiftKey) {
-            // Shift + Right: Skip forward
+        }
+
+        case 'ArrowRight': {
+          e.preventDefault()
+          if (e.altKey || e.shiftKey) {
             next()
-            toast.success('⏭️ Next track', { duration: 1000 })
+            toast('Next track', {
+              id: 'soundwave-player-status',
+              icon: '⏭️',
+              duration: 1000,
+            })
           } else {
-            // Right: Seek forward 10s
-            const newProgress = Math.min(progress + (10 / duration), 1)
+            const dur = totalDuration || 100
+            const step = 10 / dur
+            const newProgress = Math.min(curProgress + step, 1)
             seek(newProgress)
-            toast.success('⏩ +10s', { duration: 1000 })
+            toast('Forward 10s', {
+              id: 'soundwave-player-status',
+              icon: '⏩',
+              duration: 1000,
+            })
           }
           break
-          
-        case 'ArrowLeft':
-          if (e.shiftKey) {
-            // Shift + Left: Skip backward
+        }
+
+        case 'ArrowLeft': {
+          e.preventDefault()
+          if (e.altKey || e.shiftKey) {
             previous()
-            toast.success('⏮️ Previous track', { duration: 1000 })
+            toast('Previous track', {
+              id: 'soundwave-player-status',
+              icon: '⏮️',
+              duration: 1000,
+            })
           } else {
-            // Left: Seek backward 10s
-            const newProgress = Math.max(progress - (10 / duration), 0)
+            const dur = totalDuration || 100
+            const step = 10 / dur
+            const newProgress = Math.max(curProgress - step, 0)
             seek(newProgress)
-            toast.success('⏪ -10s', { duration: 1000 })
+            toast('Backward 10s', {
+              id: 'soundwave-player-status',
+              icon: '⏪',
+              duration: 1000,
+            })
           }
           break
-          
-        case 'ArrowUp':
-          // Up: Volume up
-          const newVolumeUp = Math.min(volume + 10, 100)
-          setVolume(newVolumeUp)
-          toast.success(`🔊 Volume ${newVolumeUp}%`, { duration: 1000 })
+        }
+
+        case 'ArrowUp': {
+          if (!e.altKey && !e.shiftKey) {
+            e.preventDefault()
+            const newVol = Math.min(vol + 10, 100)
+            setVolume(newVol)
+            toast(`Volume ${newVol}%`, {
+              id: 'soundwave-player-status',
+              icon: '🔊',
+              duration: 1000,
+            })
+          }
           break
-          
-        case 'ArrowDown':
-          // Down: Volume down
-          const newVolumeDown = Math.max(volume - 10, 0)
-          setVolume(newVolumeDown)
-          toast.success(`🔉 Volume ${newVolumeDown}%`, { duration: 1000 })
+        }
+
+        case 'ArrowDown': {
+          if (!e.altKey && !e.shiftKey) {
+            e.preventDefault()
+            const newVol = Math.max(vol - 10, 0)
+            setVolume(newVol)
+            toast(`Volume ${newVol}%`, {
+              id: 'soundwave-player-status',
+              icon: '🔉',
+              duration: 1000,
+            })
+          }
           break
-          
-        case 'KeyM':
-          // M: Mute/unmute
+        }
+
+        case 'KeyM': {
+          e.preventDefault()
           toggleMute()
-          toast.success('🔇 Mute toggled', { duration: 1000 })
+          const willMute = !muted
+          toast(willMute ? 'Muted' : 'Unmuted', {
+            id: 'soundwave-player-status',
+            icon: willMute ? '🔇' : '🔊',
+            duration: 1000,
+          })
           break
-          
-        case 'KeyS':
-          // S: Shuffle
-          toggleShuffle()
-          toast.success('🔀 Shuffle toggled', { duration: 1000 })
+        }
+
+        case 'KeyS': {
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault()
+            toggleShuffle()
+            const willShuffle = !shuffled
+            toast(willShuffle ? 'Shuffle on' : 'Shuffle off', {
+              id: 'soundwave-player-status',
+              icon: '🔀',
+              duration: 1000,
+            })
+          }
           break
-          
-        case 'KeyR':
-          // R: Repeat
-          cycleRepeat()
-          toast.success('🔁 Repeat mode changed', { duration: 1000 })
+        }
+
+        case 'KeyR': {
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault()
+            cycleRepeat()
+            const nextModes = { none: 'all', all: 'one', one: 'none' }
+            const nextMode = nextModes[repeat] || 'all'
+            const modeLabels = { none: 'Repeat off', all: 'Repeat all', one: 'Repeat one' }
+            toast(modeLabels[nextMode] || 'Repeat', {
+              id: 'soundwave-player-status',
+              icon: '🔁',
+              duration: 1000,
+            })
+          }
           break
-          
+        }
+
+        case 'Digit0':
         case 'Digit1':
         case 'Digit2':
         case 'Digit3':
@@ -101,30 +224,50 @@ export function useKeyboardShortcuts() {
         case 'Digit7':
         case 'Digit8':
         case 'Digit9':
-        case 'Digit0':
-          // Number keys: Seek to percentage
-          const percentage = e.code === 'Digit0' ? 1 : parseInt(e.code.slice(-1)) / 10
-          seek(percentage)
-          toast.success(`⏯️ Seek to ${Math.round(percentage * 100)}%`, { duration: 1000 })
+        case 'Numpad0':
+        case 'Numpad1':
+        case 'Numpad2':
+        case 'Numpad3':
+        case 'Numpad4':
+        case 'Numpad5':
+        case 'Numpad6':
+        case 'Numpad7':
+        case 'Numpad8':
+        case 'Numpad9': {
+          if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault()
+            const digitChar = e.code.replace('Digit', '').replace('Numpad', '')
+            const digit = parseInt(digitChar, 10)
+            const fraction = digit === 0 ? 0 : digit / 10
+            seek(fraction)
+            toast(`Seek to ${Math.round(fraction * 100)}%`, {
+              id: 'soundwave-player-status',
+              icon: '📍',
+              duration: 1000,
+            })
+          }
+          break
+        }
+
+        default:
           break
       }
     }
 
-    document.addEventListener('keydown', handleKeyPress)
-    return () => document.removeEventListener('keydown', handleKeyPress)
-  }, [togglePlay, next, previous, setVolume, volume, toggleMute, toggleShuffle, cycleRepeat, seek, progress, duration])
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [togglePlay, next, previous, setVolume, toggleMute, toggleShuffle, cycleRepeat, seek])
 
   // Show shortcuts help
   const showShortcuts = () => {
-    toast.success(`
-🎹 Keyboard Shortcuts:
-Space - Play/Pause
-← → - Seek ±10s
-Shift+← → - Previous/Next
-↑ ↓ - Volume ±10
-M - Mute, S - Shuffle, R - Repeat
-1-9,0 - Seek to %
-    `, { duration: 5000 })
+    toast(
+      '⌨️ Shortcuts: Space: Play/Pause | ←/→: ±10s (Alt/Shift: Prev/Next) | ↑/↓: Volume | M: Mute | S: Shuffle | R: Repeat | 0-9: Seek %',
+      {
+        id: 'soundwave-player-status',
+        icon: '🎹',
+        duration: 4000,
+      }
+    )
   }
 
   return { showShortcuts }

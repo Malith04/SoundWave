@@ -5,7 +5,7 @@ import Player from './Player'
 import SoundWaveLogo from './SoundWaveLogo'
 import { usePlayer } from '../context/PlayerContext'
 import { Menu, X, Home, Search, Library, User } from 'lucide-react'
-import toast from 'react-hot-toast'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 
 function YouTubePlayerMount() {
   const { initYTPlayer } = usePlayer()
@@ -18,92 +18,8 @@ function YouTubePlayerMount() {
   )
 }
 
-function ShortcutToast({ label, icon }) {
-  return (
-    <div className="flex items-center gap-2 text-sm font-medium">
-      <span className="text-lg">{icon}</span> {label}
-    </div>
-  )
-}
-
-function KeyboardShortcuts() {
-  const {
-    togglePlay, next, previous, setVolume, toggleMute, seek,
-    isPlaying, volume, isMuted, progress,
-    toggleShuffle, cycleRepeat, isShuffled, repeatMode,
-  } = usePlayer()
-
-  useEffect(() => {
-    const handler = (e) => {
-      const tag = document.activeElement?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return
-
-      switch (e.code) {
-        case 'Space':
-          e.preventDefault()
-          togglePlay()
-          toast(<ShortcutToast icon={isPlaying ? '⏸' : '▶️'} label={isPlaying ? 'Paused' : 'Playing'} />, { duration: 800 })
-          break
-        case 'ArrowRight':
-          if (e.altKey) { e.preventDefault(); next(); toast(<ShortcutToast icon="⏭" label="Next song" />, { duration: 800 }) }
-          else if (e.shiftKey) { e.preventDefault(); seek(Math.min(progress + 0.05, 1)) }
-          break
-        case 'ArrowLeft':
-          if (e.altKey) { e.preventDefault(); previous(); toast(<ShortcutToast icon="⏮" label="Previous song" />, { duration: 800 }) }
-          else if (e.shiftKey) { e.preventDefault(); seek(Math.max(progress - 0.05, 0)) }
-          break
-        case 'ArrowUp':
-          if (!e.altKey && !e.shiftKey) {
-            e.preventDefault()
-            const v = Math.min(volume + 10, 100)
-            setVolume(v)
-            toast(<ShortcutToast icon="🔊" label={`Volume ${v}%`} />, { duration: 600 })
-          }
-          break
-        case 'ArrowDown':
-          if (!e.altKey && !e.shiftKey) {
-            e.preventDefault()
-            const v = Math.max(volume - 10, 0)
-            setVolume(v)
-            toast(<ShortcutToast icon="🔉" label={`Volume ${v}%`} />, { duration: 600 })
-          }
-          break
-        case 'KeyM':
-          e.preventDefault()
-          toggleMute()
-          toast(<ShortcutToast icon={isMuted ? '🔊' : '🔇'} label={isMuted ? 'Unmuted' : 'Muted'} />, { duration: 800 })
-          break
-        case 'KeyS':
-          if (!e.ctrlKey && !e.metaKey) {
-            e.preventDefault()
-            toggleShuffle()
-            toast(<ShortcutToast icon="🔀" label={isShuffled ? 'Shuffle off' : 'Shuffle on'} />, { duration: 800 })
-          }
-          break
-        case 'KeyR':
-          if (!e.ctrlKey && !e.metaKey) {
-            e.preventDefault()
-            cycleRepeat()
-            const modes = { none: 'Repeat off', all: 'Repeat all', one: 'Repeat one' }
-            toast(<ShortcutToast icon="🔁" label={modes[repeatMode] || 'Repeat'} />, { duration: 800 })
-          }
-          break
-        case 'Digit0':
-        case 'Numpad0':
-          e.preventDefault()
-          seek(0)
-          break
-        default: break
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [togglePlay, next, previous, setVolume, toggleMute, seek, isPlaying, volume, isMuted, progress, toggleShuffle, cycleRepeat, isShuffled, repeatMode])
-
-  return null
-}
-
 export default function AppLayout() {
+  useKeyboardShortcuts()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const mobileNavClass = ({ isActive }) =>
@@ -114,7 +30,6 @@ export default function AppLayout() {
   return (
     <div className="app-root bg-surface">
       <YouTubePlayerMount />
-      <KeyboardShortcuts />
 
       {/* Mobile top bar with safe-area padding */}
       <div

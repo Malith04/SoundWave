@@ -1,6 +1,5 @@
 import { usePlayer } from '../context/PlayerContext'
 import { useAudioSettings } from '../context/AudioSettingsContext'
-import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import WaveSeekBar from './WaveSeekBar'
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
@@ -444,7 +443,6 @@ export default function Player() {
   } = usePlayer()
   const { user } = useAuth()
   const { settings, update } = useAudioSettings()
-  useKeyboardShortcuts()
 
   const waveEnabled = settings?.seekBarWave !== false
 

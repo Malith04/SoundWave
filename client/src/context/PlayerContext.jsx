@@ -60,6 +60,7 @@ export function PlayerProvider({ children }) {
   const engineRef = useRef(engine)
   const currentTimeRef = useRef(currentTime)
   const currentSongRef = useRef(currentSong)
+  const isPlayingRef = useRef(isPlaying)
 
   useEffect(() => { queueRef.current = queue }, [queue])
   useEffect(() => { queueIndexRef.current = queueIndex }, [queueIndex])
@@ -70,6 +71,7 @@ export function PlayerProvider({ children }) {
   useEffect(() => { engineRef.current = engine }, [engine])
   useEffect(() => { currentTimeRef.current = currentTime }, [currentTime])
   useEffect(() => { currentSongRef.current = currentSong }, [currentSong])
+  useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
 
   // ── Live-apply settings changes to current playback ──────
   // Playback speed - improved with force application
@@ -645,21 +647,41 @@ export function PlayerProvider({ children }) {
   }, [user?.uid])
 
   const togglePlay = useCallback(() => {
-    if (engine === 'youtube') {
+    if (engineRef.current === 'youtube') {
       const p = ytPlayerRef.current
-      if (!p) return
-      p.getPlayerState?.() === 1 ? p.pauseVideo() : p.playVideo()
+      if (!p) return null
+      const isCurrentlyPlaying = p.getPlayerState ? p.getPlayerState() === 1 : isPlayingRef.current
+      if (isCurrentlyPlaying) {
+        p.pauseVideo()
+        setIsPlaying(false)
+        return false
+      } else {
+        p.playVideo()
+        setIsPlaying(true)
+        return true
+      }
     } else {
       const h = howlRef.current
       if (!h) {
         // Howl not loaded yet — reload from saved position
         const song = currentSongRef.current
-        if (song) loadAndPlay(song, queueRef.current, queueIndexRef.current, currentTimeRef.current)
-        return
+        if (song) {
+          loadAndPlay(song, queueRef.current, queueIndexRef.current, currentTimeRef.current)
+          return true
+        }
+        return null
       }
-      h.playing() ? h.pause() : h.play()
+      if (h.playing()) {
+        h.pause()
+        setIsPlaying(false)
+        return false
+      } else {
+        h.play()
+        setIsPlaying(true)
+        return true
+      }
     }
-  }, [engine, loadAndPlay])
+  }, [loadAndPlay])
 
   const seek = useCallback(fraction => {
     if (engine === 'youtube') {
