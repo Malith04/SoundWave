@@ -17,6 +17,11 @@ import ProfilePage from './pages/ProfilePage'
 import SettingsPage from './pages/SettingsPage'
 import OnboardingPage from './pages/OnboardingPage'
 import ArtistPage from './pages/ArtistPage'
+import AdminLayout from './admin/AdminLayout'
+import AdminDashboardPage from './admin/pages/AdminDashboardPage'
+import AdminSongsPage from './admin/pages/AdminSongsPage'
+import AdminUsersPage from './admin/pages/AdminUsersPage'
+import AdminAnalyticsPage from './admin/pages/AdminAnalyticsPage'
 
 // Full-screen spinner shown while resolving auth state
 function Spinner() {
@@ -79,6 +84,11 @@ function AppRoutes() {
         <Route path="profile" element={<ProfilePage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
+
+      {/* ── SoundWave Admin Dashboard ── */}
+      <Route path="/soundwave-dashboard" element={<AdminLayout />} />
+      <Route path="/soundwave-dashboard/:tab" element={<AdminLayout />} />
+
       {/* Catch-all */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
