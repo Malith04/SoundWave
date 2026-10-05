@@ -1,5 +1,15 @@
-import { memo } from 'react'
+import { memo, useId } from 'react'
 
+/**
+ * SoundWave Next-Gen Quantum Sonic Helix Logo (Admin Dashboard)
+ * 
+ * An iconic, ultra-modern acoustic emblem featuring:
+ * - Precision-engineered aerospace obsidian squircle chassis
+ * - Chromatic refraction rim lighting
+ * - Concentric acoustic resonance ripples
+ * - Dual-harmonic 3D intertwining sonic helix ribbons (Cyber Emerald + Cosmic Ultraviolet)
+ * - Central quantum pulsar starburst singularity
+ */
 function SoundWaveLogoComponent({
   size = 36,
   showText = false,
@@ -9,94 +19,175 @@ function SoundWaveLogoComponent({
   textClassName = '',
   onClick
 }) {
+  const rawId = useId()
+  const uid = 'swadm-' + rawId.replace(/[^a-zA-Z0-9]/g, '')
+
   return (
     <div 
       className={`inline-flex items-center gap-3 select-none group ${onClick ? 'cursor-pointer' : ''} ${className}`}
       onClick={onClick}
     >
+      {/* ── Emblem Container ── */}
       <div 
         className="relative shrink-0 flex items-center justify-center transition-transform duration-300 group-hover:scale-105"
         style={{ width: size, height: size }}
       >
+        {/* Ambient Chromatic Neon Backlight Glow */}
         {glow && (
           <div 
-            className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-brand to-emerald-400 opacity-30 blur-md group-hover:opacity-50 transition-opacity duration-300 pointer-events-none" 
-            style={{ transform: 'scale(1.15)' }}
+            className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-[#1DB954]/40 via-[#00FFA3]/25 to-[#8B5CF6]/35 opacity-70 blur-md group-hover:opacity-95 transition-opacity duration-300 pointer-events-none" 
+            style={{ transform: 'scale(1.2)' }}
           />
         )}
 
+        {/* Vector SVG Emblem */}
         <svg
           viewBox="0 0 100 100"
-          className="w-full h-full relative z-10 drop-shadow-[0_4px_12px_rgba(29,185,84,0.35)]"
+          className={`w-full h-full relative z-10 drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)] ${animated ? 'animate-pulse' : ''}`}
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
           <defs>
-            <linearGradient id="swBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#141722" />
-              <stop offset="100%" stopColor="#090a0f" />
+            {/* Deep Obsidian Titanium Chassis */}
+            <radialGradient id={`${uid}-shield`} cx="30%" cy="25%" r="85%">
+              <stop offset="0%" stopColor="#15212d" />
+              <stop offset="45%" stopColor="#0b121b" />
+              <stop offset="100%" stopColor="#04060a" />
+            </radialGradient>
+
+            {/* Precision Chromatic Rim Highlight */}
+            <linearGradient id={`${uid}-rim`} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="rgba(255, 255, 255, 0.45)" />
+              <stop offset="30%" stopColor="rgba(0, 255, 163, 0.55)" />
+              <stop offset="70%" stopColor="rgba(139, 92, 246, 0.45)" />
+              <stop offset="100%" stopColor="rgba(255, 255, 255, 0.12)" />
             </linearGradient>
 
-            <linearGradient id="swCoreGrad" x1="0%" y1="100%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#10b981" />
+            {/* Primary Cyber Emerald Wave Ribbon */}
+            <linearGradient id={`${uid}-emerald`} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#00FFA3" />
               <stop offset="45%" stopColor="#1DB954" />
-              <stop offset="100%" stopColor="#00f59b" />
+              <stop offset="100%" stopColor="#00D26A" />
             </linearGradient>
 
-            <linearGradient id="swCyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#00f59b" />
-              <stop offset="60%" stopColor="#06b6d4" />
-              <stop offset="100%" stopColor="#3b82f6" />
+            {/* Secondary Cosmic Ultraviolet Wave Ribbon */}
+            <linearGradient id={`${uid}-violet`} x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#60A5FA" />
+              <stop offset="45%" stopColor="#8B5CF6" />
+              <stop offset="100%" stopColor="#C084FC" />
             </linearGradient>
 
-            <linearGradient id="swBorderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="rgba(255,255,255,0.25)" />
-              <stop offset="50%" stopColor="rgba(29,185,84,0.4)" />
-              <stop offset="100%" stopColor="rgba(255,255,255,0.05)" />
+            {/* Equalizer Sound Ray Gradients */}
+            <linearGradient id={`${uid}-ray-em`} x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#00FFA3" stopOpacity="0.8" />
+              <stop offset="100%" stopColor="#1DB954" stopOpacity="0.05" />
             </linearGradient>
+            <linearGradient id={`${uid}-ray-vi`} x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#C084FC" stopOpacity="0.8" />
+              <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.05" />
+            </linearGradient>
+
+            {/* Radiant Pulsar Core Flare */}
+            <radialGradient id={`${uid}-pulsar`} cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#FFFFFF" />
+              <stop offset="35%" stopColor="#A7F3D0" />
+              <stop offset="70%" stopColor="#00FFA3" stopOpacity="0.6" />
+              <stop offset="100%" stopColor="#1DB954" stopOpacity="0" />
+            </radialGradient>
+
+            {/* Glow Filter */}
+            <filter id={`${uid}-glow`} x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="1.8" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
           </defs>
 
+          {/* 1. Aerodynamic Obsidian Squircle Chassis */}
           <rect
-            x="3"
-            y="3"
-            width="94"
-            height="94"
+            x="4"
+            y="4"
+            width="92"
+            height="92"
             rx="26"
-            fill="url(#swBgGrad)"
-            stroke="url(#swBorderGrad)"
-            strokeWidth="2"
+            fill={`url(#${uid}-shield)`}
+            stroke={`url(#${uid}-rim)`}
+            strokeWidth="1.5"
           />
 
-          <circle cx="50" cy="50" r="32" fill="#1DB954" opacity="0.18" />
+          {/* 2. Concentric Acoustic Resonance Waves (Sound Field) */}
+          <circle
+            cx="50"
+            cy="50"
+            r="34"
+            stroke="rgba(0, 255, 163, 0.08)"
+            strokeWidth="1.2"
+            strokeDasharray="4 4"
+            fill="none"
+          />
+          <circle
+            cx="50"
+            cy="50"
+            r="23"
+            stroke="rgba(139, 92, 246, 0.12)"
+            strokeWidth="1"
+            fill="none"
+          />
+          <circle
+            cx="50"
+            cy="50"
+            r="13"
+            stroke="rgba(255, 255, 255, 0.07)"
+            strokeWidth="0.8"
+            fill="none"
+          />
 
-          <g className={animated ? 'animate-pulse' : ''}>
-            <rect x="21" y="41" width="6.5" height="18" rx="3.25" fill="url(#swCoreGrad)" opacity="0.8" />
-            <rect x="32.5" y="28" width="6.5" height="44" rx="3.25" fill="url(#swCoreGrad)" opacity="0.95" />
-            <rect x="44" y="17" width="6.5" height="66" rx="3.25" fill="url(#swCoreGrad)" />
-            <rect x="55.5" y="25" width="6.5" height="50" rx="3.25" fill="url(#swCyanGrad)" />
-            <rect x="67" y="36" width="6.5" height="28" rx="3.25" fill="url(#swCyanGrad)" opacity="0.9" />
-            <rect x="78" y="44" width="5.5" height="12" rx="2.75" fill="url(#swCyanGrad)" opacity="0.65" />
-            <path
-              d="M 18 50 Q 32.5 22, 47.25 50 T 82 50"
-              stroke="#ffffff"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeDasharray="2 3"
-              opacity="0.5"
-            />
-            <circle cx="50" cy="50" r="3.5" fill="#ffffff" />
-          </g>
+          {/* 3. Dynamic Equalizer Sound Rays */}
+          <line x1="24" y1="42" x2="24" y2="58" stroke={`url(#${uid}-ray-em)`} strokeWidth="2.2" strokeLinecap="round" opacity="0.4" />
+          <line x1="36" y1="34" x2="36" y2="66" stroke={`url(#${uid}-ray-em)`} strokeWidth="2.6" strokeLinecap="round" opacity="0.65" />
+          <line x1="64" y1="34" x2="64" y2="66" stroke={`url(#${uid}-ray-vi)`} strokeWidth="2.6" strokeLinecap="round" opacity="0.65" />
+          <line x1="76" y1="42" x2="76" y2="58" stroke={`url(#${uid}-ray-vi)`} strokeWidth="2.2" strokeLinecap="round" opacity="0.4" />
+
+          {/* 4. Secondary Wave Ribbon (Cosmic Ultraviolet - Phase B) */}
+          <path
+            d="M 16,48 C 22,67 30,74 36,74 C 42.5,74 47,60 50,50 C 53,40 57.5,26 64,26 C 70,26 78,33 84,52"
+            stroke={`url(#${uid}-violet)`}
+            strokeWidth="4.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+
+          {/* 5. Primary Wave Ribbon (Cyber Emerald - Phase A) */}
+          <path
+            d="M 16,52 C 22,33 30,26 36,26 C 42.5,26 47,40 50,50 C 53,60 57.5,74 64,74 C 70,74 78,67 84,48"
+            stroke={`url(#${uid}-emerald)`}
+            strokeWidth="4.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+
+          {/* 6. Harmonic Apex Nodes (High Frequency Resonators) */}
+          <circle cx="36" cy="26" r="2.2" fill="#00FFA3" filter={`url(#${uid}-glow)`} />
+          <circle cx="64" cy="26" r="2.2" fill="#C084FC" filter={`url(#${uid}-glow)`} />
+
+          {/* 7. Central Quantum Pulsar Singularity (Ignition Core) */}
+          <path
+            d="M 50 38 Q 50 50 38 50 Q 50 50 50 62 Q 50 50 62 50 Q 50 50 50 38 Z"
+            fill={`url(#${uid}-pulsar)`}
+            filter={`url(#${uid}-glow)`}
+          />
+          <circle cx="50" cy="50" r="3.2" fill="#FFFFFF" />
+          <circle cx="50" cy="50" r="1.4" fill="#00FFA3" />
         </svg>
       </div>
 
+      {/* ── Brand Typography Wordmark ── */}
       {showText && (
-        <div className="flex flex-col">
-          <div className="flex items-center gap-1">
-            <span className={`font-extrabold tracking-tight font-display bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent ${textClassName || 'text-xl'}`}>
-              SoundWave
-            </span>
-          </div>
-        </div>
+        <span className={`font-bold tracking-tight font-sans inline-flex items-center ${textClassName || 'text-xl'}`}>
+          <span className="text-white">Sound</span>
+          <span className="bg-gradient-to-r from-[#00FFA3] via-[#1DB954] to-[#8B5CF6] bg-clip-text text-transparent ml-0.5 font-extrabold">Wave</span>
+        </span>
       )}
     </div>
   )

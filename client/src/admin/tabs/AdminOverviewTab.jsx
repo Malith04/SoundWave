@@ -11,94 +11,94 @@ import {
   Database,
   Wifi,
   Sparkles,
-  Play,
-  Pause,
-  AlertCircle
+  RefreshCw
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 export default function AdminOverviewTab() {
   const [stats, setStats] = useState({
-    liveListeners: 42,
-    streamsToday: '18,420',
-    totalUsers: 8,
-    activeServers: '4 / 4 Nodes',
-    hitRate: '99.4%'
+    totalUsers: 0,
+    totalSongs: 0,
+    totalPlaylists: 0,
+    totalPlays: 0,
+    totalStreamsRecorded: 0
   })
 
-  // Simulated live track stream
-  const [liveStream, setLiveStream] = useState([
-    { id: 1, user: 'Malith R.', song: 'Starboy', artist: 'The Weeknd', time: 'Just now', source: 'YouTube HD' },
-    { id: 2, user: 'Hashintha R.', song: 'Blinding Lights', artist: 'The Weeknd', time: '12s ago', source: 'Direct Stream' },
-    { id: 3, user: 'Mihiranga R.', song: 'Shape of You', artist: 'Ed Sheeran', time: '45s ago', source: 'YouTube HD' },
-    { id: 4, user: 'Akalanka R.', song: 'Night Vibes Lofi', artist: 'Chillhop Music', time: '1m ago', source: 'Jamendo HiFi' },
-    { id: 5, user: 'Ananda R.', song: 'Sunflower', artist: 'Post Malone', time: '2m ago', source: 'YouTube HD' }
-  ])
+  const [liveStream, setLiveStream] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const [statsRes, activityRes] = await Promise.all([
+        fetch('/api/admin/stats').then(r => (r.ok ? r.json() : null)),
+        fetch('/api/admin/activity').then(r => (r.ok ? r.json() : null))
+      ])
+
+      if (statsRes) setStats(statsRes)
+      if (activityRes && Array.isArray(activityRes)) setLiveStream(activityRes)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    // Try fetching real admin stats from backend
-    fetch('/api/admin/stats')
-      .then(res => res.json())
-      .then(data => {
-        if (data) {
-          setStats(prev => ({
-            ...prev,
-            totalUsers: data.totalUsers || prev.totalUsers,
-            totalSongs: data.totalSongs || 45,
-            streamsToday: data.totalPlays ? data.totalPlays.toLocaleString() : prev.streamsToday
-          }))
-        }
-      })
-      .catch(() => {})
+    loadData()
+    // Poll real activity stream every 15 seconds
+    const interval = setInterval(loadData, 15000)
+    return () => clearInterval(interval)
   }, [])
 
   return (
     <div className="space-y-6">
-      {/* ── Key Metrics Cards Row ── */}
+      {/* ── Key Metrics Cards Row (100% Real PostgreSQL Data) ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Metric 1: Live Listeners */}
+        {/* Metric 1: Real Total Plays */}
         <div className="p-5 rounded-2xl bg-[#0d0e19] border border-white/5 shadow-xl relative overflow-hidden group">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-400">Live Active Listeners</span>
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
-              <Radio size={16} className="animate-pulse" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-white font-display tracking-tight">
-              {stats.liveListeners}
-            </span>
-            <span className="text-xs font-bold text-emerald-400 flex items-center">
-              +14% <ArrowUpRight size={12} />
-            </span>
-          </div>
-          <p className="text-[11px] text-gray-500 mt-1">Currently streaming via Web Player</p>
-          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-500 to-teal-400" />
-        </div>
-
-        {/* Metric 2: Streams Today */}
-        <div className="p-5 rounded-2xl bg-[#0d0e19] border border-white/5 shadow-xl relative overflow-hidden group">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-400">Streams Today</span>
+            <span className="text-xs font-semibold text-gray-400">Total Stream Plays</span>
             <div className="p-2 rounded-xl bg-[#6366f1]/10 text-[#818cf8]">
               <Headphones size={16} />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-3xl font-extrabold text-white font-display tracking-tight">
-              {stats.streamsToday}
+              {stats.totalPlays.toLocaleString()}
             </span>
-            <span className="text-xs font-bold text-indigo-400 flex items-center">
-              +28.4% <ArrowUpRight size={12} />
+            <span className="text-xs font-bold text-emerald-400 flex items-center">
+              Active <ArrowUpRight size={12} />
             </span>
           </div>
-          <p className="text-[11px] text-gray-500 mt-1">High fidelity audio buffers</p>
+          <p className="text-[11px] text-gray-500 mt-1">
+            Aggregated stream play count across catalog
+          </p>
           <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[#6366f1] to-purple-500" />
         </div>
 
-        {/* Metric 3: Total Accounts */}
+        {/* Metric 2: Real Stream Events Recorded */}
         <div className="p-5 rounded-2xl bg-[#0d0e19] border border-white/5 shadow-xl relative overflow-hidden group">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-400">Platform Users</span>
+            <span className="text-xs font-semibold text-gray-400">Logged Stream Sessions</span>
+            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
+              <Radio size={16} className="animate-pulse" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-white font-display tracking-tight">
+              {stats.totalStreamsRecorded.toLocaleString()}
+            </span>
+            <span className="text-xs font-bold text-emerald-400">Recorded</span>
+          </div>
+          <p className="text-[11px] text-gray-500 mt-1">In PostgreSQL recently_played table</p>
+          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-500 to-teal-400" />
+        </div>
+
+        {/* Metric 3: Real Database Users */}
+        <div className="p-5 rounded-2xl bg-[#0d0e19] border border-white/5 shadow-xl relative overflow-hidden group">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-400">Registered Users</span>
             <div className="p-2 rounded-xl bg-pink-500/10 text-pink-400">
               <Users size={16} />
             </div>
@@ -107,75 +107,100 @@ export default function AdminOverviewTab() {
             <span className="text-3xl font-extrabold text-white font-display tracking-tight">
               {stats.totalUsers}
             </span>
-            <span className="text-xs font-bold text-emerald-400 flex items-center">
-              100% Trust <Sparkles size={11} className="ml-1" />
+            <span className="text-xs font-bold text-pink-400 flex items-center">
+              Real DB <Sparkles size={11} className="ml-1" />
             </span>
           </div>
-          <p className="text-[11px] text-gray-500 mt-1">Google OAuth + Standard Auth</p>
+          <p className="text-[11px] text-gray-500 mt-1">Google OAuth & Local Accounts</p>
           <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-pink-500 to-rose-500" />
         </div>
 
-        {/* Metric 4: System Health */}
+        {/* Metric 4: Real Database Catalog Songs */}
         <div className="p-5 rounded-2xl bg-[#0d0e19] border border-white/5 shadow-xl relative overflow-hidden group">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-400">Audio Cache Hit Rate</span>
+            <span className="text-xs font-semibold text-gray-400">Catalog Songs</span>
             <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
-              <Activity size={16} />
+              <Music2 size={16} />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-3xl font-extrabold text-white font-display tracking-tight">
-              {stats.hitRate}
+              {stats.totalSongs}
             </span>
-            <span className="text-xs font-bold text-emerald-400">Optimal</span>
+            <span className="text-xs font-bold text-emerald-400">Available</span>
           </div>
-          <p className="text-[11px] text-gray-500 mt-1">Edge audio delivery latency &lt; 85ms</p>
+          <p className="text-[11px] text-gray-500 mt-1">High-fidelity audio stream links</p>
           <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-500 to-yellow-400" />
         </div>
       </div>
 
-      {/* ── Two-Column Operational Views ── */}
+      {/* ── Two-Column Real Operational Views ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Live Audio Stream Activity */}
+        {/* Left Column: Real Listened Songs Feed */}
         <div className="lg:col-span-7 bg-[#0d0e19] rounded-2xl border border-white/5 p-6 shadow-2xl space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                Live Audio Stream Monitor
+                Real Live Playback Monitor
               </h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                Real-time active listener playback queue and sources
+                Real-time listening history of actual users streamed on SoundWave
               </p>
             </div>
-            <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold text-gray-300">
-              Auto-updating (1s)
-            </span>
+            <button
+              onClick={loadData}
+              className="p-1.5 rounded-lg bg-white/5 text-gray-400 hover:text-white transition-all"
+              title="Refresh stream feed"
+            >
+              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            </button>
           </div>
 
-          <div className="divide-y divide-white/5">
-            {liveStream.map(item => (
-              <div key={item.id} className="py-3 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-[#141525] border border-white/5 flex items-center justify-center text-indigo-400 shrink-0">
-                    <Music2 size={15} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-white truncate">
-                      {item.song} <span className="font-normal text-gray-400">· {item.artist}</span>
-                    </p>
-                    <p className="text-[11px] text-gray-500 truncate">Listener: {item.user}</p>
-                  </div>
-                </div>
-
-                <div className="text-right shrink-0">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-[#6366f1]/20 text-[#a5b4fc] border border-[#6366f1]/30">
-                    {item.source}
-                  </span>
-                  <p className="text-[10px] text-gray-500 mt-1">{item.time}</p>
-                </div>
+          <div className="divide-y divide-white/5 max-h-[480px] overflow-y-auto custom-scroll pr-1">
+            {liveStream.length === 0 ? (
+              <div className="py-16 text-center text-gray-500 text-xs">
+                No playback events logged yet in recently_played table.
               </div>
-            ))}
+            ) : (
+              liveStream.map(item => (
+                <div key={item.id} className="py-3 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {item.coverUrl ? (
+                      <img
+                        src={item.coverUrl}
+                        alt={item.song}
+                        className="w-10 h-10 rounded-xl object-cover shrink-0 shadow-md ring-1 ring-white/10"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-xl bg-[#141525] border border-white/5 flex items-center justify-center text-indigo-400 shrink-0">
+                        <Music2 size={16} />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-xs md:text-sm font-bold text-white truncate">
+                        {item.song}{' '}
+                        <span className="font-normal text-gray-400">· {item.artist}</span>
+                      </p>
+                      <p className="text-[11px] text-gray-400 truncate">
+                        Listener:{' '}
+                        <span className="text-indigo-300 font-semibold">{item.user}</span>{' '}
+                        {item.userEmail && (
+                          <span className="text-gray-500">({item.userEmail})</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-[#6366f1]/20 text-[#a5b4fc] border border-[#6366f1]/30">
+                      {item.source}
+                    </span>
+                    <p className="text-[10px] text-gray-400 mt-1">{item.time}</p>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -196,12 +221,12 @@ export default function AdminOverviewTab() {
                   <Database size={15} />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-white">PostgreSQL Primary Cluster</p>
-                  <p className="text-[10px] text-gray-400">Neon Cloud · 12ms ping</p>
+                  <p className="text-xs font-bold text-white">PostgreSQL Supabase Pooler</p>
+                  <p className="text-[10px] text-gray-400">AWS ap-southeast-1 · Port 6543</p>
                 </div>
               </div>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300">
-                HEALTHY
+                CONNECTED
               </span>
             </div>
 

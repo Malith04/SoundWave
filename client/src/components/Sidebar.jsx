@@ -63,11 +63,11 @@ export default function Sidebar({ onNavigate }) {
     }`
 
   return (
-    <aside className="w-full lg:w-64 bg-[#0a0a0a] flex flex-col shrink-0 h-full overflow-hidden border-r border-white/5">
+    <aside className="w-full lg:w-64 bg-[#0a0a0a] flex flex-col shrink-0 h-full overflow-hidden border-r border-white/5 shadow-2xl">
       {/* Logo & mobile close button */}
       <div className="px-4 sm:px-5 py-4 sm:py-5 flex items-center justify-between shrink-0 border-b border-white/5 lg:border-b-0">
-        <Link to="/" onClick={onNavigate} className="inline-block hover:opacity-90 transition-opacity">
-          <SoundWaveLogo size={32} showText animated glow textClassName="text-lg lg:text-xl tracking-tight font-extrabold" />
+        <Link to="/" onClick={onNavigate} className="inline-flex items-center hover:opacity-95 transition-opacity">
+          <SoundWaveLogo size={36} showText animated glow textClassName="text-lg lg:text-xl tracking-tight font-extrabold" />
         </Link>
         <button
           onClick={onNavigate}
@@ -144,8 +144,11 @@ export default function Sidebar({ onNavigate }) {
         </div>
       </div>
 
-      {/* Bottom: profile + settings + logout — always visible */}
-      <div className="px-3 py-3 border-t border-white/10 space-y-0.5 shrink-0 bg-[#0a0a0a]">
+      {/* Bottom: profile + settings + logout — always visible with safe-area padding */}
+      <div
+        className="px-3 py-3 border-t border-white/10 space-y-0.5 shrink-0 bg-[#0a0a0a]"
+        style={{ paddingBottom: 'max(0.85rem, env(safe-area-inset-bottom, 0px))' }}
+      >
         {!isInstalled && (
           <button
             onClick={() => {

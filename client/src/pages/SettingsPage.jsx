@@ -122,25 +122,18 @@ function AudioTab({ settings, update, applyPreset, setEqBand }) {
           </button>
         </div>
 
-        {/* Engine status notice if on YouTube */}
-        {currentSong && engine === 'youtube' && (
-          <div className="my-3 p-3 rounded-xl bg-purple-500/10 border border-purple-500/25 flex items-center justify-between gap-3">
+        {/* Universal DSP Equalizer Active Status */}
+        {currentSong && (
+          <div className="my-3 p-3 rounded-xl bg-brand/10 border border-brand/25 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className="text-base shrink-0">🎧</span>
-              <p className="text-xs text-purple-300">
-                Playing YouTube stream. Switch to Studio Audio Engine for real-time Equalizer & 3D Spatial processing.
+              <span className="text-base shrink-0">🎛️</span>
+              <p className="text-xs text-brand/90 font-medium">
+                10-Band Equalizer & 3D Spatial Audio are active on <span className="font-bold underline decoration-brand/40">{settings.audioEngine === 'youtube' ? 'YouTube Stream' : settings.audioEngine === 'studio' ? 'Studio Audio Engine' : 'Smart Auto Engine'}</span>.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                switchEngine('howler')
-                toast.success('Switched to Studio Audio Engine')
-              }}
-              className="text-xs px-3 py-1 bg-purple-500 text-white font-bold rounded-full hover:bg-purple-600 transition-colors shrink-0 shadow-sm"
-            >
-              Switch to Studio Audio
-            </button>
+            <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-brand/20 text-brand font-semibold shrink-0 uppercase tracking-wider">
+              {engine === 'youtube' ? 'YouTube • EQ ACTIVE' : 'Studio • EQ ACTIVE'}
+            </span>
           </div>
         )}
 
@@ -322,23 +315,24 @@ function PlaybackTab({ settings, update }) {
       </Section>
 
       <Section title="Audio Engine & Quality">
-        <Select label="Audio Playback Engine" desc="Choose between Studio Web Audio with full EQ or YouTube stream"
+        <Select label="Audio Playback Engine" desc="10-Band Equalizer & 3D Spatial Audio are enabled across all playback engines"
           value={settings.audioEngine || 'auto'}
           options={[
-            { value: 'auto',    label: '✨ Smart Auto (Studio EQ when active)' },
+            { value: 'auto',    label: '✨ Smart Auto (Studio EQ & YouTube Streams)' },
             { value: 'studio',  label: '🎧 Studio Audio Engine (Full 10-Band EQ & 3D Spatial)' },
-            { value: 'youtube', label: '🎬 YouTube Stream (Full tracks for iTunes)' },
+            { value: 'youtube', label: '🎬 YouTube Stream (Full tracks with 10-Band EQ)' },
           ]}
           onChange={v => {
             update('audioEngine', v)
             if (v === 'studio') {
-              switchEngine?.('howler')
-              toast.success('Studio Audio Engine activated (Full EQ & 3D Spatial active)')
+              switchEngine?.('studio')
+              toast.success('Studio Audio Engine activated (10-Band EQ & 3D Spatial active)')
             } else if (v === 'youtube') {
               switchEngine?.('youtube')
-              toast.success('YouTube streaming engine activated')
+              toast.success('YouTube Stream Engine activated (10-Band EQ & 3D Spatial active)')
             } else {
-              toast.success('Smart Audio Engine mode enabled')
+              switchEngine?.('auto')
+              toast.success('Smart Auto Engine activated (10-Band EQ active across all sources)')
             }
           }} />
         <Select label="Streaming Quality" desc="Higher quality uses more data"

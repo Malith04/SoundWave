@@ -65,11 +65,9 @@ function AppRoutes() {
         path="/"
         element={
           <ProtectedRoute>
-            <AudioSettingsProvider>
-              <PlayerProvider>
-                <AppLayout />
-              </PlayerProvider>
-            </AudioSettingsProvider>
+            <PlayerProvider>
+              <AppLayout />
+            </PlayerProvider>
           </ProtectedRoute>
         }
       >
@@ -98,10 +96,12 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <InstallProvider>
-        <AppRoutes />
-        <InstallPrompt />
-      </InstallProvider>
+      <AudioSettingsProvider>
+        <InstallProvider>
+          <AppRoutes />
+          <InstallPrompt />
+        </InstallProvider>
+      </AudioSettingsProvider>
     </AuthProvider>
   )
 }

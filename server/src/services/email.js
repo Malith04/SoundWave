@@ -102,7 +102,7 @@ function renderOtpEmailTemplate({ otp, purpose, email }) {
                 © ${new Date().getFullYear()} SoundWave Music Platform. All rights reserved.
               </p>
               <p style="margin: 0; font-size: 11px; color: #4b5563;">
-                Secured by Brevo & SoundWave Two-Factor Authentication Guard
+                Secured by SoundWave Two-Factor Authentication Guard
               </p>
             </td>
           </tr>
@@ -117,7 +117,84 @@ function renderOtpEmailTemplate({ otp, purpose, email }) {
 }
 
 /**
- * Send OTP Email via Brevo REST API, Gmail SMTP, or Safe Dev Fallback
+ * Send email via official Google Gmail REST API (OAuth2 over HTTPS)
+ * Sends up to 500 free emails per day to ANY recipient in the world.
+ */
+async function sendViaGmailRestApi({ to, subject, htmlContent }) {
+  const clientId = process.env.GMAIL_CLIENT_ID
+  const clientSecret = process.env.GMAIL_CLIENT_SECRET
+  const refreshToken = process.env.GMAIL_REFRESH_TOKEN
+  const senderEmail = process.env.GMAIL_SENDER_EMAIL || process.env.GMAIL_USER || 'me'
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    return null
+  }
+
+  try {
+    // 1. Refresh access token from Google OAuth endpoint
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId.trim(),
+        client_secret: clientSecret.trim(),
+        refresh_token: refreshToken.trim(),
+        grant_type: 'refresh_token'
+      })
+    })
+
+    const tokenData = await tokenRes.json()
+    if (!tokenRes.ok || !tokenData.access_token) {
+      console.error('[Email Service] Failed refreshing Google access token:', tokenData)
+      return null
+    }
+
+    const accessToken = tokenData.access_token
+
+    // 2. Build RFC 2822 MIME message
+    const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString('base64')}?=`
+    const messageParts = [
+      `From: SoundWave Security <${senderEmail}>`,
+      `To: ${to.trim().toLowerCase()}`,
+      `Subject: ${utf8Subject}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/html; charset=utf-8',
+      '',
+      htmlContent
+    ]
+    const rawMessage = messageParts.join('\r\n')
+    const encodedMessage = Buffer.from(rawMessage)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+
+    // 3. Dispatch via Google Gmail REST API
+    const sendRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ raw: encodedMessage })
+    })
+
+    const sendData = await sendRes.json()
+    if (sendRes.ok && sendData.id) {
+      console.log(`[Email Service] ✉️ Gmail REST API email dispatched to ${to}. Message ID:`, sendData.id)
+      return { success: true, provider: 'gmail-rest-api', messageId: sendData.id }
+    } else {
+      console.error('[Email Service] Gmail REST API error:', sendData)
+      return null
+    }
+  } catch (err) {
+    console.error('[Email Service] Exception sending via Gmail REST API:', err.message)
+    return null
+  }
+}
+
+/**
+ * Send OTP Email via Gmail REST API, Resend REST API, or Safe Dev Fallback
  * 
  * @param {Object} params
  * @param {string} params.email - Recipient email
@@ -135,37 +212,79 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
     : `SoundWave - Login Security Passcode: ${otp}`
   const htmlContent = renderOtpEmailTemplate({ otp, purpose, email })
 
-  // 1. Try Brevo REST API (api.brevo.com/v3/smtp/email)
-  const brevoApiKey = process.env.BREVO_API_KEY
-  if (brevoApiKey && brevoApiKey !== 'your_brevo_api_key_here') {
-    try {
-      const senderName = process.env.BREVO_SENDER_NAME || 'SoundWave'
-      const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.GMAIL_USER || 'no-reply@soundwave.app'
+  // 1. Try Google Gmail REST API (Official HTTPS port 443 OAuth2 - sends to ANY recipient for free)
+  const gmailRestResult = await sendViaGmailRestApi({ to: email, subject, htmlContent })
+  if (gmailRestResult) {
+    return gmailRestResult
+  }
 
-      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+  // 2. Try Resend REST API (https://api.resend.com/emails)
+  const resendApiKey = process.env.RESEND_API_KEY
+  if (resendApiKey && resendApiKey.startsWith('re_')) {
+    try {
+      const fromEmail = process.env.RESEND_FROM_EMAIL || 'SoundWave Security <onboarding@resend.dev>'
+
+      const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          'accept': 'application/json',
-          'api-key': brevoApiKey,
-          'content-type': 'application/json'
+          'Authorization': `Bearer ${resendApiKey.trim()}`,
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          sender: { name: senderName, email: senderEmail },
-          to: [{ email: email.trim().toLowerCase() }],
+          from: fromEmail,
+          to: [email.trim().toLowerCase()],
           subject,
-          htmlContent
+          html: htmlContent
         })
       })
 
       const data = await response.json()
-      if (response.ok) {
-        console.log(`[Email Service] ✉️ Brevo email dispatched to ${email}. MessageId:`, data.messageId)
-        return { success: true, provider: 'brevo', messageId: data.messageId }
+      if (response.ok && data.id) {
+        console.log(`[Email Service] ✉️ Resend email dispatched to ${email}. ID:`, data.id)
+        return { success: true, provider: 'resend', messageId: data.id }
+      } else if (response.status === 403 && data.message && data.message.includes('only send testing emails to your own email address')) {
+        // Extract the verified developer email from Resend's error message (e.g., malithrajamanthri@gmail.com)
+        const match = data.message.match(/\(([^)]+)\)/)
+        const devRecipient = match ? match[1] : (process.env.RESEND_DEV_EMAIL || 'malithrajamanthri@gmail.com')
+        
+        console.warn(`[Email Service] ⚠️ Resend Sandbox restriction: Cannot send directly to "${email}". Rerouting to verified dev email: ${devRecipient}`)
+        
+        const sandboxNotice = `
+          <div style="background-color: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.4); border-radius: 10px; padding: 14px; margin-bottom: 20px; font-size: 13px; color: #fef08a; line-height: 1.5;">
+            <strong>🛠️ Resend Sandbox Mode Active:</strong><br>
+            This verification code was requested for <strong>${email}</strong>.<br>
+            Since Resend free sandbox (<em>onboarding@resend.dev</em>) only delivers to your registered account, this email was safely routed to your inbox: <strong>${devRecipient}</strong>.
+          </div>
+        `
+        const routedHtml = htmlContent.replace('<!-- Security Warning -->', sandboxNotice + '<!-- Security Warning -->')
+        const routedSubject = `[For ${email}] ${subject}`
+
+        const retryResponse = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resendApiKey.trim()}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: fromEmail,
+            to: [devRecipient],
+            subject: routedSubject,
+            html: routedHtml
+          })
+        })
+
+        const retryData = await retryResponse.json()
+        if (retryResponse.ok && retryData.id) {
+          console.log(`[Email Service] ✉️ Resend sandbox email delivered to ${devRecipient} for requested user ${email}. ID:`, retryData.id)
+          return { success: true, provider: 'resend-sandbox-routed', messageId: retryData.id }
+        } else {
+          console.error('[Email Service] Failed retrying Resend sandbox email:', retryData)
+        }
       } else {
-        console.error('[Email Service] Brevo API error response:', data)
+        console.error('[Email Service] Resend API error response:', data)
       }
-    } catch (brevoErr) {
-      console.error('[Email Service] Failed sending via Brevo API:', brevoErr.message)
+    } catch (resendErr) {
+      console.error('[Email Service] Failed sending via Resend API:', resendErr.message)
     }
   }
 
@@ -179,7 +298,10 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
         auth: {
           user: gmailUser,
           pass: gmailPass
-        }
+        },
+        connectionTimeout: 4000,
+        greetingTimeout: 4000,
+        socketTimeout: 5000
       })
 
       const info = await transporter.sendMail({
@@ -203,7 +325,7 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
   console.log(`   Purpose:  ${purpose.toUpperCase()}`)
   console.log(`   OTP CODE: [ ${otp} ] (8 DIGITS)`)
   console.log(`   Expires:  10 Minutes from now`)
-  console.log('   Note:     Configure BREVO_API_KEY or GMAIL_APP_PASSWORD in server/.env for live delivery.')
+  console.log('   Note:     Configure RESEND_API_KEY or GMAIL_APP_PASSWORD in server/.env for live delivery.')
   console.log('='.repeat(68) + '\n')
 
   return { success: true, provider: 'console-dev-fallback' }

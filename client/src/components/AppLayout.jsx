@@ -13,7 +13,17 @@ function YouTubePlayerMount() {
   return (
     <div
       id="yt-hidden-player"
-      style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: '1px', height: '1px', opacity: 0, pointerEvents: 'none' }}
+      aria-hidden="true"
+      style={{
+        position: 'fixed',
+        bottom: 0,
+        right: 0,
+        width: '200px',
+        height: '200px',
+        opacity: 0.002,
+        pointerEvents: 'none',
+        zIndex: -9999,
+      }}
     />
   )
 }
@@ -21,6 +31,18 @@ function YouTubePlayerMount() {
 export default function AppLayout() {
   useKeyboardShortcuts()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Lock body scroll when mobile sidebar drawer is open
+  useEffect(() => {
+    if (sidebarOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [sidebarOpen])
 
   const mobileNavClass = ({ isActive }) =>
     `flex flex-col items-center justify-center flex-1 py-1.5 text-[11px] font-semibold transition-all ${
@@ -59,9 +81,9 @@ export default function AppLayout() {
 
       {/* Body: sidebar + main */}
       <div className="app-body">
-        {/* Sidebar — on mobile: fixed full-height slide drawer with safe insets */}
+        {/* Sidebar — on mobile: fixed full-height slide drawer with z-[150] above player and bottom nav */}
         <div className={`
-          sidebar fixed lg:relative z-40 lg:z-auto
+          sidebar fixed lg:relative z-[150] lg:z-auto
           inset-y-0 left-0
           w-[280px] max-w-[85vw] lg:w-64 lg:max-w-none
           h-full

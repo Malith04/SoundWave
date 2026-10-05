@@ -1,96 +1,152 @@
-import { useState } from 'react'
-import { BarChart3, TrendingUp, Headphones, Globe, Disc, Radio } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { BarChart3, TrendingUp, Headphones, Globe, Disc, Radio, RefreshCw } from 'lucide-react'
 
 export default function AdminAnalyticsTab() {
-  const genres = [
-    { name: 'Pop & Synthpop', percentage: 38, count: '142,500 plays', color: 'bg-indigo-500' },
-    { name: 'Hip Hop & Rap', percentage: 24, count: '91,200 plays', color: 'bg-purple-500' },
-    { name: 'Electronic & EDM', percentage: 18, count: '67,400 plays', color: 'bg-pink-500' },
-    { name: 'Lo-Fi Chill & Ambient', percentage: 12, count: '45,100 plays', color: 'bg-teal-500' },
-    { name: 'Rock & Alternative', percentage: 8, count: '30,800 plays', color: 'bg-amber-500' }
+  const [data, setData] = useState({
+    topGenres: [],
+    topSongs: [],
+    topArtists: [],
+    streamHours: 0
+  })
+  const [loading, setLoading] = useState(true)
+
+  const loadAnalytics = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/admin/analytics')
+      if (res.ok) {
+        const json = await res.json()
+        setData(json)
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadAnalytics()
+  }, [])
+
+  const colorPalette = [
+    'bg-indigo-500',
+    'bg-purple-500',
+    'bg-pink-500',
+    'bg-teal-500',
+    'bg-amber-500',
+    'bg-cyan-500'
   ]
 
-  const topArtists = [
-    { rank: 1, name: 'The Weeknd', plays: '52,190', trend: '+18%' },
-    { rank: 2, name: 'Ed Sheeran', plays: '38,420', trend: '+12%' },
-    { rank: 3, name: 'Post Malone', plays: '31,800', trend: '+9%' },
-    { rank: 4, name: 'Dua Lipa', plays: '24,550', trend: '+15%' },
-    { rank: 5, name: 'ChilledCow / Lofi Girl', plays: '19,300', trend: '+22%' }
-  ]
+  // Calculate total genre plays for bar width
+  const totalGenrePlays = data.topGenres.reduce((acc, g) => acc + Number(g.plays || g.count || 1), 0) || 1
 
   return (
     <div className="space-y-6">
-      {/* ── Top Summary ── */}
+      {/* ── Top Summary with 100% Real Database Metrics ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="p-5 rounded-2xl bg-[#0d0e19] border border-white/5">
-          <p className="text-xs font-semibold text-gray-400">Total Stream Time</p>
-          <p className="text-2xl font-extrabold text-white mt-1">2,840.5 Hours</p>
-          <p className="text-[11px] text-emerald-400 mt-1">↑ 19.4% vs last week</p>
+          <p className="text-xs font-semibold text-gray-400">Total Catalog Stream Time</p>
+          <p className="text-2xl font-extrabold text-white mt-1">
+            {data.streamHours.toLocaleString()} Hours
+          </p>
+          <p className="text-[11px] text-emerald-400 mt-1">Real database duration × play count</p>
         </div>
 
         <div className="p-5 rounded-2xl bg-[#0d0e19] border border-white/5">
-          <p className="text-xs font-semibold text-gray-400">Average Session Duration</p>
-          <p className="text-2xl font-extrabold text-white mt-1">42.8 Minutes</p>
-          <p className="text-[11px] text-indigo-400 mt-1">4.2 tracks per session</p>
+          <p className="text-xs font-semibold text-gray-400">Top Trending Genre</p>
+          <p className="text-2xl font-extrabold text-white mt-1">
+            {data.topGenres[0]?.genre || 'Loading...'}
+          </p>
+          <p className="text-[11px] text-indigo-400 mt-1">
+            {data.topGenres[0]?.plays ? `${Number(data.topGenres[0].plays).toLocaleString()} plays logged` : 'Leading catalog category'}
+          </p>
         </div>
 
         <div className="p-5 rounded-2xl bg-[#0d0e19] border border-white/5">
-          <p className="text-xs font-semibold text-gray-400">Peak Concurrency Time</p>
-          <p className="text-2xl font-extrabold text-white mt-1">9:00 PM – 11:30 PM</p>
-          <p className="text-[11px] text-gray-400 mt-1">UTC+05:30 (Sri Lanka Time)</p>
+          <p className="text-xs font-semibold text-gray-400">Top Streamed Artist</p>
+          <p className="text-2xl font-extrabold text-white mt-1">
+            {data.topArtists[0]?.artist || 'Loading...'}
+          </p>
+          <p className="text-[11px] text-pink-400 mt-1">
+            {data.topArtists[0]?.plays ? `${Number(data.topArtists[0].plays).toLocaleString()} total plays` : 'Highest listener retention'}
+          </p>
         </div>
       </div>
 
-      {/* ── Charts Grid ── */}
+      {/* ── Charts Grid (100% Real Database Data) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Genre Share */}
         <div className="lg:col-span-7 p-6 rounded-2xl bg-[#0d0e19] border border-white/5 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-              Streaming Genre Distribution
+              Streaming Genre Distribution (Real DB)
             </h3>
-            <span className="text-xs text-gray-400">Last 30 Days</span>
+            <button
+              onClick={loadAnalytics}
+              className="p-1 rounded-lg bg-white/5 text-gray-400 hover:text-white"
+            >
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+            </button>
           </div>
 
-          <div className="space-y-3.5 pt-2">
-            {genres.map(g => (
-              <div key={g.name} className="space-y-1">
-                <div className="flex justify-between text-xs font-medium">
-                  <span className="text-gray-200">{g.name}</span>
-                  <span className="text-gray-400">
-                    {g.percentage}% · {g.count}
-                  </span>
-                </div>
-                <div className="w-full h-2 rounded-full bg-[#141525] overflow-hidden">
-                  <div
-                    className={`h-full ${g.color} rounded-full transition-all duration-500`}
-                    style={{ width: `${g.percentage}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+          <div className="space-y-4 pt-2">
+            {data.topGenres.length === 0 ? (
+              <p className="text-xs text-gray-500 py-8 text-center">No genre data available</p>
+            ) : (
+              data.topGenres.map((g, idx) => {
+                const plays = Number(g.plays || g.count || 0)
+                const percentage = Math.round((plays / totalGenrePlays) * 100) || 5
+                const color = colorPalette[idx % colorPalette.length]
+
+                return (
+                  <div key={g.genre} className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-medium">
+                      <span className="text-gray-200 font-semibold">{g.genre}</span>
+                      <span className="text-gray-400">
+                        {percentage}% · {plays.toLocaleString()} plays ({g.count} tracks)
+                      </span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-[#141525] overflow-hidden">
+                      <div
+                        className={`h-full ${color} rounded-full transition-all duration-500`}
+                        style={{ width: `${Math.max(percentage, 4)}%` }}
+                      />
+                    </div>
+                  </div>
+                )
+              })
+            )}
           </div>
         </div>
 
         {/* Top Streamed Artists */}
         <div className="lg:col-span-5 p-6 rounded-2xl bg-[#0d0e19] border border-white/5 space-y-4">
           <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-            Top Artists by Plays
+            Top Artists by Play Count (Real DB)
           </h3>
 
           <div className="divide-y divide-white/5">
-            {topArtists.map(a => (
-              <div key={a.name} className="py-2.5 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="w-5 text-center text-xs font-bold text-gray-500">#{a.rank}</span>
-                  <span className="text-xs font-bold text-white">{a.name}</span>
+            {data.topArtists.length === 0 ? (
+              <p className="text-xs text-gray-500 py-8 text-center">No artist play logs yet</p>
+            ) : (
+              data.topArtists.map((a, idx) => (
+                <div key={a.artist} className="py-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="w-5 text-center text-xs font-bold text-gray-500">#{idx + 1}</span>
+                    <div>
+                      <p className="text-xs font-bold text-white">{a.artist}</p>
+                      <p className="text-[10px] text-gray-500">{a.track_count} catalog tracks</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-bold text-emerald-400">
+                      {Number(a.plays).toLocaleString()} plays
+                    </span>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-xs font-bold text-emerald-400">{a.plays}</span>
-                  <span className="text-[10px] text-gray-500 ml-1.5">{a.trend}</span>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

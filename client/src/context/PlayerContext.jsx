@@ -1,10 +1,34 @@
 import { createContext, useContext, useRef, useState, useCallback, useEffect } from 'react'
-import { Howl } from 'howler'
+import { Howl, Howler } from 'howler'
 import { useAuth } from './AuthContext'
 import { addToRecentlyPlayed } from '../services/userService'
 import { searchYouTube, getCachedYouTubeId } from '../services/musicApi'
 import { upsertSong, incrementPlayCount } from '../services/songService'
 import { useAudioSettings } from './AudioSettingsContext'
+
+// Prevent browsers from suspending audio when switching tabs or minimizing
+// and configure HTML5 audio elements to allow Web Audio API DSP processing (10-band EQ, 3D Spatial Audio, Bass Boost)
+if (typeof window !== 'undefined' && Howler) {
+  Howler.autoSuspend = false
+  Howler.autoUnlock = true
+
+  if (Howler._obtainHtml5Audio) {
+    const origObtain = Howler._obtainHtml5Audio
+    Howler._obtainHtml5Audio = function() {
+      const audio = origObtain.call(this)
+      if (audio) {
+        audio.crossOrigin = 'anonymous'
+        audio.preload = 'auto'
+      }
+      return audio
+    }
+  }
+  if (Array.isArray(Howler._html5AudioPool)) {
+    Howler._html5AudioPool.forEach(node => {
+      if (node) node.crossOrigin = 'anonymous'
+    })
+  }
+}
 
 const PlayerContext = createContext(null)
 const YT_API_KEY = import.meta.env.VITE_YT_API_KEY || ''
@@ -233,7 +257,17 @@ export function PlayerProvider({ children }) {
                 console.log('YouTube player started playing - upgrade successful!')
                 setIsPlaying(true); setIsLoading(false); startYTProgress() 
               }
-              else if (e.data === S.PAUSED) { setIsPlaying(false); clearInterval(progressInterval.current) }
+              else if (e.data === S.PAUSED) {
+                // If the document is hidden or minimized and the user did not trigger pause,
+                // keep playing continuously in the background!
+                if (document.hidden && isPlayingRef.current) {
+                  console.log('Background tab pause intercepted - resuming YouTube playback')
+                  try { ytPlayerRef.current?.playVideo() } catch (_) {}
+                  return
+                }
+                setIsPlaying(false)
+                clearInterval(progressInterval.current)
+              }
               else if (e.data === S.ENDED) { clearInterval(progressInterval.current); handleEnd() }
               else if (e.data === S.BUFFERING) { setIsLoading(true) }
             },
@@ -318,19 +352,36 @@ export function PlayerProvider({ children }) {
     else setIsPlaying(false)
   }, [])
 
-  const playWithHowler = useCallback((song, audioUrl, startAt = 0) => {
+  const playWithYouTubeIframe = useCallback((song, videoId, startAt = 0) => {
+    console.log('playWithYouTubeIframe fallback called for:', videoId)
+    setEngine('youtube')
+    howlRef.current?.unload()
+    clearInterval(progressInterval.current)
+    setProgress(0); setCurrentTime(0); setDuration(0)
+    setIsLoading(true); setError(null)
+
+    if (ytReadyRef.current && ytPlayerRef.current) {
+      ytPlayerRef.current.setVolume(mutedRef.current ? 0 : volumeRef.current)
+      ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startAt })
+    } else {
+      pendingYTRef.current = videoId
+    }
+  }, [])
+
+  const playWithHowler = useCallback((song, audioUrl, startAt = 0, isStream = false) => {
     console.log('playWithHowler called:', {
       title: song.title,
       source: song.source,
       audioUrl: audioUrl?.substring(0, 50) + '...',
-      startAt
+      startAt,
+      isStream
     })
     
     try {
       howlRef.current?.unload()
       clearInterval(progressInterval.current)
       ytPlayerRef.current?.stopVideo?.()
-      setEngine('howler')
+      setEngine(isStream ? 'youtube' : 'howler')
       setProgress(0); setCurrentTime(0); setDuration(0)
 
       // Ensure AudioContext is ready and un-suspended
@@ -346,20 +397,24 @@ export function PlayerProvider({ children }) {
           ? Math.min(baseVol, 0.85)
           : baseVol
 
-      console.log('Creating Howl (Web Audio Mode) with:', { speed, vol, audioUrl })
+      console.log('Creating Howl with Web Audio DSP chain:', { speed, vol, isStream })
 
-      // Primary: Web Audio API mode (html5: false) so Equalizer, Bass Boost, 3D Spatial Audio & Normalization process audio directly
       const howl = new Howl({
         src: [audioUrl],
-        html5: false,
+        html5: isStream, // stream uses HTML5 audio element for instant byte-range buffering
         volume: vol,
         rate: speed,
-        format: ['mp3', 'ogg', 'aac', 'm4a'],
+        format: isStream ? ['mp4', 'm4a', 'aac', 'mp3'] : ['mp3', 'ogg', 'aac', 'm4a'],
         onload: () => {
-          console.log('Howl loaded successfully via Web Audio, duration:', howl.duration())
+          console.log('Howl loaded successfully, duration:', howl.duration())
+          if (howl.duration() > 0) {
+            setDuration(howl.duration())
+          } else if (song.duration) {
+            setDuration(song.duration > 1000 ? song.duration / 1000 : song.duration)
+          }
         },
         onplay: () => {
-          console.log('Howl started playing via Web Audio')
+          console.log('Howl started playing via Web Audio DSP pipeline')
           if (startAt > 0) { 
             howl.seek(startAt) 
           }
@@ -367,8 +422,24 @@ export function PlayerProvider({ children }) {
           if (settings?.speed && settings.speed !== 1) {
             try { howl.rate(settings.speed) } catch (_) {}
           }
+
+          // If playing via HTML5 audio element (streaming mode), wire into Web Audio DSP graph
+          if (isStream) {
+            try {
+              const node = howl._sounds?.[0]?._node
+              if (node && !node._sourceNode && Howler.ctx) {
+                node.crossOrigin = 'anonymous'
+                const src = Howler.ctx.createMediaElementSource(node)
+                src.connect(Howler.masterGain)
+                node._sourceNode = src
+                console.log('✅ HTML5 Audio Node successfully routed to 10-Band EQ & Spatial DSP!')
+              }
+            } catch (err) {
+              console.warn('HTML5 MediaElementSource wiring note:', err)
+            }
+          }
           
-          // AudioContext is live — apply all audio settings immediately
+          // AudioContext is live — apply all audio settings (10-band EQ, 3D Spatial Audio, Bass Boost, Normalization)
           try {
             applyAudioChain(settings)
           } catch (e) {
@@ -387,45 +458,29 @@ export function PlayerProvider({ children }) {
           handleEnd()
         },
         onloaderror: (id, error) => { 
-          console.warn('Howler Web Audio load error, falling back to HTML5 audio element:', error)
-          // Fallback to HTML5 audio element
-          try {
-            const fallbackHowl = new Howl({
-              src: [audioUrl],
-              html5: true,
-              volume: vol,
-              rate: speed,
-              format: ['mp3', 'ogg', 'aac', 'm4a'],
-              onload: () => console.log('HTML5 fallback loaded successfully'),
-              onplay: () => {
-                // Route HTML5 audio element through Web Audio if supported
-                try {
-                  const node = fallbackHowl._sounds?.[0]?._node
-                  if (node && !node._sourceNode && Howler.ctx) {
-                    node.crossOrigin = 'anonymous'
-                    const src = Howler.ctx.createMediaElementSource(node)
-                    src.connect(Howler.masterGain)
-                    node._sourceNode = src
-                    applyAudioChain(settings)
-                  }
-                } catch (_) {}
-                setIsPlaying(true); setIsLoading(false); startProgressTracking()
-              },
-              onpause: () => { setIsPlaying(false); clearInterval(progressInterval.current) },
-              onstop: () => { setIsPlaying(false); clearInterval(progressInterval.current) },
-              onend: () => handleEnd(),
-              onloaderror: () => { setIsLoading(false); setError('Could not load audio file'); setIsPlaying(false) },
-              onplayerror: () => { setIsLoading(false); setError('Playback error'); setIsPlaying(false) },
-            })
-            howlRef.current = fallbackHowl
-            fallbackHowl.play()
-          } catch (e) {
-            setIsLoading(false); setError('Could not load audio'); setIsPlaying(false)
+          console.warn('Howler load error:', error)
+          // Fallback to YouTube iframe if stream failed
+          const query = `${song.artist} - ${song.title}`
+          const vId = song.videoId || song.youtubeId || getCachedYouTubeId(song.id, query)
+          if (isStream && vId) {
+            console.log('Falling back to YouTube iframe player for:', vId)
+            playWithYouTubeIframe(song, vId, startAt)
+          } else if (song.audioUrl && audioUrl !== song.audioUrl) {
+            // Fallback to original audioUrl
+            playWithHowler(song, song.audioUrl, startAt, false)
+          } else {
+            setIsLoading(false); setError('Could not load audio file'); setIsPlaying(false)
           }
         },
         onplayerror: (id, error) => { 
           console.error('Howler play error:', error)
-          setIsLoading(false); setError('Playback error'); setIsPlaying(false) 
+          const query = `${song.artist} - ${song.title}`
+          const vId = song.videoId || song.youtubeId || getCachedYouTubeId(song.id, query)
+          if (isStream && vId) {
+            playWithYouTubeIframe(song, vId, startAt)
+          } else {
+            setIsLoading(false); setError('Playback error'); setIsPlaying(false)
+          }
         },
       })
       howlRef.current = howl
@@ -436,67 +491,49 @@ export function PlayerProvider({ children }) {
       setError('Failed to initialize audio player')
       setIsPlaying(false)
     }
-  }, [startProgressTracking, handleEnd, settings, applyAudioChain])
+  }, [startProgressTracking, handleEnd, settings, applyAudioChain, playWithYouTubeIframe])
 
   const playWithYouTube = useCallback(async (song, startAt = 0) => {
     console.log('playWithYouTube called for:', song.title, 'by', song.artist)
     
     // Check instant cache first (0ms)
     const query = `${song.artist} - ${song.title}`
-    const cachedVideoId = getCachedYouTubeId(song.id, query)
+    const cachedVideoId = song.videoId || song.youtubeId || getCachedYouTubeId(song.id, query)
 
-    // ⚡ Instant Cache Hit:
-    // Skip 30s preview completely! Play full YouTube track directly!
-    if (cachedVideoId) {
-      console.log('⚡ Instant YouTube Play (cached video ID):', cachedVideoId)
-      setEngine('youtube')
-      if (ytReadyRef.current && ytPlayerRef.current) {
-        howlRef.current?.unload()
-        clearInterval(progressInterval.current)
-        setProgress(0); setCurrentTime(0); setDuration(0)
-        setIsLoading(true); setError(null)
-        ytPlayerRef.current.setVolume(mutedRef.current ? 0 : volumeRef.current)
-        ytPlayerRef.current.loadVideoById({ videoId: cachedVideoId, startSeconds: startAt })
-        return
-      } else {
-        pendingYTRef.current = cachedVideoId
-        return
-      }
+    // Helper: stream through Web Audio DSP so EQ, 3D Spatial Audio & Bass Boost are 100% active
+    const streamThroughWebAudio = (videoId) => {
+      const streamUrl = `/api/youtube/stream/${videoId}`
+      console.log('⚡ Streaming YouTube track through Studio Web Audio DSP (Equalizer Active):', streamUrl)
+      playWithHowler(song, streamUrl, startAt, true)
     }
 
-    // First time playing: start 30s preview immediately so user hears audio right away with 0 delay
+    if (cachedVideoId) {
+      console.log('⚡ Instant YouTube Stream (cached video ID):', cachedVideoId)
+      streamThroughWebAudio(cachedVideoId)
+      return
+    }
+
+    // Play preview while discovering full YouTube stream so user hears music with 0ms delay
     if (song.audioUrl) {
-      console.log('Playing 30s preview while finding full track...')
-      playWithHowler(song, song.audioUrl, startAt)
+      console.log('Playing preview while searching YouTube stream...')
+      playWithHowler(song, song.audioUrl, startAt, false)
+    } else {
+      setIsLoading(true)
     }
 
     try {
-      // Find full track via unlimited backend search (with Google API fallback)
       const videoId = await searchYouTube(`${song.artist} - ${song.title} official audio`, song.id)
       
       if (!videoId) {
-        console.log('No YouTube video found - continuing with preview')
+        console.log('No YouTube video found - continuing with direct audioUrl')
         return
       }
       
-      console.log('Found YouTube video, switching to full track:', videoId)
-      setEngine('youtube')
-      
-      if (ytReadyRef.current && ytPlayerRef.current) {
-        console.log('YouTube player ready, loading video...')
-        howlRef.current?.unload()
-        clearInterval(progressInterval.current)
-        setProgress(0); setCurrentTime(0); setDuration(0)
-        setIsLoading(true); setError(null)
-        ytPlayerRef.current.setVolume(mutedRef.current ? 0 : volumeRef.current)
-        ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startAt })
-      } else {
-        console.log('YouTube player not ready, queuing video:', videoId)
-        pendingYTRef.current = videoId
-      }
+      console.log('Found YouTube video, streaming full track with Web Audio EQ:', videoId)
+      streamThroughWebAudio(videoId)
     } catch (error) {
       console.error('YouTube upgrade failed:', error)
-      // Stay with preview - already playing
+      // Stay with preview if already playing
     }
   }, [playWithHowler])
 
@@ -532,37 +569,29 @@ export function PlayerProvider({ children }) {
       })
     }
 
-    // Play the song - prioritize full-length sources
+    // Play the song across all 3 engines with full Equalizer support
     try {
       console.log('Determining playback method for:', { 
         title: song.title,
         source: song.source, 
-        hasAudioUrl: !!song.audioUrl,
-        audioUrl: song.audioUrl?.substring(0, 50) + '...'
+        engine: settings?.audioEngine || 'auto'
       })
       
-      // Always prefer Jamendo for direct full-length playback
+      // Jamendo tracks: direct high-fidelity Web Audio (Full length + Full EQ)
       if (song.source === 'jamendo' && song.audioUrl) {
-        console.log('✅ Playing Jamendo track with Howler (FULL LENGTH)')
-        playWithHowler(song, song.audioUrl, startAt)
+        console.log('✅ Playing Jamendo track with Howler Web Audio (FULL LENGTH + FULL EQ)')
+        playWithHowler(song, song.audioUrl, startAt, false)
       } 
-      // Preview-based tracks (iTunes, Deezer, etc.): attempt YouTube upgrade for full length
-      else if (song.source === 'itunes' || song.source === 'deezer' || settings?.audioEngine === 'youtube') {
-        const wantsStudioAudio = settings?.audioEngine === 'studio' || 
-          (settings?.audioEngine !== 'youtube' && (settings?.eqEnabled || settings?.bassBoost > 0 || settings?.spatialEnabled))
-
-        if (wantsStudioAudio && song.audioUrl) {
-          console.log('🎛️ Equalizer active — playing track with Studio Web Audio Engine')
-          playWithHowler(song, song.audioUrl, startAt)
-        } else {
-          console.log('⏳ Attempting YouTube upgrade for full length playback')
-          playWithYouTube(song, startAt)
-        }
+      // Preview-based tracks (iTunes, Deezer, etc.) or YouTube tracks:
+      // Stream via YouTube backend through Web Audio DSP so 10-band EQ, 3D Spatial Audio & Bass Boost are 100% active!
+      else if (song.source === 'itunes' || song.source === 'deezer' || settings?.audioEngine === 'youtube' || song.videoId || song.youtubeId) {
+        console.log(`🎛️ Engine [${settings?.audioEngine || 'auto'}] streaming full track with Web Audio DSP Equalizer`)
+        playWithYouTube(song, startAt)
       } 
-      // Any other track with audioUrl: play with Howler
+      // Any other track with audioUrl: play with Howler Web Audio
       else if (song.audioUrl) {
-        console.log('🎵 Playing track with Howler (fallback) - source:', song.source)
-        playWithHowler(song, song.audioUrl, startAt)
+        console.log('🎵 Playing track with Howler Web Audio (fallback) - source:', song.source)
+        playWithHowler(song, song.audioUrl, startAt, false)
       } 
       // No audio source available
       else {
@@ -582,14 +611,16 @@ export function PlayerProvider({ children }) {
     if (!song) return
     const curTime = currentTimeRef.current
 
-    if (targetEngine === 'howler' || targetEngine === 'studio') {
-      if (song.audioUrl) {
-        playWithHowler(song, song.audioUrl, curTime)
+    if (targetEngine === 'studio') {
+      if (song.source === 'jamendo' && song.audioUrl) {
+        playWithHowler(song, song.audioUrl, curTime, false)
       } else {
-        toast.error('No direct audio preview available for this track')
+        playWithYouTube(song, curTime)
       }
     } else if (targetEngine === 'youtube') {
       playWithYouTube(song, curTime)
+    } else if (targetEngine === 'auto') {
+      loadAndPlayRef.current?.(song, queueRef.current, queueIndexRef.current, curTime)
     }
   }, [playWithHowler, playWithYouTube])
 
@@ -775,6 +806,86 @@ export function PlayerProvider({ children }) {
       console.error('Failed to apply audio chain:', e)
     }
   }, [settings, applyAudioChain])
+
+  // ── Background Audio Persistence (Keep playing when minimized or switching tabs) ──
+  useEffect(() => {
+    const keepAudioAlive = () => {
+      if (isPlayingRef.current) {
+        // 1. Resume Web Audio context if browser suspended it on tab blur
+        if (Howler?.ctx && Howler.ctx.state === 'suspended') {
+          Howler.ctx.resume().catch(() => {})
+        }
+        // 2. Keep Howler playing if it got interrupted
+        if (engineRef.current === 'howler' && howlRef.current && !howlRef.current.playing()) {
+          try { howlRef.current.play() } catch (_) {}
+        }
+        // 3. Keep YouTube playing if it got paused while tab is backgrounded
+        if (engineRef.current === 'youtube' && ytPlayerRef.current?.getPlayerState) {
+          const state = ytPlayerRef.current.getPlayerState()
+          if (state === 2) { // 2 = PAUSED
+            try { ytPlayerRef.current.playVideo() } catch (_) {}
+          }
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', keepAudioAlive)
+    window.addEventListener('blur', keepAudioAlive)
+    window.addEventListener('focus', keepAudioAlive)
+    window.addEventListener('pagehide', keepAudioAlive)
+
+    return () => {
+      document.removeEventListener('visibilitychange', keepAudioAlive)
+      document.removeEventListener('blur', keepAudioAlive)
+      document.removeEventListener('focus', keepAudioAlive)
+      document.removeEventListener('pagehide', keepAudioAlive)
+    }
+  }, [])
+
+  // ── MediaSession API (OS Media Controls & Background Throttling Prevention) ──
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('mediaSession' in navigator)) return
+
+    if (currentSong) {
+      try {
+        navigator.mediaSession.metadata = new window.MediaMetadata({
+          title: currentSong.title || 'SoundWave Track',
+          artist: currentSong.artist || 'Unknown Artist',
+          album: currentSong.album || 'SoundWave',
+          artwork: currentSong.coverUrl ? [
+            { src: currentSong.coverUrl, sizes: '96x96', type: 'image/jpeg' },
+            { src: currentSong.coverUrl, sizes: '128x128', type: 'image/jpeg' },
+            { src: currentSong.coverUrl, sizes: '256x256', type: 'image/jpeg' },
+            { src: currentSong.coverUrl, sizes: '512x512', type: 'image/jpeg' },
+          ] : []
+        })
+      } catch (err) {
+        console.warn('Failed to set mediaSession metadata:', err)
+      }
+    }
+
+    try {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused'
+    } catch (_) {}
+
+    const handlers = [
+      ['play', () => { if (!isPlayingRef.current) togglePlay() }],
+      ['pause', () => { if (isPlayingRef.current) togglePlay() }],
+      ['previoustrack', () => previous()],
+      ['nexttrack', () => next()],
+      ['seekto', (details) => {
+        if (details.seekTime !== undefined && duration > 0) {
+          seek(details.seekTime / duration)
+        }
+      }]
+    ]
+
+    for (const [action, handler] of handlers) {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler)
+      } catch (_) {}
+    }
+  }, [currentSong, isPlaying, duration, togglePlay, previous, next, seek])
 
   return (
     <PlayerContext.Provider value={{

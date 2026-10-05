@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate, Link, useParams } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -15,14 +15,19 @@ import {
   Search,
   Bell,
   Moon,
+  Sun,
+  Palette,
   ChevronDown,
   LogOut,
   ExternalLink,
   Flag,
   Sparkles,
+  Check
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { useAudioSettings } from '../context/AudioSettingsContext'
 import SoundWaveLogo from '../components/SoundWaveLogo'
+import toast from 'react-hot-toast'
 
 // Import all tab panels
 import AdminUsersTab from './tabs/AdminUsersTab'
@@ -53,15 +58,30 @@ const NAV_ITEMS = [
   { id: 'settings',       label: 'Settings',             icon: Settings },
 ]
 
+const ACCENT_COLORS = [
+  { value: '#1DB954', name: 'Spotify Green' },
+  { value: '#1E90FF', name: 'Electric Blue' },
+  { value: '#FF6B6B', name: 'Coral Red' },
+  { value: '#A855F7', name: 'Purple' },
+  { value: '#F59E0B', name: 'Amber' },
+]
+
 export default function AdminLayout() {
   const { tab: pathTab } = useParams()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const currentTab = searchParams.get('tab') || pathTab || 'users'
   const { user, profile, logout } = useAuth()
+  const { settings: audioSettings, update: updateSetting } = useAudioSettings()
   const navigate = useNavigate()
 
   const [globalSearch, setGlobalSearch] = useState('')
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false)
+  const themeMenuRef = useRef(null)
+
+  const currentTheme = audioSettings?.theme || 'dark'
+  const currentAccent = audioSettings?.accent || '#1DB954'
+  const isSuperAdmin = user?.email === 'malithrajamanthri@gmail.com'
 
   const handleSelectTab = tabId => {
     navigate(`/soundwave-dashboard?tab=${tabId}`)
@@ -74,30 +94,45 @@ export default function AdminLayout() {
     } catch (_) {}
   }
 
+  // Close theme menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = e => {
+      if (themeMenuRef.current && !themeMenuRef.current.contains(e.target)) {
+        setThemeMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   const activeItem = NAV_ITEMS.find(item => item.id === currentTab) || NAV_ITEMS[1]
 
   return (
-    <div className="flex h-screen bg-[#0a0b12] text-white overflow-hidden font-sans selection:bg-[#6366f1] selection:text-white">
+    <div className="flex h-screen bg-[var(--bg,#0a0b12)] text-[var(--text,#ffffff)] overflow-hidden font-sans selection:bg-[var(--brand,#1DB954)] selection:text-white transition-colors duration-300">
       {/* ── Left Cybernetic Sidebar ── */}
-      <aside className="w-64 bg-[#0d0e19] flex flex-col border-r border-white/5 shrink-0 z-30 select-none">
+      <aside className="w-64 bg-[var(--bg2,#0d0e19)] flex flex-col border-r border-[var(--bg3,rgba(255,255,255,0.06))] shrink-0 z-30 select-none transition-colors duration-300">
         {/* Brand Header */}
-        <div className="p-5 border-b border-white/5 flex items-center justify-between">
+        <div className="p-5 border-b border-[var(--bg3,rgba(255,255,255,0.06))] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* Custom rounded gradient logo badge */}
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#6366f1] via-[#8b5cf6] to-[#ec4899] p-0.5 shadow-lg shadow-indigo-500/20 flex items-center justify-center">
-              <div className="w-full h-full bg-[#0d0e19] rounded-[14px] flex items-center justify-center">
-                <SoundWaveLogo size={22} animated glow={false} />
-              </div>
-            </div>
+            <SoundWaveLogo size={36} animated glow />
 
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-base tracking-tight font-display text-white">SoundWave</span>
-                <span className="px-1.5 py-0.2 rounded text-[10px] font-extrabold bg-white/10 text-white border border-white/20 tracking-wider">
+                <span className="font-extrabold text-base tracking-tight font-display text-[var(--text,#ffffff)]">
+                  SoundWave
+                </span>
+                <span
+                  className="px-1.5 py-0.2 rounded text-[10px] font-extrabold border tracking-wider"
+                  style={{
+                    backgroundColor: 'rgba(var(--brand-rgb, 29, 185, 84), 0.15)',
+                    color: 'var(--brand, #1DB954)',
+                    borderColor: 'var(--brand, #1DB954)'
+                  }}
+                >
                   ADMIN
                 </span>
               </div>
-              <p className="text-[11px] text-gray-500 font-medium">Admin panel</p>
+              <p className="text-[11px] text-[var(--text-muted,#9ca3af)] font-medium">Control console</p>
             </div>
           </div>
         </div>
@@ -112,11 +147,23 @@ export default function AdminLayout() {
                 onClick={() => handleSelectTab(id)}
                 className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 text-left ${
                   isActive
-                    ? 'text-white bg-white/10 shadow-sm border border-white/10'
-                    : 'text-gray-400 hover:text-white hover:bg-white/[0.04]'
+                    ? 'text-white shadow-sm border font-bold'
+                    : 'text-[var(--text-muted,#9ca3af)] hover:text-[var(--text,#ffffff)] hover:bg-white/[0.04]'
                 }`}
+                style={
+                  isActive
+                    ? {
+                        backgroundColor: 'var(--brand, #1DB954)',
+                        borderColor: 'var(--brand, #1DB954)',
+                        color: '#ffffff'
+                      }
+                    : {}
+                }
               >
-                <Icon size={16} className={isActive ? 'text-[#a5b4fc]' : 'text-gray-400'} />
+                <Icon
+                  size={16}
+                  className={isActive ? 'text-white' : 'text-[var(--text-muted,#9ca3af)]'}
+                />
                 <span>{label}</span>
               </button>
             )
@@ -124,22 +171,44 @@ export default function AdminLayout() {
         </nav>
 
         {/* Bottom Profile Capsule & Sign Out */}
-        <div className="p-4 border-t border-white/5 space-y-3 bg-[#0a0b12]/60">
+        <div className="p-4 border-t border-[var(--bg3,rgba(255,255,255,0.06))] space-y-3 bg-[var(--bg,#0a0b12)]/60">
           {/* Administrator capsule */}
-          <div className="p-3 rounded-2xl bg-[#141524] border border-white/5 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#ec4899] to-[#8b5cf6] text-white flex items-center justify-center font-extrabold text-xs shadow-md shrink-0">
-              {(profile?.displayName?.[0] || user?.email?.[0] || 'A').toUpperCase()}
-            </div>
+          <div className="p-3 rounded-2xl bg-[var(--bg3,#141524)] border border-white/5 flex items-center gap-3">
+            {profile?.photoURL || user?.photoURL ? (
+              <img
+                src={profile?.photoURL || user?.photoURL}
+                alt="Admin"
+                className="w-8 h-8 rounded-full object-cover shrink-0 shadow-md ring-1 ring-white/10"
+              />
+            ) : (
+              <div
+                className="w-8 h-8 rounded-full text-white flex items-center justify-center font-extrabold text-xs shadow-md shrink-0"
+                style={{
+                  background: isSuperAdmin
+                    ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+                    : 'linear-gradient(135deg, var(--brand, #1DB954), #8b5cf6)'
+                }}
+              >
+                {(user?.displayName?.[0] || user?.email?.[0] || 'M').toUpperCase()}
+              </div>
+            )}
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-white truncate">Administrator</p>
-              <p className="text-[10px] text-gray-500 font-medium truncate">Allowlisted IP</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-xs font-bold text-[var(--text,#ffffff)] truncate">
+                  {isSuperAdmin ? 'Super Administrator' : 'Administrator'}
+                </p>
+                {isSuperAdmin && <Sparkles size={11} className="text-amber-400 shrink-0" />}
+              </div>
+              <p className="text-[10px] text-[var(--text-muted,#9ca3af)] font-medium truncate">
+                {user?.email || 'malithrajamanthri@gmail.com'}
+              </p>
             </div>
           </div>
 
           {/* Sign Out Outlined Button */}
           <button
             onClick={handleSignOut}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-white/10 text-xs font-semibold text-gray-300 hover:text-white hover:bg-white/5 hover:border-white/20 transition-all active:scale-[0.98]"
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-white/10 text-xs font-semibold text-[var(--text-muted,#9ca3af)] hover:text-[var(--text,#ffffff)] hover:bg-white/5 hover:border-white/20 transition-all active:scale-[0.98]"
           >
             <LogOut size={14} className="text-gray-400" />
             <span>Sign out</span>
@@ -148,7 +217,7 @@ export default function AdminLayout() {
           {/* Quick link back to SoundWave Player */}
           <Link
             to="/"
-            className="flex items-center justify-center gap-1.5 text-[11px] text-gray-500 hover:text-[#1DB954] transition-colors pt-1"
+            className="flex items-center justify-center gap-1.5 text-[11px] text-[var(--text-muted,#9ca3af)] hover:text-[var(--brand,#1DB954)] transition-colors pt-1"
           >
             <span>Return to SoundWave App</span>
             <ExternalLink size={11} />
@@ -157,22 +226,25 @@ export default function AdminLayout() {
       </aside>
 
       {/* ── Main Panel ── */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-br from-[#0c0d17] via-[#090a10] to-[#07080b]">
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[var(--bg,#0a0b12)]">
         {/* Top Control Bar */}
-        <header className="px-8 pt-6 pb-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
+        <header className="px-8 pt-6 pb-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 border-b border-[var(--bg3,rgba(255,255,255,0.06))]">
           <div>
-            <div className="text-[10px] font-extrabold text-[#818cf8] uppercase tracking-widest mb-0.5">
+            <div
+              className="text-[10px] font-extrabold uppercase tracking-widest mb-0.5"
+              style={{ color: 'var(--brand, #1DB954)' }}
+            >
               SECURE CONSOLE
             </div>
-            <h1 className="text-2xl font-extrabold text-white tracking-tight font-display">
+            <h1 className="text-2xl font-extrabold text-[var(--text,#ffffff)] tracking-tight font-display">
               {activeItem.label}
             </h1>
-            <p className="text-xs text-gray-400 mt-0.5 max-w-xl">
-              Control dashboard for volunteer network users, content filters, safety campaigns, and trust reports.
+            <p className="text-xs text-[var(--text-muted,#9ca3af)] mt-0.5 max-w-xl">
+              Control dashboard for music listeners, verified artists, content filters, and trust reports.
             </p>
           </div>
 
-          {/* Top Right Controls matching screenshot */}
+          {/* Top Right Controls with Real Theme Switcher */}
           <div className="flex items-center gap-3 shrink-0">
             {/* Search Pill Bar */}
             <div className="relative">
@@ -182,39 +254,128 @@ export default function AdminLayout() {
                 value={globalSearch}
                 onChange={e => setGlobalSearch(e.target.value)}
                 placeholder="Search users or content"
-                className="w-56 lg:w-64 bg-[#141525] border border-white/10 rounded-full pl-9 pr-4 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#6366f1] transition-all"
+                className="w-56 lg:w-64 bg-[var(--bg2,#141525)] border border-[var(--bg3,rgba(255,255,255,0.1))] rounded-full pl-9 pr-4 py-2 text-xs text-[var(--text,#ffffff)] placeholder-gray-500 focus:outline-none transition-all"
+                style={{
+                  borderColor: globalSearch ? 'var(--brand, #1DB954)' : undefined
+                }}
               />
             </div>
 
             {/* Live Channel / Live Engine Badge */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#141525] border border-white/10 text-[11px] font-extrabold text-emerald-400 shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <div
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-extrabold shadow-sm"
+              style={{
+                backgroundColor: 'rgba(var(--brand-rgb, 29, 185, 84), 0.1)',
+                borderColor: 'rgba(var(--brand-rgb, 29, 185, 84), 0.3)',
+                color: 'var(--brand, #1DB954)'
+              }}
+            >
+              <span
+                className="w-2 h-2 rounded-full animate-pulse"
+                style={{ backgroundColor: 'var(--brand, #1DB954)' }}
+              />
               <span>LIVE CHANNEL</span>
             </div>
 
-            {/* Notification Bell with counter */}
+            {/* Notification Bell */}
             <button
               onClick={() => setNotificationsOpen(v => !v)}
-              className="relative p-2 rounded-full bg-[#141525] border border-white/10 text-gray-300 hover:text-white transition-all"
+              className="relative p-2 rounded-full bg-[var(--bg2,#141525)] border border-white/10 text-gray-300 hover:text-white transition-all"
               title="Notifications"
             >
               <Bell size={15} />
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#ec4899] text-white text-[9px] font-bold flex items-center justify-center shadow-md">
-                9
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center shadow-md">
+                3
               </span>
             </button>
 
-            {/* Theme dropdown pill */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#141525] border border-white/10 text-xs font-semibold text-gray-300">
-              <Moon size={14} className="text-indigo-400" />
-              <span>Dark</span>
-              <ChevronDown size={13} className="text-gray-500" />
+            {/* Theme & Accent Interactive Dropdown Pill */}
+            <div className="relative" ref={themeMenuRef}>
+              <button
+                onClick={() => setThemeMenuOpen(v => !v)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--bg2,#141525)] border border-white/10 text-xs font-semibold text-[var(--text,#ffffff)] hover:border-white/25 transition-all shadow-sm"
+              >
+                {currentTheme === 'light' ? (
+                  <Sun size={14} className="text-amber-400" />
+                ) : (
+                  <Moon size={14} style={{ color: 'var(--brand, #1DB954)' }} />
+                )}
+                <span className="capitalize">{currentTheme}</span>
+                <span
+                  className="w-2.5 h-2.5 rounded-full ring-1 ring-white/20"
+                  style={{ backgroundColor: currentAccent }}
+                  title="Active Accent Colour"
+                />
+                <ChevronDown size={13} className="text-gray-400" />
+              </button>
+
+              {/* Dropdown Menu */}
+              {themeMenuOpen && (
+                <div className="absolute right-0 mt-2 w-52 bg-[var(--bg2,#141525)] border border-white/10 rounded-2xl shadow-2xl p-3 z-50 animate-fade-in space-y-3">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted,#9ca3af)] mb-1.5">
+                      Theme Mode
+                    </p>
+                    <div className="space-y-1">
+                      {[
+                        { id: 'dark', label: 'Dark Mode', icon: Moon },
+                        { id: 'amoled', label: 'AMOLED Black', icon: Moon },
+                        { id: 'light', label: 'Light Mode', icon: Sun },
+                      ].map(({ id, label, icon: Icon }) => (
+                        <button
+                          key={id}
+                          onClick={() => {
+                            updateSetting('theme', id)
+                            setThemeMenuOpen(false)
+                            toast.success(`Theme switched to ${label}`)
+                          }}
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                            currentTheme === id
+                              ? 'bg-[var(--brand,#1DB954)] text-white font-bold'
+                              : 'text-gray-300 hover:bg-white/5'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Icon size={13} />
+                            <span>{label}</span>
+                          </div>
+                          {currentTheme === id && <Check size={13} />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-white/10">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted,#9ca3af)] mb-1.5">
+                      SoundWave Accent
+                    </p>
+                    <div className="flex items-center gap-2 justify-between px-1">
+                      {ACCENT_COLORS.map(c => (
+                        <button
+                          key={c.value}
+                          onClick={() => {
+                            updateSetting('accent', c.value)
+                            toast.success(`Accent color set to ${c.name}`)
+                          }}
+                          className={`w-6 h-6 rounded-full transition-transform hover:scale-110 flex items-center justify-center ${
+                            currentAccent === c.value ? 'ring-2 ring-white ring-offset-2 ring-offset-black scale-110' : ''
+                          }`}
+                          style={{ backgroundColor: c.value }}
+                          title={c.name}
+                        >
+                          {currentAccent === c.value && <Check size={11} className="text-white drop-shadow" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>
 
         {/* Scrollable Content Body */}
-        <main className="flex-1 overflow-y-auto px-8 pb-8 custom-scroll">
+        <main className="flex-1 overflow-y-auto px-8 pb-8 pt-6 custom-scroll">
           {currentTab === 'users' && <AdminUsersTab search={globalSearch} />}
           {currentTab === 'overview' && <AdminOverviewTab />}
           {currentTab === 'deleted' && <AdminDeletedTab search={globalSearch} />}

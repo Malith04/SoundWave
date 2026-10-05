@@ -3,6 +3,7 @@ import dotenv from 'dotenv'
 import { initDb } from './db/index.js'
 import { purgeExpiredAccounts } from './routes/auth.js'
 
+// Environment configuration & Google Gmail REST API integration
 dotenv.config()
 
 const PORT = process.env.PORT || 5000

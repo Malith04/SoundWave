@@ -28,14 +28,7 @@ export default function AdminUsersPage() {
           return
         }
       }
-
-      // Fallback sample/cached users
-      setUsers([
-        { id: '1', name: 'Malith Rajamanthri', email: 'thegr8malith@gmail.com', isAdmin: true, tier: 'premium', createdAt: '2026-03-10' },
-        { id: '2', name: 'SoundWave Demo Admin', email: 'admin@soundwave.com', isAdmin: true, tier: 'premium', createdAt: '2026-04-01' },
-        { id: '3', name: 'Alex Rivera', email: 'alex.rivera@example.com', isAdmin: false, tier: 'free', createdAt: '2026-06-15' },
-        { id: '4', name: 'Sarah Chen', email: 'sarah.c@example.com', isAdmin: false, tier: 'free', createdAt: '2026-08-20' },
-      ])
+      setUsers([])
     } catch (_) {
       setUsers([])
     } finally {

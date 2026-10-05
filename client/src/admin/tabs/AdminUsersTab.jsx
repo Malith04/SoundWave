@@ -18,176 +18,39 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-// Default sample users matching the exact ImpactEcho dashboard screenshot
-const INITIAL_USERS = [
-  {
-    id: 'usr_1',
-    name: 'Ananda Rathnayake',
-    email: 'anandarathnayake58@gmail.com',
-    provider: 'GOOGLE',
-    role: 'USER',
-    trustScore: 100,
-    strikes: 0,
-    warns: 0,
-    lastLogin: '9/27/2026, 10:29:24 PM',
-    status: 'ACTIVE',
-    twoFactor: true,
-    verified: true,
-    avatarColor: 'from-[#1e1b4b] to-[#312e81]'
-  },
-  {
-    id: 'usr_2',
-    name: 'Hashintha Rajamanthri',
-    email: 'hashrajamanthri@gmail.com',
-    provider: 'GOOGLE',
-    role: 'USER',
-    trustScore: 100,
-    strikes: 0,
-    warns: 0,
-    lastLogin: '9/27/2026, 10:12:15 PM',
-    status: 'ACTIVE',
-    twoFactor: true,
-    verified: true,
-    avatarColor: 'from-[#06b6d4] to-[#0284c7]'
-  },
-  {
-    id: 'usr_3',
-    name: 'Mihiranga Rathnayake',
-    email: 'mihirangarathnayake2005@gmail.com',
-    provider: 'GOOGLE',
-    role: 'USER',
-    trustScore: 100,
-    strikes: 0,
-    warns: 0,
-    lastLogin: '9/27/2026, 10:29:49 PM',
-    status: 'ACTIVE',
-    twoFactor: true,
-    verified: true,
-    avatarColor: 'from-[#ec4899] to-[#be185d]'
-  },
-  {
-    id: 'usr_4',
-    name: 'Mihir SSJ',
-    email: 'ssjmihir@gmail.com',
-    provider: 'GOOGLE',
-    role: 'USER',
-    trustScore: 100,
-    strikes: 0,
-    warns: 0,
-    lastLogin: '9/30/2026, 12:52:01 PM',
-    status: 'ACTIVE',
-    twoFactor: false,
-    verified: true,
-    avatarColor: 'from-[#6366f1] to-[#4338ca]'
-  },
-  {
-    id: 'usr_5',
-    name: 'Hashintha Malith',
-    email: 'hashinthamalith@gmail.com',
-    provider: 'GOOGLE',
-    role: 'USER',
-    trustScore: 100,
-    strikes: 0,
-    warns: 0,
-    lastLogin: '9/20/2026, 11:25:44 AM',
-    status: 'RECOVERABLE',
-    twoFactor: false,
-    verified: true,
-    avatarColor: 'from-[#a855f7] to-[#7e22ce]'
-  },
-  {
-    id: 'usr_6',
-    name: 'Akalanka Rajamantri',
-    email: 'akalankarajamantri@gmail.com',
-    provider: 'GOOGLE',
-    role: 'USER',
-    trustScore: 100,
-    strikes: 0,
-    warns: 0,
-    lastLogin: '9/27/2026, 10:13:25 PM',
-    status: 'ACTIVE',
-    twoFactor: true,
-    verified: true,
-    avatarColor: 'from-[#818cf8] to-[#6366f1]'
-  },
-  {
-    id: 'usr_7',
-    name: 'Malith Rajamanthri (Administrator)',
-    email: 'thegr8malith@gmail.com',
-    provider: 'GOOGLE',
-    role: 'SUPER_ADMIN',
-    trustScore: 100,
-    strikes: 0,
-    warns: 0,
-    lastLogin: '10/4/2026, 2:15:00 PM',
-    status: 'ACTIVE',
-    twoFactor: true,
-    verified: true,
-    avatarColor: 'from-[#f59e0b] to-[#d97706]'
-  },
-  {
-    id: 'usr_8',
-    name: 'SoundWave Ops Admin',
-    email: 'admin@soundwave.com',
-    provider: 'STANDARD',
-    role: 'ADMIN',
-    trustScore: 100,
-    strikes: 0,
-    warns: 0,
-    lastLogin: '10/4/2026, 1:40:12 PM',
-    status: 'ACTIVE',
-    twoFactor: true,
-    verified: true,
-    avatarColor: 'from-[#10b981] to-[#059669]'
-  }
-]
-
 export default function AdminUsersTab({ search = '' }) {
-  const [users, setUsers] = useState(INITIAL_USERS)
-  const [loading, setLoading] = useState(false)
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
   const [activeProvider, setActiveProvider] = useState('All providers')
   const [activeRole, setActiveRole] = useState('All roles')
   const [activeStatus, setActiveStatus] = useState('All statuses')
   const [selectedUser, setSelectedUser] = useState(null)
-  const [actionMenuOpenId, setActionMenuOpenId] = useState(null)
+  const [actionLoadingId, setActionLoadingId] = useState(null)
 
-  // Fetch real users from backend and merge
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const res = await fetch('/api/admin/users').catch(() => null)
-        if (res && res.ok) {
-          const apiUsers = await res.json()
-          if (Array.isArray(apiUsers) && apiUsers.length > 0) {
-            setUsers(prev => {
-              const existingEmails = new Set(prev.map(u => u.email.toLowerCase()))
-              const newItems = apiUsers
-                .filter(u => u.email && !existingEmails.has(u.email.toLowerCase()))
-                .map((u, i) => ({
-                  id: u.id || `api_${i}`,
-                  name: u.display_name || u.email?.split('@')[0] || 'SoundWave Listener',
-                  email: u.email,
-                  provider: u.auth_provider === 'google' ? 'GOOGLE' : 'STANDARD',
-                  role: u.is_admin ? 'ADMIN' : 'USER',
-                  trustScore: 100,
-                  strikes: 0,
-                  warns: 0,
-                  lastLogin: u.created_at ? new Date(u.created_at).toLocaleString() : 'Recent',
-                  status: 'ACTIVE',
-                  twoFactor: false,
-                  verified: true,
-                  avatarColor: 'from-[#6366f1] to-[#ec4899]'
-                }))
-              return [...newItems, ...prev]
-            })
-          }
-        }
-      } catch (_) {}
+  // Fetch real users from PostgreSQL database
+  const loadUsers = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/admin/users')
+      if (res.ok) {
+        const data = await res.json()
+        setUsers(data)
+      } else {
+        toast.error('Failed to load users from database')
+      }
+    } catch (err) {
+      console.error(err)
+      toast.error('Network error loading users')
+    } finally {
+      setLoading(false)
     }
-    fetchUsers()
+  }
+
+  useEffect(() => {
+    loadUsers()
   }, [])
 
-  // Filter pills configuration matching screenshot exactly
+  // Filter pills matching the ImpactEcho design
   const providerFilters = ['All providers', 'Google', 'Standard']
   const roleFilters = ['All roles', 'USER', 'ADMIN', 'SUPER_ADMIN']
   const statusFilters = [
@@ -197,10 +60,10 @@ export default function AdminUsersTab({ search = '' }) {
     'Unverified',
     '2FA enabled',
     'Recoverable deletion',
-    'Recovered'
+    'Banned'
   ]
 
-  // Filter logic
+  // Filter logic on real database records
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
       // Search filter
@@ -233,35 +96,79 @@ export default function AdminUsersTab({ search = '' }) {
         if (activeStatus === 'Unverified' && u.verified) return false
         if (activeStatus === '2FA enabled' && !u.twoFactor) return false
         if (activeStatus === 'Recoverable deletion' && u.status !== 'RECOVERABLE') return false
-        if (activeStatus === 'Recovered' && u.status !== 'RECOVERED') return false
+        if (activeStatus === 'Banned' && u.status !== 'BANNED') return false
       }
 
       return true
     })
   }, [users, search, activeProvider, activeRole, activeStatus])
 
-  // Ban/Unban handler
-  const handleToggleBan = (user, e) => {
+  // Real Ban / Unban API handler
+  const handleToggleBan = async (user, e) => {
     e.stopPropagation()
-    const isBanned = user.status === 'BANNED'
-    const newStatus = isBanned ? 'ACTIVE' : 'BANNED'
-    setUsers(prev =>
-      prev.map(u => (u.id === user.id ? { ...u, status: newStatus } : u))
-    )
-    if (isBanned) {
-      toast.success(`User ${user.email} unbanned successfully!`)
-    } else {
-      toast.error(`User ${user.email} has been banned.`)
+    if (user.email === 'malithrajamanthri@gmail.com') {
+      return toast.error('Super Admin account cannot be banned.')
+    }
+
+    const willBan = user.status !== 'BANNED'
+    setActionLoadingId(user.id)
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/ban`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isBanned: willBan })
+      })
+
+      if (res.ok) {
+        setUsers(prev =>
+          prev.map(u =>
+            u.id === user.id
+              ? {
+                  ...u,
+                  status: willBan ? 'BANNED' : 'ACTIVE',
+                  trustScore: willBan ? 30 : 100,
+                  strikes: willBan ? 1 : 0
+                }
+              : u
+          )
+        )
+        if (willBan) {
+          toast.error(`User ${user.email} has been banned in database.`)
+        } else {
+          toast.success(`User ${user.email} unbanned successfully!`)
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}))
+        toast.error(errData.error || 'Failed to update ban status in database.')
+      }
+    } catch (_) {
+      toast.error('Network error during ban operation.')
+    } finally {
+      setActionLoadingId(null)
     }
   }
 
-  // Restore recoverable user
-  const handleRestoreUser = (user, e) => {
+  // Real Restore user API handler
+  const handleRestoreUser = async (user, e) => {
     e.stopPropagation()
-    setUsers(prev =>
-      prev.map(u => (u.id === user.id ? { ...u, status: 'ACTIVE' } : u))
-    )
-    toast.success(`Account for ${user.email} restored successfully!`)
+    setActionLoadingId(user.id)
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/restore`, {
+        method: 'POST'
+      })
+      if (res.ok) {
+        setUsers(prev =>
+          prev.map(u => (u.id === user.id ? { ...u, status: 'ACTIVE' } : u))
+        )
+        toast.success(`Account for ${user.email} restored successfully!`)
+      } else {
+        toast.error('Failed to restore user.')
+      }
+    } catch (_) {
+      toast.error('Network error during account restore.')
+    } finally {
+      setActionLoadingId(null)
+    }
   }
 
   // Helper for initials
@@ -274,76 +181,104 @@ export default function AdminUsersTab({ search = '' }) {
 
   return (
     <div className="space-y-6">
-      {/* ── Filter Pills Row (Exact Match to ImpactEcho Screenshot) ── */}
-      <div className="flex flex-wrap items-center gap-2 pt-1 pb-2">
-        {/* Providers Group */}
-        <div className="flex items-center gap-1.5 bg-[#0f101d] p-1 rounded-full border border-white/5">
-          {providerFilters.map(p => {
-            const isSelected = activeProvider === p
-            return (
-              <button
-                key={p}
-                onClick={() => setActiveProvider(p)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
-                  isSelected
-                    ? 'bg-[#6366f1] text-white shadow-md shadow-indigo-500/25'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {p}
-              </button>
-            )
-          })}
+      {/* ── Filter Pills Row (Theme Responsive) ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1 pb-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Providers Group */}
+          <div className="flex items-center gap-1.5 bg-[var(--bg2,#0f101d)] p-1 rounded-full border border-[var(--bg3,rgba(255,255,255,0.06))]">
+            {providerFilters.map(p => {
+              const isSelected = activeProvider === p
+              return (
+                <button
+                  key={p}
+                  onClick={() => setActiveProvider(p)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
+                    isSelected
+                      ? 'text-white shadow-md'
+                      : 'text-[var(--text-muted,#9ca3af)] hover:text-[var(--text,#ffffff)] hover:bg-white/5'
+                  }`}
+                  style={
+                    isSelected
+                      ? { backgroundColor: 'var(--brand, #1DB954)', color: '#ffffff' }
+                      : {}
+                  }
+                >
+                  {p}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Roles Group */}
+          <div className="flex items-center gap-1.5 bg-[var(--bg2,#0f101d)] p-1 rounded-full border border-[var(--bg3,rgba(255,255,255,0.06))]">
+            {roleFilters.map(r => {
+              const isSelected = activeRole === r
+              return (
+                <button
+                  key={r}
+                  onClick={() => setActiveRole(r)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
+                    isSelected
+                      ? 'text-white shadow-md'
+                      : 'text-[var(--text-muted,#9ca3af)] hover:text-[var(--text,#ffffff)] hover:bg-white/5'
+                  }`}
+                  style={
+                    isSelected
+                      ? { backgroundColor: 'var(--brand, #1DB954)', color: '#ffffff' }
+                      : {}
+                  }
+                >
+                  {r}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Statuses Group */}
+          <div className="flex items-center gap-1.5 bg-[var(--bg2,#0f101d)] p-1 rounded-full border border-[var(--bg3,rgba(255,255,255,0.06))]">
+            {statusFilters.map(s => {
+              const isSelected = activeStatus === s
+              return (
+                <button
+                  key={s}
+                  onClick={() => setActiveStatus(s)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
+                    isSelected
+                      ? 'text-white shadow-md'
+                      : 'text-[var(--text-muted,#9ca3af)] hover:text-[var(--text,#ffffff)] hover:bg-white/5'
+                  }`}
+                  style={
+                    isSelected
+                      ? { backgroundColor: 'var(--brand, #1DB954)', color: '#ffffff' }
+                      : {}
+                  }
+                >
+                  {s}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
-        {/* Roles Group */}
-        <div className="flex items-center gap-1.5 bg-[#0f101d] p-1 rounded-full border border-white/5">
-          {roleFilters.map(r => {
-            const isSelected = activeRole === r
-            return (
-              <button
-                key={r}
-                onClick={() => setActiveRole(r)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
-                  isSelected
-                    ? 'bg-[#6366f1] text-white shadow-md shadow-indigo-500/25'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {r}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Statuses Group */}
-        <div className="flex items-center gap-1.5 bg-[#0f101d] p-1 rounded-full border border-white/5">
-          {statusFilters.map(s => {
-            const isSelected = activeStatus === s
-            return (
-              <button
-                key={s}
-                onClick={() => setActiveStatus(s)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
-                  isSelected
-                    ? 'bg-[#6366f1] text-white shadow-md shadow-indigo-500/25'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {s}
-              </button>
-            )
-          })}
-        </div>
+        {/* Refresh button */}
+        <button
+          onClick={loadUsers}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[var(--bg2,#141525)] border border-[var(--bg3,rgba(255,255,255,0.1))] text-xs font-semibold text-[var(--text-muted,#9ca3af)] hover:text-[var(--text,#ffffff)] transition-all disabled:opacity-50"
+          title="Refresh database records"
+        >
+          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+          <span>Refresh</span>
+        </button>
       </div>
 
-      {/* ── Table Container Matching Screenshot ── */}
-      <div className="w-full bg-[#0d0e19] rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
+      {/* ── Table Container Matching Screenshot (Theme Adapted) ── */}
+      <div className="w-full bg-[var(--bg2,#0d0e19)] rounded-2xl border border-[var(--bg3,rgba(255,255,255,0.06))] overflow-hidden shadow-2xl transition-colors duration-300">
         {/* Table Head */}
-        <div className="grid grid-cols-12 px-6 py-4 border-b border-white/5 text-[11px] font-extrabold uppercase tracking-wider text-gray-400 select-none">
+        <div className="grid grid-cols-12 px-6 py-4 border-b border-[var(--bg3,rgba(255,255,255,0.06))] text-[11px] font-extrabold uppercase tracking-wider text-[var(--text-muted,#9ca3af)] select-none">
           <div className="col-span-12 md:col-span-4">
             <span className="block">USER</span>
-            <span className="block text-[10px] text-gray-600 font-semibold mt-0.5">ACTIONS</span>
+            <span className="block text-[10px] text-gray-500 font-semibold mt-0.5">ACTIONS</span>
           </div>
           <div className="hidden md:block md:col-span-2">PROVIDER</div>
           <div className="hidden md:block md:col-span-2">TRUST</div>
@@ -352,19 +287,32 @@ export default function AdminUsersTab({ search = '' }) {
         </div>
 
         {/* Table Body */}
-        <div className="divide-y divide-white/5">
-          {filteredUsers.length === 0 ? (
+        <div className="divide-y divide-[var(--bg3,rgba(255,255,255,0.06))]">
+          {loading ? (
             <div className="py-20 text-center text-gray-500">
-              <UserX size={44} className="mx-auto mb-3 opacity-20 text-indigo-400" />
-              <p className="text-sm font-semibold text-gray-400">No users found matching your filters</p>
-              <p className="text-xs text-gray-600 mt-1">Try resetting the provider, role, or status pills.</p>
+              <div
+                className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3"
+                style={{ borderColor: 'var(--brand, #1DB954)', borderTopColor: 'transparent' }}
+              />
+              <p className="text-xs font-semibold text-[var(--text-muted,#9ca3af)]">
+                Loading registered database users...
+              </p>
+            </div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="py-20 text-center text-gray-500">
+              <UserX size={44} className="mx-auto mb-3 opacity-20 text-[var(--brand,#1DB954)]" />
+              <p className="text-sm font-semibold text-[var(--text-muted,#9ca3af)]">
+                No users found in database
+              </p>
+              <p className="text-xs text-gray-500 mt-1">Try resetting the provider, role, or status pills.</p>
               <button
                 onClick={() => {
                   setActiveProvider('All providers')
                   setActiveRole('All roles')
                   setActiveStatus('All statuses')
                 }}
-                className="mt-4 px-4 py-1.5 rounded-full bg-[#6366f1] text-white text-xs font-semibold hover:bg-[#4f46e5] transition-all"
+                className="mt-4 px-4 py-1.5 rounded-full text-white text-xs font-semibold hover:brightness-110 transition-all"
+                style={{ backgroundColor: 'var(--brand, #1DB954)' }}
               >
                 Reset All Filters
               </button>
@@ -374,66 +322,92 @@ export default function AdminUsersTab({ search = '' }) {
               const initials = getInitials(u.name)
               const isBanned = u.status === 'BANNED'
               const isRecoverable = u.status === 'RECOVERABLE'
+              const isActionLoading = actionLoadingId === u.id
+              const isSuper = u.email === 'malithrajamanthri@gmail.com'
 
               return (
                 <div
                   key={u.id}
                   onClick={() => setSelectedUser(u)}
-                  className="grid grid-cols-12 px-6 py-4 items-center hover:bg-white/[0.02] transition-colors cursor-pointer group"
+                  className="grid grid-cols-12 px-6 py-4 items-center hover:bg-white/[0.03] transition-colors cursor-pointer group"
                 >
                   {/* User Column */}
                   <div className="col-span-12 md:col-span-4 flex items-center gap-3.5 min-w-0 pr-4">
-                    {/* Circle Avatar matching screenshot */}
-                    <div
-                      className={`w-10 h-10 rounded-full bg-gradient-to-tr ${u.avatarColor || 'from-indigo-600 to-purple-600'} text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-md ring-1 ring-white/10`}
-                    >
-                      {initials}
-                    </div>
+                    {/* Real Profile Image or Circle Initial Badge */}
+                    {u.profilePicUrl ? (
+                      <img
+                        src={u.profilePicUrl}
+                        alt={u.name}
+                        className="w-10 h-10 rounded-full object-cover shrink-0 shadow-md ring-1 ring-white/10"
+                        onError={e => {
+                          e.target.style.display = 'none'
+                        }}
+                      />
+                    ) : (
+                      <div
+                        className={`w-10 h-10 rounded-full text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-md ring-1 ring-white/10`}
+                        style={{
+                          background: isSuper
+                            ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+                            : `linear-gradient(135deg, var(--brand, #1DB954), #8b5cf6)`
+                        }}
+                      >
+                        {initials}
+                      </div>
+                    )}
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <p className="text-xs md:text-sm font-bold text-white truncate group-hover:text-indigo-300 transition-colors">
+                        <p className="text-xs md:text-sm font-bold text-[var(--text,#ffffff)] truncate transition-colors">
                           {u.name}
                         </p>
-                        {u.role === 'SUPER_ADMIN' && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            SUPER
+                        {isSuper && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                            <span>SUPER</span>
+                            <Sparkles size={9} />
                           </span>
                         )}
-                        {u.role === 'ADMIN' && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                        {!isSuper && u.role === 'ADMIN' && (
+                          <span
+                            className="px-1.5 py-0.5 rounded text-[9px] font-extrabold border"
+                            style={{
+                              backgroundColor: 'rgba(var(--brand-rgb, 29, 185, 84), 0.15)',
+                              color: 'var(--brand, #1DB954)',
+                              borderColor: 'var(--brand, #1DB954)'
+                            }}
+                          >
                             ADMIN
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-400 truncate mt-0.5">{u.email}</p>
+                      <p className="text-xs text-[var(--text-muted,#9ca3af)] truncate mt-0.5">{u.email}</p>
                     </div>
                   </div>
 
                   {/* Provider Column */}
                   <div className="hidden md:block md:col-span-2">
-                    <p className="text-xs font-bold text-gray-200 uppercase tracking-wide">
+                    <p className="text-xs font-bold text-[var(--text,#ffffff)] uppercase tracking-wide">
                       {u.provider}
                     </p>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mt-0.5">
-                      {u.role}
+                    <p className="text-[11px] font-semibold text-[var(--text-muted,#9ca3af)] uppercase tracking-wide mt-0.5">
+                      {isSuper ? 'SUPER_ADMIN' : u.role}
                     </p>
                   </div>
 
                   {/* Trust Column */}
                   <div className="hidden md:block md:col-span-2">
-                    <p className="text-xs font-bold text-emerald-400">
+                    <p className={`text-xs font-bold ${isBanned ? 'text-rose-400' : 'text-emerald-400'}`}>
                       Score: {u.trustScore}
                     </p>
-                    <p className="text-[11px] font-medium text-gray-500 mt-0.5">
+                    <p className="text-[11px] font-medium text-[var(--text-muted,#9ca3af)] mt-0.5">
                       {u.strikes} Strikes, {u.warns} Warns
                     </p>
                   </div>
 
                   {/* Last Active Column */}
                   <div className="hidden md:block md:col-span-2">
-                    <p className="text-[11px] font-medium text-gray-500">Last login</p>
-                    <p className="text-xs font-medium text-gray-300 mt-0.5 truncate">
+                    <p className="text-[11px] font-medium text-[var(--text-muted,#9ca3af)]">Last login</p>
+                    <p className="text-xs font-medium text-[var(--text,#ffffff)] mt-0.5 truncate">
                       {u.lastLogin}
                     </p>
                   </div>
@@ -456,32 +430,31 @@ export default function AdminUsersTab({ search = '' }) {
                           BANNED
                         </span>
                       )}
-                      {u.status === 'RECOVERED' && (
-                        <span className="text-xs font-extrabold text-cyan-400 tracking-wider">
-                          RECOVERED
-                        </span>
-                      )}
                     </div>
 
-                    {/* Action button on right matching screenshot "Ban User" in red */}
+                    {/* Action button on right */}
                     <div className="flex items-center gap-2">
-                      {isRecoverable ? (
+                      {isSuper ? (
+                        <span className="text-xs font-bold text-amber-400">Owner</span>
+                      ) : isRecoverable ? (
                         <button
+                          disabled={isActionLoading}
                           onClick={e => handleRestoreUser(u, e)}
-                          className="text-xs font-bold text-emerald-400 hover:text-emerald-300 hover:underline transition-colors"
+                          className="text-xs font-bold text-emerald-400 hover:text-emerald-300 hover:underline transition-colors disabled:opacity-50"
                         >
-                          Restore
+                          {isActionLoading ? 'Restoring...' : 'Restore'}
                         </button>
                       ) : (
                         <button
+                          disabled={isActionLoading}
                           onClick={e => handleToggleBan(u, e)}
-                          className={`text-xs font-semibold transition-colors ${
+                          className={`text-xs font-semibold transition-colors disabled:opacity-50 ${
                             isBanned
                               ? 'text-emerald-400 hover:text-emerald-300 hover:underline'
                               : 'text-rose-500 hover:text-rose-400 hover:underline'
                           }`}
                         >
-                          {isBanned ? 'Unban User' : 'Ban User'}
+                          {isActionLoading ? 'Updating...' : isBanned ? 'Unban User' : 'Ban User'}
                         </button>
                       )}
                     </div>
@@ -500,20 +473,33 @@ export default function AdminUsersTab({ search = '' }) {
           onClick={() => setSelectedUser(null)}
         >
           <div
-            className="w-full max-w-lg bg-[#0d0e19] border border-white/10 rounded-2xl p-6 shadow-2xl space-y-6"
+            className="w-full max-w-lg bg-[var(--bg2,#0d0e19)] border border-[var(--bg3,rgba(255,255,255,0.1))] rounded-2xl p-6 shadow-2xl space-y-6"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-white/5 pb-4">
+            <div className="flex items-center justify-between border-b border-[var(--bg3,rgba(255,255,255,0.06))] pb-4">
               <div className="flex items-center gap-3">
-                <div
-                  className={`w-12 h-12 rounded-full bg-gradient-to-tr ${selectedUser.avatarColor} text-white font-extrabold text-sm flex items-center justify-center shadow-lg`}
-                >
-                  {getInitials(selectedUser.name)}
-                </div>
+                {selectedUser.profilePicUrl ? (
+                  <img
+                    src={selectedUser.profilePicUrl}
+                    alt={selectedUser.name}
+                    className="w-12 h-12 rounded-full object-cover shadow-lg ring-1 ring-white/10"
+                  />
+                ) : (
+                  <div
+                    className="w-12 h-12 rounded-full text-white font-extrabold text-sm flex items-center justify-center shadow-lg"
+                    style={{
+                      background: selectedUser.email === 'malithrajamanthri@gmail.com'
+                        ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+                        : `linear-gradient(135deg, var(--brand, #1DB954), #8b5cf6)`
+                    }}
+                  >
+                    {getInitials(selectedUser.name)}
+                  </div>
+                )}
                 <div>
-                  <h3 className="text-base font-bold text-white">{selectedUser.name}</h3>
-                  <p className="text-xs text-gray-400">{selectedUser.email}</p>
+                  <h3 className="text-base font-bold text-[var(--text,#ffffff)]">{selectedUser.name}</h3>
+                  <p className="text-xs text-[var(--text-muted,#9ca3af)]">{selectedUser.email}</p>
                 </div>
               </div>
 
@@ -527,45 +513,55 @@ export default function AdminUsersTab({ search = '' }) {
 
             {/* Quick Metrics */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="p-3 bg-[#141525] rounded-xl border border-white/5 text-center">
+              <div className="p-3 bg-[var(--bg,#141525)] rounded-xl border border-white/5 text-center">
                 <p className="text-[10px] text-gray-500 font-bold uppercase">Provider</p>
-                <p className="text-xs font-extrabold text-white mt-1">{selectedUser.provider}</p>
+                <p className="text-xs font-extrabold text-[var(--text,#ffffff)] mt-1">{selectedUser.provider}</p>
               </div>
-              <div className="p-3 bg-[#141525] rounded-xl border border-white/5 text-center">
+              <div className="p-3 bg-[var(--bg,#141525)] rounded-xl border border-white/5 text-center">
                 <p className="text-[10px] text-gray-500 font-bold uppercase">Trust Score</p>
-                <p className="text-xs font-extrabold text-emerald-400 mt-1">
+                <p
+                  className={`text-xs font-extrabold mt-1 ${
+                    selectedUser.status === 'BANNED' ? 'text-rose-400' : 'text-emerald-400'
+                  }`}
+                >
                   {selectedUser.trustScore} / 100
                 </p>
               </div>
-              <div className="p-3 bg-[#141525] rounded-xl border border-white/5 text-center">
+              <div className="p-3 bg-[var(--bg,#141525)] rounded-xl border border-white/5 text-center">
                 <p className="text-[10px] text-gray-500 font-bold uppercase">Status</p>
-                <p className="text-xs font-extrabold text-indigo-400 mt-1">{selectedUser.status}</p>
+                <p className="text-xs font-extrabold text-emerald-400 mt-1">{selectedUser.status}</p>
               </div>
             </div>
 
-            {/* SoundWave Music Activity Info */}
-            <div className="space-y-3 bg-[#141525]/60 p-4 rounded-xl border border-white/5 text-xs">
-              <div className="flex justify-between text-gray-400">
-                <span>Account Role</span>
-                <span className="font-bold text-white">{selectedUser.role}</span>
-              </div>
-              <div className="flex justify-between text-gray-400">
-                <span>Two-Factor Authentication</span>
-                <span className="font-bold text-white">
-                  {selectedUser.twoFactor ? 'Enabled (Google Authenticator)' : 'Disabled'}
+            {/* SoundWave Music Activity Info (Real Database Data) */}
+            <div className="space-y-3 bg-[var(--bg,#141525)]/60 p-4 rounded-xl border border-white/5 text-xs">
+              <div className="flex justify-between text-[var(--text-muted,#9ca3af)]">
+                <span>Database User ID</span>
+                <span className="font-mono text-[11px] text-[var(--text,#ffffff)] truncate max-w-[240px]">
+                  {selectedUser.id}
                 </span>
               </div>
-              <div className="flex justify-between text-gray-400">
-                <span>SoundWave Music Stream Hours</span>
-                <span className="font-bold text-emerald-400">148.5 hrs</span>
+              <div className="flex justify-between text-[var(--text-muted,#9ca3af)]">
+                <span>Account Role</span>
+                <span className="font-bold text-[var(--text,#ffffff)]">
+                  {selectedUser.email === 'malithrajamanthri@gmail.com' ? 'SUPER_ADMIN' : selectedUser.role}
+                </span>
               </div>
-              <div className="flex justify-between text-gray-400">
-                <span>Curated Playlists</span>
-                <span className="font-bold text-white">6 playlists</span>
+              <div className="flex justify-between text-[var(--text-muted,#9ca3af)]">
+                <span>Subscription Tier</span>
+                <span className="font-bold uppercase text-emerald-400">{selectedUser.subscriptionTier}</span>
               </div>
-              <div className="flex justify-between text-gray-400">
-                <span>Last Active Session</span>
-                <span className="font-bold text-gray-300">{selectedUser.lastLogin}</span>
+              <div className="flex justify-between text-[var(--text-muted,#9ca3af)]">
+                <span>Total Tracks Streamed</span>
+                <span className="font-bold" style={{ color: 'var(--brand, #1DB954)' }}>
+                  {selectedUser.totalPlayed} tracks
+                </span>
+              </div>
+              <div className="flex justify-between text-[var(--text-muted,#9ca3af)]">
+                <span>Member Since</span>
+                <span className="font-bold text-[var(--text,#ffffff)]">
+                  {new Date(selectedUser.createdAt).toLocaleDateString()}
+                </span>
               </div>
             </div>
 
@@ -573,24 +569,26 @@ export default function AdminUsersTab({ search = '' }) {
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 onClick={() => setSelectedUser(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:text-white hover:bg-white/5"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-[var(--text-muted,#9ca3af)] hover:text-white hover:bg-white/5"
               >
                 Close
               </button>
 
-              <button
-                onClick={e => {
-                  handleToggleBan(selectedUser, e)
-                  setSelectedUser(null)
-                }}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md ${
-                  selectedUser.status === 'BANNED'
-                    ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                    : 'bg-rose-600 text-white hover:bg-rose-500'
-                }`}
-              >
-                {selectedUser.status === 'BANNED' ? 'Unban Account' : 'Ban Account'}
-              </button>
+              {selectedUser.email !== 'malithrajamanthri@gmail.com' && (
+                <button
+                  onClick={e => {
+                    handleToggleBan(selectedUser, e)
+                    setSelectedUser(null)
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md ${
+                    selectedUser.status === 'BANNED'
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                      : 'bg-rose-600 text-white hover:bg-rose-500'
+                  }`}
+                >
+                  {selectedUser.status === 'BANNED' ? 'Unban Account' : 'Ban Account'}
+                </button>
+              )}
             </div>
           </div>
         </div>

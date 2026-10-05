@@ -61,6 +61,7 @@ function LyricsPanel({ song, currentTime, onClose, expanded = false }) {
   const [err, setErr] = useState(false)
   const [synced, setSynced] = useState(false)
   const activeRef = useRef(null)
+  const listRef = useRef(null)
 
   useEffect(() => {
     if (!song) return
@@ -76,13 +77,21 @@ function LyricsPanel({ song, currentTime, onClose, expanded = false }) {
   }, [song?.id])
 
   const activeIdx = synced ? lines.reduce((acc, l, i) => l.time <= currentTime ? i : acc, -1) : -1
-  useEffect(() => { activeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, [activeIdx])
+
+  // Strictly container-scoped scroll — prevents moving or shifting the parent player window
+  useEffect(() => {
+    if (!activeRef.current || !listRef.current) return
+    const container = listRef.current
+    const el = activeRef.current
+    const target = el.offsetTop - (container.clientHeight / 2) + (el.clientHeight / 2)
+    container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' })
+  }, [activeIdx])
 
   if (expanded) {
     return (
       <div className="flex flex-col h-full overflow-hidden">
         {synced && <p className="text-sm text-brand mb-4 font-medium shrink-0">● Live synced</p>}
-        <div className="overflow-y-auto flex-1 mobile-scroll">
+        <div ref={listRef} className="overflow-y-auto flex-1 mobile-scroll">
           {loading ? <div className="flex items-center justify-center h-32"><div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin" /></div>
             : err ? <div className="flex flex-col items-center justify-center h-32 text-gray-600"><Mic2 size={40} className="mb-2 opacity-30" /><p>Lyrics not found</p></div>
             : synced ? (
@@ -112,7 +121,7 @@ function LyricsPanel({ song, currentTime, onClose, expanded = false }) {
         </div>
         <button onClick={onClose} className="touch-target text-gray-400 hover:text-white ml-4 shrink-0"><X size={20} /></button>
       </div>
-      <div className="overflow-y-auto flex-1 px-5 py-4 mobile-scroll">
+      <div ref={listRef} className="overflow-y-auto flex-1 px-5 py-4 mobile-scroll">
         {loading ? <div className="flex items-center justify-center h-full"><div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin" /></div>
           : err ? <div className="flex flex-col items-center justify-center h-full text-gray-600"><Mic2 size={40} className="mb-2 opacity-30" /><p>Lyrics not found</p></div>
           : synced ? (
@@ -189,10 +198,19 @@ function SleepTimerPanel({ onClose, onSetTimer, currentTimer, timeLeft }) {
 
 function QueuePanel({ queue, queueIndex, onClose, onPlay, expanded = false }) {
   const activeRef = useRef(null)
-  useEffect(() => { activeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, [queueIndex])
+  const listRef = useRef(null)
+
+  // Strictly container-scoped scroll — prevents moving or shifting the parent player window
+  useEffect(() => {
+    if (!activeRef.current || !listRef.current) return
+    const container = listRef.current
+    const el = activeRef.current
+    const target = el.offsetTop - (container.clientHeight / 2) + (el.clientHeight / 2)
+    container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' })
+  }, [queueIndex])
 
   const inner = (
-    <div className="overflow-y-auto flex-1 py-1 mobile-scroll">
+    <div ref={listRef} className="overflow-y-auto flex-1 py-1 mobile-scroll">
       {queue.map((song, i) => (
         <div key={`${song.id}-${i}`} ref={i === queueIndex ? activeRef : null}
           onClick={() => onPlay(song, queue, i)}
@@ -237,8 +255,26 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
   const [viewMode, setViewMode] = useState('audio')
   const [videoId, setVideoId] = useState(null)
   const [loadingVideo, setLoadingVideo] = useState(false)
+  const containerRef = useRef(null)
+  const scrollBodyRef = useRef(null)
   const VolumeIcon = isMuted || volume === 0 ? VolumeX : volume < 50 ? Volume1 : Volume2
   const RepeatIcon = repeatMode === 'one' ? Repeat1 : Repeat
+
+  // Lock body scroll and anchor viewport at top whenever full player is mounted
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.scrollTo(0, 0)
+    return () => {
+      document.body.style.overflow = prevOverflow
+    }
+  }, [])
+
+  // Keep parent player anchored to top when panel (lyrics/queue) opens or closes
+  useEffect(() => {
+    if (containerRef.current) containerRef.current.scrollTop = 0
+    window.scrollTo(0, 0)
+  }, [panel])
 
   useEffect(() => {
     if (viewMode === 'video' && !videoId && currentSong) {
@@ -252,7 +288,7 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
   }, [viewMode, currentSong, videoId])
 
   return (
-    <div className="mobile-expanded-player slide-up flex flex-col bg-black overflow-hidden">
+    <div ref={containerRef} className="mobile-expanded-player slide-up flex flex-col bg-black overflow-hidden overscroll-none">
       {/* Blurred background */}
       <div className="absolute inset-0">
         <img src={currentSong.coverUrl || ''} alt="" className="w-full h-full object-cover scale-110"
@@ -263,7 +299,7 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
 
       <div className="relative z-10 flex flex-col h-full mobile-safe-area">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-4 shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 shrink-0 bg-transparent">
           <button onClick={onClose}
             className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors touch-target">
             <ChevronDown size={22} />
@@ -280,7 +316,7 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto mobile-scroll px-4 sm:px-6">
+        <div ref={scrollBodyRef} className="flex-1 overflow-y-auto mobile-scroll px-4 sm:px-6">
           <div className="flex flex-col items-center gap-5 max-w-sm mx-auto pb-4">
 
             {/* Art / Video */}
@@ -334,12 +370,12 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
               </button>
               <button
                 type="button"
-                onClick={() => switchEngine?.(engine === 'youtube' ? 'howler' : 'youtube')}
-                title="Click to toggle Studio EQ / YouTube stream"
+                onClick={() => switchEngine?.(engine === 'youtube' ? 'studio' : 'youtube')}
+                title="Switch audio engine (10-Band EQ active across all engines)"
                 className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-all hover:scale-105 active:scale-95 cursor-pointer ${
                   currentSong.source === 'jamendo' ? 'bg-brand/20 text-brand' : 'bg-purple-500/20 text-purple-400'
                 }`}>
-                {currentSong.source === 'jamendo' ? 'Full Track (Studio EQ)' : engine === 'youtube' ? 'Full Track (YouTube)' : 'Studio EQ Audio'}
+                {currentSong.source === 'jamendo' ? 'Studio EQ (Lossless)' : engine === 'youtube' ? 'YouTube Stream (EQ Active)' : 'Studio Audio (EQ Active)'}
               </button>
               <button
                 onClick={() => onOpenQuickAdd?.()}
@@ -677,14 +713,14 @@ export default function Player() {
               {currentSong.source === 'itunes' && (
                 <button
                   type="button"
-                  onClick={() => switchEngine?.(engine === 'youtube' ? 'howler' : 'youtube')}
-                  title={engine === 'youtube' ? 'Switch to Studio Web Audio (Full EQ)' : 'Switch to Full YouTube Stream'}
+                  onClick={() => switchEngine?.(engine === 'youtube' ? 'studio' : 'youtube')}
+                  title="Switch audio engine (10-Band EQ active across all engines)"
                   className="text-[11px] px-2 py-0.5 rounded-full font-semibold transition-all hover:scale-105 active:scale-95 bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 cursor-pointer"
                 >
-                  {engine === 'youtube' ? 'Full track (YT)' : 'Studio EQ'}
+                  {engine === 'youtube' ? 'YouTube (EQ Active)' : 'Studio (EQ Active)'}
                 </button>
               )}
-              {currentSong.source === 'jamendo' && <span className="text-xs text-brand font-medium">Full track (Studio EQ)</span>}
+              {currentSong.source === 'jamendo' && <span className="text-xs text-brand font-medium">Studio EQ (Lossless)</span>}
             </div>
             <button onClick={handleLike} className={`touch-target shrink-0 transition-all active:scale-125 ${liked ? 'text-brand' : 'text-gray-500 hover:text-white'}`}>
               <Heart size={16} fill={liked ? 'currentColor' : 'none'} />

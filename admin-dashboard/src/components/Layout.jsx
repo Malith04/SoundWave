@@ -29,7 +29,7 @@ export default function Layout() {
         {/* Brand Header */}
         <div className="p-5 border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <SoundWaveLogo size={32} animated glow />
+            <SoundWaveLogo size={36} animated glow />
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="font-extrabold text-sm tracking-tight font-display text-white">SoundWave</span>

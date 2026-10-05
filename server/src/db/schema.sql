@@ -31,6 +31,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS listening_vibe VARCHAR(100) DEFAULT '
 ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_scheduled_for TIMESTAMPTZ DEFAULT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN DEFAULT false;
 
 -- ── 2. Songs Table ──────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS songs (

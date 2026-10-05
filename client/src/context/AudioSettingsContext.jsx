@@ -2,6 +2,28 @@ import { createContext, useContext, useState, useEffect, useRef, useCallback } f
 import { Howler } from 'howler'
 import { useAuth } from './AuthContext'
 
+if (typeof window !== 'undefined' && Howler) {
+  Howler.autoSuspend = false
+  Howler.autoUnlock = true
+
+  if (Howler._obtainHtml5Audio) {
+    const origObtain = Howler._obtainHtml5Audio
+    Howler._obtainHtml5Audio = function() {
+      const audio = origObtain.call(this)
+      if (audio) {
+        audio.crossOrigin = 'anonymous'
+        audio.preload = 'auto'
+      }
+      return audio
+    }
+  }
+  if (Array.isArray(Howler._html5AudioPool)) {
+    Howler._html5AudioPool.forEach(node => {
+      if (node) node.crossOrigin = 'anonymous'
+    })
+  }
+}
+
 export const DEFAULT = {
   eq: { 32:0, 64:0, 125:0, 250:0, 500:0, 1000:0, 2000:0, 4000:0, 8000:0, 16000:0 },
   eqEnabled: false,

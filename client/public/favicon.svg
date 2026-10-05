@@ -1,70 +1,103 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <defs>
-    <!-- Background Gradient -->
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0f1117" />
-      <stop offset="50%" stop-color="#141721" />
-      <stop offset="100%" stop-color="#090a0d" />
+    <!-- Deep Obsidian Titanium Chassis -->
+    <radialGradient id="favShieldGrad" cx="30%" cy="25%" r="85%">
+      <stop offset="0%" stop-color="#182533" />
+      <stop offset="45%" stop-color="#0b121b" />
+      <stop offset="100%" stop-color="#04060a" />
+    </radialGradient>
+
+    <!-- Metallic Chromatic Rim -->
+    <linearGradient id="favRimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255, 255, 255, 0.6)" />
+      <stop offset="30%" stop-color="#00FFA3" />
+      <stop offset="70%" stop-color="#8B5CF6" />
+      <stop offset="100%" stop-color="rgba(255, 255, 255, 0.2)" />
     </linearGradient>
 
-    <!-- Emerald to Electric Cyan Gradient -->
-    <linearGradient id="waveGrad" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#10b981" />
-      <stop offset="50%" stop-color="#1DB954" />
-      <stop offset="100%" stop-color="#00f59b" />
+    <!-- Primary Cyber Emerald Wave Ribbon -->
+    <linearGradient id="favWaveEmerald" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00FFA3" />
+      <stop offset="45%" stop-color="#1DB954" />
+      <stop offset="100%" stop-color="#00D26A" />
     </linearGradient>
 
-    <!-- Secondary Wave Gradient -->
-    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#00f59b" />
-      <stop offset="50%" stop-color="#06b6d4" />
-      <stop offset="100%" stop-color="#3b82f6" />
+    <!-- Secondary Cosmic Ultraviolet Wave Ribbon -->
+    <linearGradient id="favWaveViolet" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#60A5FA" />
+      <stop offset="45%" stop-color="#8B5CF6" />
+      <stop offset="100%" stop-color="#C084FC" />
     </linearGradient>
 
-    <!-- Subtle Glow Filter -->
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="3.5" result="blur" />
+    <!-- Equalizer Rays -->
+    <linearGradient id="favRayEmerald" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00FFA3" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#1DB954" stop-opacity="0.1" />
+    </linearGradient>
+    <linearGradient id="favRayViolet" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#C084FC" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#8B5CF6" stop-opacity="0.1" />
+    </linearGradient>
+
+    <!-- Core Glow -->
+    <filter id="favCoreGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="1.5" result="blur" />
       <feComposite in="SourceGraphic" in2="blur" operator="over" />
     </filter>
   </defs>
 
-  <!-- Squircle Base with Metallic Border -->
-  <rect width="96" height="96" x="2" y="2" rx="26" fill="url(#bgGrad)" stroke="rgba(255,255,255,0.15)" stroke-width="1.5" />
+  <!-- 1. Aerodynamic Obsidian Squircle Chassis -->
+  <rect
+    x="3"
+    y="3"
+    width="94"
+    height="94"
+    rx="28"
+    fill="url(#favShieldGrad)"
+    stroke="url(#favRimGrad)"
+    stroke-width="2.5"
+  />
 
-  <!-- Ambient Internal Glow -->
-  <circle cx="50" cy="50" r="32" fill="#1DB954" opacity="0.16" filter="url(#glow)" />
+  <!-- 2. Concentric Acoustic Waves -->
+  <circle cx="50" cy="50" r="33" stroke="rgba(0, 255, 163, 0.12)" stroke-width="1.2" stroke-dasharray="4 4" fill="none" />
+  <circle cx="50" cy="50" r="22" stroke="rgba(139, 92, 246, 0.15)" stroke-width="1" fill="none" />
 
-  <!-- Stylized Harmonic SoundWave 'S' & Frequency Bars -->
-  <g filter="url(#glow)">
-    <!-- Harmonic Audio Wave Bars -->
-    <!-- Bar 1 (Leftmost) -->
-    <rect x="22" y="42" width="6.5" height="16" rx="3.25" fill="url(#waveGrad)" opacity="0.75" />
-    
-    <!-- Bar 2 (Mid-Left) -->
-    <rect x="33" y="30" width="6.5" height="40" rx="3.25" fill="url(#waveGrad)" opacity="0.9" />
-    
-    <!-- Bar 3 (Center Apex) -->
-    <rect x="44" y="19" width="6.5" height="62" rx="3.25" fill="url(#waveGrad)" />
-    
-    <!-- Bar 4 (Mid-Right) -->
-    <rect x="55" y="26" width="6.5" height="48" rx="3.25" fill="url(#cyanGrad)" />
-    
-    <!-- Bar 5 (Rightmost Peak) -->
-    <rect x="66" y="37" width="6.5" height="26" rx="3.25" fill="url(#cyanGrad)" opacity="0.85" />
+  <!-- 3. Dynamic Equalizer Sound Rays -->
+  <line x1="24" y1="42" x2="24" y2="58" stroke="url(#favRayEmerald)" stroke-width="2.6" stroke-linecap="round" opacity="0.45" />
+  <line x1="36" y1="34" x2="36" y2="66" stroke="url(#favRayEmerald)" stroke-width="3" stroke-linecap="round" opacity="0.75" />
+  <line x1="64" y1="34" x2="64" y2="66" stroke="url(#favRayViolet)" stroke-width="3" stroke-linecap="round" opacity="0.75" />
+  <line x1="76" y1="42" x2="76" y2="58" stroke="url(#favRayViolet)" stroke-width="2.6" stroke-linecap="round" opacity="0.45" />
 
-    <!-- Bar 6 (Trailing Whisper) -->
-    <rect x="77" y="44" width="5.5" height="12" rx="2.75" fill="url(#cyanGrad)" opacity="0.6" />
+  <!-- 4. Secondary Wave Ribbon (Cosmic Ultraviolet) -->
+  <path
+    d="M 16,48 C 22,67 30,74 36,74 C 42.5,74 47,60 50,50 C 53,40 57.5,26 64,26 C 70,26 78,33 84,52"
+    stroke="url(#favWaveViolet)"
+    stroke-width="4.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
 
-    <!-- Kinetic Sine Wave Arc intersecting the audio bars (representing the continuous acoustic wave) -->
-    <path d="M 18 50 C 28 34, 38 66, 50 50 C 62 34, 72 66, 82 50" 
-          fill="none" 
-          stroke="#ffffff" 
-          stroke-width="2.5" 
-          stroke-linecap="round" 
-          stroke-dasharray="1 3"
-          opacity="0.45" />
+  <!-- 5. Primary Wave Ribbon (Cyber Emerald) -->
+  <path
+    d="M 16,52 C 22,33 30,26 36,26 C 42.5,26 47,40 50,50 C 53,60 57.5,74 64,74 C 70,74 78,67 84,48"
+    stroke="url(#favWaveEmerald)"
+    stroke-width="4.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
 
-    <!-- Center Energy Pulsar Point -->
-    <circle cx="50" cy="50" r="3" fill="#ffffff" opacity="0.95" />
-  </g>
+  <!-- 6. Harmonic Apex Nodes -->
+  <circle cx="36" cy="26" r="2.6" fill="#00FFA3" filter="url(#favCoreGlow)" />
+  <circle cx="64" cy="26" r="2.6" fill="#C084FC" filter="url(#favCoreGlow)" />
+
+  <!-- 7. Central Quantum Pulsar Singularity -->
+  <path
+    d="M 50 38 Q 50 50 38 50 Q 50 50 50 62 Q 50 50 62 50 Q 50 50 50 38 Z"
+    fill="#FFFFFF"
+    filter="url(#favCoreGlow)"
+  />
+  <circle cx="50" cy="50" r="3.6" fill="#FFFFFF" />
+  <circle cx="50" cy="50" r="1.6" fill="#00FFA3" />
 </svg>
