@@ -2,11 +2,11 @@ import nodemailer from 'nodemailer'
 import crypto from 'crypto'
 import dotenv from 'dotenv'
 import path from 'path'
-import { fileURLToPath } from 'url'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-dotenv.config({ path: path.resolve(__dirname, '../../.env') })
 dotenv.config()
+try {
+  dotenv.config({ path: path.resolve(process.cwd(), 'server/.env') })
+} catch (_) {}
 
 /**
  * Generate a cryptographically secure 8-digit OTP code (e.g., "74920153")
