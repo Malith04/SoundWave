@@ -84,7 +84,9 @@ function darkenHex(hex, amount) {
   } catch { return hex }
 }
 
-export const EQ_BANDS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
+import { audioEngine, EQ_BANDS } from '../services/audioEngine'
+
+export { EQ_BANDS }
 
 const AudioSettingsContext = createContext(null)
 
@@ -94,20 +96,6 @@ export function AudioSettingsProvider({ children }) {
 
   const [settings, setSettings] = useState(() => load(settingsKey))
   const settingsRef = useRef(settings)
-
-  // Web Audio DSP nodes graph
-  const nodes = useRef({
-    built: false,
-    bass: null,
-    eq: {},
-    compressor: null,
-    splitter: null,
-    merger: null,
-    directL: null,
-    crossL: null,
-    directR: null,
-    crossR: null,
-  })
 
   // Sync settings when switching user account
   useEffect(() => {
@@ -137,149 +125,7 @@ export function AudioSettingsProvider({ children }) {
 
   // ── Build & Apply the Web Audio chain ───────────────────────
   const applyAudioChain = useCallback((s) => {
-    const ctx = Howler.ctx
-    if (!ctx) return
-
-    // Auto-resume audio context if browser suspended it
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {})
-    }
-
-    const n = nodes.current
-
-    // Build DSP graph if not built or if AudioContext was re-created
-    if (!n.built || !n.bass) {
-      try {
-        console.log('Building high-fidelity audio DSP graph...')
-
-        // 1. Bass boost (lowshelf 100Hz)
-        n.bass = ctx.createBiquadFilter()
-        n.bass.type = 'lowshelf'
-        n.bass.frequency.value = 100
-        n.bass.gain.value = 0
-
-        // 2. 10-band Equalizer
-        EQ_BANDS.forEach((freq, i) => {
-          const f = ctx.createBiquadFilter()
-          f.type = i === 0 ? 'lowshelf' : i === EQ_BANDS.length - 1 ? 'highshelf' : 'peaking'
-          f.frequency.value = freq
-          f.Q.value = 1.4
-          f.gain.value = 0
-          n.eq[freq] = f
-        })
-
-        // 3. Audio Normalization (Studio Dynamics Compressor)
-        n.compressor = ctx.createDynamicsCompressor()
-        n.compressor.threshold.value = 0
-        n.compressor.knee.value = 30
-        n.compressor.ratio.value = 1
-        n.compressor.attack.value = 0.003
-        n.compressor.release.value = 0.25
-
-        // 4. Stereo Matrix for True Mono & 3D Spatial Audio Widening
-        n.splitter = ctx.createChannelSplitter(2)
-        n.merger = ctx.createChannelMerger(2)
-
-        n.directL = ctx.createGain()
-        n.crossL = ctx.createGain()
-        n.directR = ctx.createGain()
-        n.crossR = ctx.createGain()
-
-        n.directL.gain.value = 1
-        n.crossL.gain.value = 0
-        n.directR.gain.value = 1
-        n.crossR.gain.value = 0
-
-        // Wire nodes: Howler.masterGain -> bass -> 10-band EQ -> compressor -> splitter
-        Howler.masterGain.disconnect()
-
-        let prev = Howler.masterGain
-        prev.connect(n.bass)
-        prev = n.bass
-
-        EQ_BANDS.forEach(freq => {
-          prev.connect(n.eq[freq])
-          prev = n.eq[freq]
-        })
-
-        prev.connect(n.compressor)
-        n.compressor.connect(n.splitter)
-
-        // Splitter ch 0 (Left) feeds directL and crossL
-        n.splitter.connect(n.directL, 0)
-        n.splitter.connect(n.crossL, 0)
-
-        // Splitter ch 1 (Right) feeds directR and crossR
-        n.splitter.connect(n.directR, 1)
-        n.splitter.connect(n.crossR, 1)
-
-        // DirectL & crossR sum into Merger ch 0 (Left out)
-        n.directL.connect(n.merger, 0, 0)
-        n.crossR.connect(n.merger, 0, 0)
-
-        // DirectR & crossL sum into Merger ch 1 (Right out)
-        n.directR.connect(n.merger, 0, 1)
-        n.crossL.connect(n.merger, 0, 1)
-
-        // Merger connects to final speakers/headphones output
-        n.merger.connect(ctx.destination)
-        n.built = true
-        console.log('Audio DSP graph successfully wired!')
-      } catch (e) {
-        console.warn('Audio DSP graph build failed:', e)
-        return
-      }
-    }
-
-    // ── Apply values in real-time ──
-    const now = ctx.currentTime
-
-    // 1. Bass boost
-    if (n.bass) {
-      const bassVal = Math.max(0, Math.min(12, s.bassBoost ?? 0))
-      n.bass.gain.setValueAtTime(bassVal, now)
-    }
-
-    // 2. 10-band Equalizer
-    EQ_BANDS.forEach(freq => {
-      if (n.eq[freq]) {
-        const gain = s.eqEnabled ? (s.eq[freq] ?? 0) : 0
-        n.eq[freq].gain.setValueAtTime(Math.max(-12, Math.min(12, gain)), now)
-      }
-    })
-
-    // 3. Audio Normalization
-    if (n.compressor) {
-      if (s.normalize) {
-        n.compressor.threshold.setValueAtTime(-24, now)
-        n.compressor.ratio.setValueAtTime(12, now)
-      } else {
-        n.compressor.threshold.setValueAtTime(0, now)
-        n.compressor.ratio.setValueAtTime(1, now)
-      }
-    }
-
-    // 4. Stereo Matrix (Spatial 3D Audio & Mono)
-    if (n.directL && n.crossL && n.directR && n.crossR) {
-      let d = 1.0
-      let c = 0.0
-
-      if (s.mono) {
-        // True 50/50 Mono downmix
-        d = 0.5
-        c = 0.5
-      } else if (s.spatialEnabled) {
-        // 3D Spatial Audio widening
-        const w = s.spatialWidth ?? 1.0
-        d = (1 + w) / 2
-        c = (1 - w) / 2
-      }
-
-      n.directL.gain.setValueAtTime(d, now)
-      n.directR.gain.setValueAtTime(d, now)
-      n.crossL.gain.setValueAtTime(c, now)
-      n.crossR.gain.setValueAtTime(c, now)
-    }
+    audioEngine.applySettings(s)
   }, [])
 
   // Re-apply chain whenever relevant audio settings change
@@ -292,6 +138,7 @@ export function AudioSettingsProvider({ children }) {
     settings.spatialEnabled, settings.spatialWidth,
     settings.normalize,
     settings.loudVolume,
+    settings.speed,
     applyAudioChain
   ])
 
@@ -324,10 +171,6 @@ export function AudioSettingsProvider({ children }) {
 
   const reset = useCallback(() => {
     setSettings({ ...DEFAULT })
-    nodes.current = {
-      built: false, bass: null, eq: {}, compressor: null,
-      splitter: null, merger: null, directL: null, crossL: null, directR: null, crossR: null
-    }
     setTimeout(() => applyAudioChain({ ...DEFAULT }), 0)
   }, [applyAudioChain])
 

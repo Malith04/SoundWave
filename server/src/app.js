@@ -38,10 +38,18 @@ const healthHandler = async (req, res) => {
     dbStatus = `disconnected (${err.message})`
   }
 
+  const emailServices = {
+    resendConfigured: !!(process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.startsWith('re_')),
+    brevoConfigured: !!process.env.BREVO_API_KEY,
+    gmailRestConfigured: !!(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET && process.env.GMAIL_REFRESH_TOKEN),
+    gmailSmtpConfigured: !!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)
+  }
+
   res.json({
     status: 'ok',
     service: 'SoundWave PostgreSQL API (Netlify / Node)',
     database: dbStatus,
+    email: emailServices,
     time: new Date().toISOString()
   })
 }

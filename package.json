@@ -25,7 +25,8 @@
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^10.0.13",
     "pg": "^8.11.5",
-    "serverless-http": "^3.2.0"
+    "serverless-http": "^3.2.0",
+    "youtubei.js": "^18.1.0"
   },
   "keywords": [
     "music",

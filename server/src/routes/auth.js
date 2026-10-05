@@ -59,26 +59,37 @@ router.post('/send-otp', async (req, res) => {
       // Google verification applies to both new and existing users
     }
 
-    // Rate limiting: 60-second cooldown per email & purpose
+    // Allow resending with 10-second debounce
     const recentOtp = await query(
       `SELECT created_at FROM email_verifications
-       WHERE LOWER(email) = $1 AND purpose = $2 AND created_at > NOW() - INTERVAL '60 seconds'
+       WHERE LOWER(email) = $1 AND purpose = $2 AND created_at > NOW() - INTERVAL '10 seconds'
        ORDER BY created_at DESC LIMIT 1`,
       [cleanEmail, purpose]
     )
     if (recentOtp.rows.length > 0) {
       return res.status(429).json({
-        error: 'A verification code was already sent recently. Please check your inbox or wait 60 seconds before requesting a new code.'
+        error: 'Please wait a few seconds before requesting another code.'
       })
     }
 
-    const otp = generateOtpCode()
-
-    await query(
-      `INSERT INTO email_verifications (email, otp_code, purpose, expires_at)
-       VALUES ($1, $2, $3, NOW() + INTERVAL '10 minutes')`,
-      [cleanEmail, otp, purpose]
+    const active = await query(
+      `SELECT otp_code FROM email_verifications
+       WHERE LOWER(email) = $1 AND purpose = $2 AND expires_at > NOW() AND verified = false
+       ORDER BY created_at DESC LIMIT 1`,
+      [cleanEmail, purpose]
     )
+
+    let otp
+    if (active.rows.length > 0) {
+      otp = active.rows[0].otp_code
+    } else {
+      otp = generateOtpCode()
+      await query(
+        `INSERT INTO email_verifications (email, otp_code, purpose, expires_at)
+         VALUES ($1, $2, $3, NOW() + INTERVAL '10 minutes')`,
+        [cleanEmail, otp, purpose]
+      )
+    }
 
     await sendOtpEmail({ email: cleanEmail, otp, purpose })
 
@@ -311,23 +322,16 @@ router.post('/login', async (req, res) => {
 
     // ── 2FA Passcode Verification ──
     if (!otp) {
-      // Send 8-digit OTP to user's email
-      const recentOtp = await query(
-        `SELECT created_at FROM email_verifications
-         WHERE LOWER(email) = $1 AND purpose = 'login' AND created_at > NOW() - INTERVAL '30 seconds'
+      const active = await query(
+        `SELECT otp_code FROM email_verifications
+         WHERE LOWER(email) = $1 AND purpose = 'login' AND expires_at > NOW() AND verified = false
          ORDER BY created_at DESC LIMIT 1`,
         [cleanEmail]
       )
 
       let otpCode
-      if (recentOtp.rows.length > 0) {
-        const active = await query(
-          `SELECT otp_code FROM email_verifications
-           WHERE LOWER(email) = $1 AND purpose = 'login' AND expires_at > NOW() AND verified = false
-           ORDER BY created_at DESC LIMIT 1`,
-          [cleanEmail]
-        )
-        otpCode = active.rows[0]?.otp_code || generateOtpCode()
+      if (active.rows.length > 0) {
+        otpCode = active.rows[0].otp_code
       } else {
         otpCode = generateOtpCode()
         await query(
@@ -335,8 +339,9 @@ router.post('/login', async (req, res) => {
            VALUES ($1, $2, 'login', NOW() + INTERVAL '10 minutes')`,
           [cleanEmail, otpCode]
         )
-        await sendOtpEmail({ email: cleanEmail, otp: otpCode, purpose: 'login' })
       }
+
+      await sendOtpEmail({ email: cleanEmail, otp: otpCode, purpose: 'login' })
 
       return res.json({
         requiresOtp: true,
@@ -450,22 +455,16 @@ router.post('/google', async (req, res) => {
 
     // ── 1. Require 8-Digit Email Verification Code ──
     if (!otp) {
-      const recentOtp = await query(
-        `SELECT created_at FROM email_verifications
-         WHERE LOWER(email) = $1 AND purpose = 'google' AND created_at > NOW() - INTERVAL '30 seconds'
+      const active = await query(
+        `SELECT otp_code FROM email_verifications
+         WHERE LOWER(email) = $1 AND purpose = 'google' AND expires_at > NOW() AND verified = false
          ORDER BY created_at DESC LIMIT 1`,
         [cleanEmail]
       )
 
       let otpCode
-      if (recentOtp.rows.length > 0) {
-        const active = await query(
-          `SELECT otp_code FROM email_verifications
-           WHERE LOWER(email) = $1 AND purpose = 'google' AND expires_at > NOW() AND verified = false
-           ORDER BY created_at DESC LIMIT 1`,
-          [cleanEmail]
-        )
-        otpCode = active.rows[0]?.otp_code || generateOtpCode()
+      if (active.rows.length > 0) {
+        otpCode = active.rows[0].otp_code
       } else {
         otpCode = generateOtpCode()
         await query(
@@ -473,8 +472,9 @@ router.post('/google', async (req, res) => {
            VALUES ($1, $2, 'google', NOW() + INTERVAL '10 minutes')`,
           [cleanEmail, otpCode]
         )
-        await sendOtpEmail({ email: cleanEmail, otp: otpCode, purpose: 'google' })
       }
+
+      await sendOtpEmail({ email: cleanEmail, otp: otpCode, purpose: 'google' })
 
       return res.json({
         requiresOtp: true,

@@ -4,7 +4,8 @@ import WaveSeekBar from './WaveSeekBar'
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
   Volume2, VolumeX, Volume1, Heart, ListMusic, X, Music, Mic2,
-  ChevronDown, Maximize2, Timer, PlusCircle, ListPlus, Info
+  ChevronDown, Maximize2, Timer, PlusCircle, ListPlus, Info,
+  GripVertical, Trash2
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
@@ -89,9 +90,9 @@ function LyricsPanel({ song, currentTime, onClose, expanded = false }) {
 
   if (expanded) {
     return (
-      <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex flex-col flex-1 min-h-0 h-full overflow-hidden">
         {synced && <p className="text-sm text-brand mb-4 font-medium shrink-0">● Live synced</p>}
-        <div ref={listRef} className="overflow-y-auto flex-1 mobile-scroll">
+        <div ref={listRef} className="overflow-y-auto flex-1 min-h-0 mobile-scroll no-scrollbar">
           {loading ? <div className="flex items-center justify-center h-32"><div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin" /></div>
             : err ? <div className="flex flex-col items-center justify-center h-32 text-gray-600"><Mic2 size={40} className="mb-2 opacity-30" /><p>Lyrics not found</p></div>
             : synced ? (
@@ -121,7 +122,7 @@ function LyricsPanel({ song, currentTime, onClose, expanded = false }) {
         </div>
         <button onClick={onClose} className="touch-target text-gray-400 hover:text-white ml-4 shrink-0"><X size={20} /></button>
       </div>
-      <div ref={listRef} className="overflow-y-auto flex-1 px-5 py-4 mobile-scroll">
+      <div ref={listRef} className="overflow-y-auto flex-1 min-h-0 px-5 py-4 mobile-scroll no-scrollbar">
         {loading ? <div className="flex items-center justify-center h-full"><div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin" /></div>
           : err ? <div className="flex flex-col items-center justify-center h-full text-gray-600"><Mic2 size={40} className="mb-2 opacity-30" /><p>Lyrics not found</p></div>
           : synced ? (
@@ -196,12 +197,22 @@ function SleepTimerPanel({ onClose, onSetTimer, currentTimer, timeLeft }) {
   )
 }
 
-function QueuePanel({ queue, queueIndex, onClose, onPlay, expanded = false }) {
+function QueuePanel({ queue = [], queueIndex, onClose, onPlay, reorderQueue, removeFromQueue, expanded = false }) {
   const activeRef = useRef(null)
   const listRef = useRef(null)
 
-  // Strictly container-scoped scroll — prevents moving or shifting the parent player window
+  // Hold-to-reorder state (milliseconds hold)
+  const [dragIndex, setDragIndex] = useState(null)
+  const [overIndex, setOverIndex] = useState(null)
+  const holdTimerRef = useRef(null)
+  const isDraggingRef = useRef(false)
+  const pointerOriginRef = useRef(null)
+  const dragIndexRef = useRef(null)
+  const overIndexRef = useRef(null)
+
+  // Container-scoped scroll to active track on initial load or queueIndex change
   useEffect(() => {
+    if (isDraggingRef.current) return
     if (!activeRef.current || !listRef.current) return
     const container = listRef.current
     const el = activeRef.current
@@ -209,40 +220,239 @@ function QueuePanel({ queue, queueIndex, onClose, onPlay, expanded = false }) {
     container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' })
   }, [queueIndex])
 
+  // Cleanup hold timer on unmount
+  useEffect(() => {
+    return () => {
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+    }
+  }, [])
+
+  const handlePointerDown = (e, index, song) => {
+    // Only primary mouse button or touch
+    if (e.button !== undefined && e.button !== 0) return
+    if (e.target.closest('[data-queue-action="remove"]')) return
+
+    pointerOriginRef.current = { x: e.clientX, y: e.clientY, index, song }
+    isDraggingRef.current = false
+    dragIndexRef.current = index
+    overIndexRef.current = index
+
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+
+    // Millisecond hold threshold (200ms) to trigger reorder mode
+    holdTimerRef.current = setTimeout(() => {
+      isDraggingRef.current = true
+      setDragIndex(index)
+      setOverIndex(index)
+      if ('vibrate' in navigator) navigator.vibrate(25)
+      try { e.currentTarget.setPointerCapture?.(e.pointerId) } catch (_) {}
+    }, 200)
+  }
+
+  const handlePointerMove = (e) => {
+    const origin = pointerOriginRef.current
+    if (!origin) return
+
+    // If pre-hold and user moves > 7px, cancel hold so native scroll operates freely
+    if (!isDraggingRef.current) {
+      const dist = Math.hypot(e.clientX - origin.x, e.clientY - origin.y)
+      if (dist > 7) {
+        if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+        pointerOriginRef.current = null
+      }
+      return
+    }
+
+    // Active reordering: prevent native page scroll
+    if (e.cancelable) e.preventDefault?.()
+
+    // Auto-scroll list if pointer is near container top or bottom edge
+    if (listRef.current) {
+      const rect = listRef.current.getBoundingClientRect()
+      if (e.clientY < rect.top + 45) {
+        listRef.current.scrollTop -= 7
+      } else if (e.clientY > rect.bottom - 45) {
+        listRef.current.scrollTop += 7
+      }
+    }
+
+    // Identify target item index under pointer
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-queue-index]')
+    if (el) {
+      const idx = parseInt(el.getAttribute('data-queue-index'), 10)
+      if (!isNaN(idx) && idx !== overIndexRef.current && idx >= 0 && idx < queue.length) {
+        overIndexRef.current = idx
+        setOverIndex(idx)
+        if ('vibrate' in navigator) navigator.vibrate(10)
+      }
+    }
+  }
+
+  const handlePointerUp = (e, index, song) => {
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+
+    if (isDraggingRef.current) {
+      try { e.currentTarget.releasePointerCapture?.(e.pointerId) } catch (_) {}
+      const from = dragIndexRef.current
+      const to = overIndexRef.current
+      if (from !== null && to !== null && from !== to) {
+        reorderQueue?.(from, to)
+        if ('vibrate' in navigator) navigator.vibrate(30)
+      }
+      isDraggingRef.current = false
+      setDragIndex(null)
+      setOverIndex(null)
+      dragIndexRef.current = null
+      overIndexRef.current = null
+      pointerOriginRef.current = null
+      return
+    }
+
+    // Normal tap / click (< 200ms)
+    const origin = pointerOriginRef.current
+    if (origin && !e.target.closest('[data-queue-action="remove"]')) {
+      const dist = Math.hypot(e.clientX - origin.x, e.clientY - origin.y)
+      if (dist < 8) {
+        onPlay?.(song, queue, index)
+      }
+    }
+    pointerOriginRef.current = null
+  }
+
+  const handlePointerCancel = () => {
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+    isDraggingRef.current = false
+    setDragIndex(null)
+    setOverIndex(null)
+    dragIndexRef.current = null
+    overIndexRef.current = null
+    pointerOriginRef.current = null
+  }
+
   const inner = (
-    <div ref={listRef} className="overflow-y-auto flex-1 py-1 mobile-scroll">
-      {queue.map((song, i) => (
-        <div key={`${song.id}-${i}`} ref={i === queueIndex ? activeRef : null}
-          onClick={() => onPlay(song, queue, i)}
-          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-colors ${i === queueIndex ? 'bg-white/10' : 'hover:bg-white/5'}`}>
-          <img src={song.coverUrl || 'https://via.placeholder.com/40'} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className={`text-sm font-medium truncate ${i === queueIndex ? 'text-brand' : ''}`}>{song.title}</p>
-            <p className="text-xs text-gray-500 truncate">{song.artist}</p>
+    <div
+      ref={listRef}
+      onPointerMove={handlePointerMove}
+      onPointerCancel={handlePointerCancel}
+      className="overflow-y-auto flex-1 min-h-0 py-1 mobile-scroll no-scrollbar overscroll-contain touch-pan-y select-none relative"
+    >
+      {queue.map((song, i) => {
+        const isCurrent = i === queueIndex
+        const isHeld = dragIndex === i
+        const isDropTarget = overIndex === i && dragIndex !== null && dragIndex !== i
+
+        return (
+          <div
+            key={`${song.id}-${i}`}
+            data-queue-index={i}
+            ref={isCurrent ? activeRef : null}
+            onPointerDown={(e) => handlePointerDown(e, i, song)}
+            onPointerUp={(e) => handlePointerUp(e, i, song)}
+            className={`group relative flex items-center gap-2.5 sm:gap-3 px-3 py-2.5 my-0.5 rounded-xl transition-all select-none ${
+              isHeld
+                ? 'queue-item-dragging ring-2 ring-brand/60 bg-brand/15 shadow-2xl cursor-grabbing'
+                : isCurrent
+                  ? 'bg-white/10 border border-brand/35 cursor-grab'
+                  : 'hover:bg-white/5 active:bg-white/10 cursor-grab'
+            } ${isDropTarget ? 'queue-drop-indicator' : ''}`}
+          >
+            {/* Grip handle indicator */}
+            <div className="text-gray-500 group-hover:text-gray-300 transition-colors shrink-0 touch-none">
+              <GripVertical size={16} />
+            </div>
+
+            {/* Song Cover */}
+            <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-white/5 border border-white/10">
+              <img
+                src={song.coverUrl || 'https://via.placeholder.com/40'}
+                alt=""
+                className="w-full h-full object-cover pointer-events-none"
+                loading="lazy"
+              />
+              {isCurrent && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                  <AudioBars isPlaying={true} size="sm" />
+                </div>
+              )}
+            </div>
+
+            {/* Title & Artist */}
+            <div className="flex-1 min-w-0 pointer-events-none">
+              <p className={`text-sm font-medium truncate ${isCurrent ? 'text-brand font-semibold' : 'text-white'}`}>
+                {song.title}
+              </p>
+              <p className="text-xs text-gray-400 truncate">
+                {song.artist}
+              </p>
+            </div>
+
+            {/* Active Playing Badge / Remove Button */}
+            <div className="flex items-center gap-1 shrink-0">
+              {isCurrent ? (
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-brand/20 text-brand border border-brand/30">
+                  Now Playing
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  data-queue-action="remove"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    removeFromQueue?.(i)
+                    toast.success('Removed from queue', { duration: 1500, id: 'queue-remove' })
+                  }}
+                  title="Remove from queue"
+                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-red-400 transition-all touch-target"
+                >
+                  <Trash2 size={15} />
+                </button>
+              )}
+            </div>
           </div>
-          {i === queueIndex && <AudioBars isPlaying={true} />}
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 
   if (expanded) {
     return (
-      <div className="flex flex-col h-full overflow-hidden">
-        <p className="text-xs text-gray-400 mb-3 uppercase tracking-wider shrink-0">Up next · {queue.length} songs</p>
+      <div className="flex flex-col flex-1 min-h-0 h-full overflow-hidden">
+        <div className="flex items-center justify-between pb-2 mb-1 shrink-0 border-b border-white/5">
+          <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">
+            Up next · {queue.length} songs
+          </p>
+          <span className="text-[11px] text-gray-500 hidden sm:inline-block">
+            Hold song to reorder
+          </span>
+        </div>
         {inner}
       </div>
     )
   }
 
   return (
-    <div className="fixed right-4 bottom-24 w-80 h-[65vh] glass-drawer border border-white/15 rounded-3xl shadow-2xl flex flex-col overflow-hidden z-40 animate-pop-in">
+    <div className="fixed inset-x-3 sm:inset-x-auto sm:right-4 bottom-24 sm:w-96 h-[65vh] max-h-[600px] glass-drawer border border-white/15 rounded-3xl shadow-2xl flex flex-col overflow-hidden z-40 animate-pop-in">
       <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mt-2.5 -mb-1 shrink-0" />
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 shrink-0">
-        <div><p className="font-bold text-sm">Queue</p><p className="text-xs text-gray-400">{queue.length} songs</p></div>
-        <button onClick={onClose} className="touch-target text-gray-400 hover:text-white"><X size={18} /></button>
+        <div>
+          <div className="flex items-center gap-2">
+            <p className="font-bold text-sm">Queue</p>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand/15 text-brand font-medium border border-brand/20">
+              Hold to reorder
+            </span>
+          </div>
+          <p className="text-xs text-gray-400">{queue.length} songs</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="touch-target p-1.5 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+        >
+          <X size={18} />
+        </button>
       </div>
-      {inner}
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden p-2 sm:p-3">
+        {inner}
+      </div>
     </div>
   )
 }
@@ -250,7 +460,7 @@ function QueuePanel({ queue, queueIndex, onClose, onPlay, expanded = false }) {
 function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duration, volume, isMuted,
   isShuffled, repeatMode, isLoading, error, engine, queue, queueIndex, liked, onLike, onClose,
   togglePlay, seek, next, previous, setVolume, toggleMute, toggleShuffle, cycleRepeat, play,
-  showParticles, settings, switchEngine, onOpenQuickAdd }) {
+  showParticles, settings, switchEngine, onOpenQuickAdd, reorderQueue, removeFromQueue }) {
   const [panel, setPanel] = useState(() => (settings?.autoLyrics ? 'lyrics' : null))
   const [viewMode, setViewMode] = useState('audio')
   const [videoId, setVideoId] = useState(null)
@@ -451,17 +661,27 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
 
         {/* Slide-up panel overlay */}
         {panel && (
-          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" onClick={() => setPanel(null)}>
-            <div className="absolute bottom-0 left-0 right-0 bg-surface-2 rounded-t-2xl border-t border-white/10 max-h-[72vh] flex flex-col"
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md" onClick={() => setPanel(null)}>
+            <div className="absolute bottom-0 left-0 right-0 bg-surface-2 rounded-t-3xl border-t border-white/10 h-[75vh] max-h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-slide-up"
               onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
-                <h3 className="font-bold capitalize">{panel}</h3>
-                <button onClick={() => setPanel(null)} className="touch-target text-gray-400 hover:text-white"><X size={20} /></button>
+              <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mt-2.5 -mb-1 shrink-0" />
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <h3 className="font-bold text-base capitalize">{panel}</h3>
+                  {panel === 'queue' && (
+                    <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-brand/15 text-brand font-medium border border-brand/20">
+                      Hold to reorder
+                    </span>
+                  )}
+                </div>
+                <button onClick={() => setPanel(null)} className="touch-target p-1.5 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                  <X size={20} />
+                </button>
               </div>
-              <div className="flex-1 overflow-hidden p-4">
+              <div className="flex-1 min-h-0 overflow-hidden flex flex-col p-3 sm:p-4">
                 {panel === 'lyrics'
                   ? <LyricsPanel song={currentSong} currentTime={currentTime} expanded />
-                  : <QueuePanel queue={queue} queueIndex={queueIndex} onPlay={play} expanded />}
+                  : <QueuePanel queue={queue} queueIndex={queueIndex} onPlay={play} reorderQueue={reorderQueue} removeFromQueue={removeFromQueue} expanded />}
               </div>
             </div>
           </div>
@@ -475,7 +695,8 @@ export default function Player() {
   const {
     currentSong, queue, queueIndex, isPlaying, progress, currentTime, duration,
     volume, isMuted, isShuffled, repeatMode, isLoading, error, engine,
-    play, togglePlay, seek, next, previous, setVolume, toggleMute, toggleShuffle, cycleRepeat, switchEngine
+    play, togglePlay, seek, next, previous, setVolume, toggleMute, toggleShuffle, cycleRepeat, switchEngine,
+    reorderQueue, removeFromQueue
   } = usePlayer()
   const { user } = useAuth()
   const { settings, update } = useAudioSettings()
@@ -582,12 +803,14 @@ export default function Player() {
           settings={settings}
           switchEngine={switchEngine}
           onOpenQuickAdd={() => setShowQuickAdd(true)}
+          reorderQueue={reorderQueue}
+          removeFromQueue={removeFromQueue}
         />
       )}
 
       {/* Floating panels (desktop) */}
       {!expanded && showLyrics && <LyricsPanel song={currentSong} currentTime={currentTime} onClose={() => setShowLyrics(false)} />}
-      {!expanded && showQueue && <QueuePanel queue={queue} queueIndex={queueIndex} onClose={() => setShowQueue(false)} onPlay={play} />}
+      {!expanded && showQueue && <QueuePanel queue={queue} queueIndex={queueIndex} onClose={() => setShowQueue(false)} onPlay={play} reorderQueue={reorderQueue} removeFromQueue={removeFromQueue} />}
       {!expanded && showSleepTimer && <SleepTimerPanel onClose={() => setShowSleepTimer(false)} onSetTimer={startSleepTimer} currentTimer={sleepTimer} timeLeft={sleepTimeLeft} />}
 
       {/* Up-next toast */}

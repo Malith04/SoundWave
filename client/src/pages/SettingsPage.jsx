@@ -89,11 +89,79 @@ function Section({ title, children }) {
 }
 
 // ── Audio Tab ─────────────────────────────────────────────────
-function AudioTab({ settings, update, applyPreset, setEqBand }) {
+function AudioTab({ settings, update, applyPreset, setEqBand, reset }) {
   const { currentSong, engine, switchEngine } = usePlayer()
+
+  const currentEngine = settings.audioEngine || 'auto'
+
+  const engineLabels = {
+    auto: '✨ Smart Auto',
+    studio: '🎧 Studio Audio Engine',
+    youtube: '🎬 YouTube Stream'
+  }
 
   return (
     <>
+      {/* Universal 3-Engine Switcher & EQ Status Banner */}
+      <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-brand/15 via-purple-500/10 to-brand/15 border border-brand/30 shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">🎛️</span>
+            <div>
+              <p className="text-sm font-bold text-white flex items-center gap-2">
+                Universal Audio DSP Pipeline
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand/20 text-brand font-bold border border-brand/30">
+                  ALL 3 ENGINES ACTIVE
+                </span>
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                10-Band Equalizer, 3D Spatial Audio, Bass Boost & Normalization work across all three engines.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* 3 Engines Selector Pills */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-white/10">
+          {[
+            { id: 'auto', name: 'Smart Auto', desc: 'Auto best stream + Full EQ', icon: '✨' },
+            { id: 'studio', name: 'Studio Audio', desc: 'Reference stream + Full EQ', icon: '🎧' },
+            { id: 'youtube', name: 'YouTube Stream', desc: 'Full length + Full EQ', icon: '🎬' },
+          ].map(eng => {
+            const isSelected = currentEngine === eng.id
+            return (
+              <button
+                key={eng.id}
+                type="button"
+                onClick={() => {
+                  update('audioEngine', eng.id)
+                  switchEngine?.(eng.id)
+                  toast.success(`${eng.name} Engine activated (Full EQ & 3D Spatial active)`)
+                }}
+                className={`flex flex-col p-2.5 rounded-xl border text-left transition-all ${
+                  isSelected
+                    ? 'border-brand bg-brand/15 shadow-sm ring-1 ring-brand/40'
+                    : 'border-white/10 bg-surface-3/70 hover:border-white/20 hover:bg-surface-4'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>{eng.icon}</span> {eng.name}
+                  </span>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
+                    isSelected ? 'bg-brand text-black' : 'bg-white/10 text-gray-400'
+                  }`}>
+                    {isSelected ? 'ACTIVE' : 'READY'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1 leading-tight">{eng.desc}</p>
+                <span className="text-[10px] text-brand/90 font-medium mt-1">● 10-Band EQ Active</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       <Section title="Equalizer">
         <div className="flex items-center justify-between py-3.5 border-b border-white/5">
           <div className="flex-1 min-w-0 pr-4">
@@ -106,7 +174,7 @@ function AudioTab({ settings, update, applyPreset, setEqBand }) {
               )}
             </div>
             <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-              Adjust 10 frequency bands in real-time with zero latency
+              Adjust 10 frequency bands in real-time with zero latency across all playback engines
             </p>
           </div>
           <button
@@ -122,23 +190,21 @@ function AudioTab({ settings, update, applyPreset, setEqBand }) {
           </button>
         </div>
 
-        {/* Universal DSP Equalizer Active Status */}
-        {currentSong && (
-          <div className="my-3 p-3 rounded-xl bg-brand/10 border border-brand/25 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="text-base shrink-0">🎛️</span>
-              <p className="text-xs text-brand/90 font-medium">
-                10-Band Equalizer & 3D Spatial Audio are active on <span className="font-bold underline decoration-brand/40">{settings.audioEngine === 'youtube' ? 'YouTube Stream' : settings.audioEngine === 'studio' ? 'Studio Audio Engine' : 'Smart Auto Engine'}</span>.
-              </p>
-            </div>
-            <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-brand/20 text-brand font-semibold shrink-0 uppercase tracking-wider">
-              {engine === 'youtube' ? 'YouTube • EQ ACTIVE' : 'Studio • EQ ACTIVE'}
-            </span>
-          </div>
-        )}
-
+        {/* Real-time Preset Toolbar */}
         <div className="py-4">
-          <p className="text-xs text-gray-500 mb-3">Presets</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-gray-500">Presets</p>
+            <button
+              type="button"
+              onClick={() => {
+                applyPreset('flat')
+                toast.success('Equalizer reset to Flat Reference')
+              }}
+              className="text-xs text-gray-400 hover:text-brand flex items-center gap-1 transition-colors"
+            >
+              <RotateCcw size={11} /> Reset to Flat
+            </button>
+          </div>
           <div className="flex flex-wrap gap-2">
             {Object.keys(EQ_PRESETS).map(name => (
               <button
@@ -149,7 +215,7 @@ function AudioTab({ settings, update, applyPreset, setEqBand }) {
                   toast.success(`${name.toUpperCase()} preset applied`)
                 }}
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize transition-all ${
-                  settings.eqPreset === name ? 'bg-brand text-black shadow-md' : 'bg-surface-3 text-gray-300 hover:bg-surface-4'
+                  settings.eqPreset === name && settings.eqEnabled ? 'bg-brand text-black shadow-md' : 'bg-surface-3 text-gray-300 hover:bg-surface-4'
                 }`}
               >
                 {name}
@@ -1020,7 +1086,7 @@ export default function SettingsPage() {
 
       {/* ── Content ── */}
       <div className="flex-1 overflow-y-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-5 pb-16">
-        {activeTab === 'audio'    && <AudioTab    settings={settings} update={update} applyPreset={applyPreset} setEqBand={setEqBand} />}
+        {activeTab === 'audio'    && <AudioTab    settings={settings} update={update} applyPreset={applyPreset} setEqBand={setEqBand} reset={handleReset} />}
         {activeTab === 'playback' && <PlaybackTab settings={settings} update={update} />}
         {activeTab === 'display'  && <DisplayTab  settings={settings} update={update} />}
         {activeTab === 'privacy'  && <PrivacyTab  settings={settings} update={update} />}

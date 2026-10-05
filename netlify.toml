@@ -7,7 +7,7 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["pg", "pg-native"]
+  external_node_modules = ["pg", "pg-native", "youtubei.js"]
   included_files = ["server/src/db/schema.sql"]
 
 # ── API Proxy to Netlify Serverless Functions ──

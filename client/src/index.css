@@ -528,6 +528,46 @@ input[type='range']::-moz-range-thumb {
   overscroll-behavior: contain;
 }
 
+/* ── Invisible scrollbar with native smooth scrolling ── */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none !important; /* IE and Edge */
+  scrollbar-width: none !important; /* Firefox */
+}
+
+/* ── Queue reorder drag styles ── */
+.queue-item-dragging {
+  opacity: 0.95;
+  transform: scale(1.02);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  border-color: rgba(29, 185, 84, 0.5) !important;
+  background-color: rgba(29, 185, 84, 0.12) !important;
+  z-index: 50;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.queue-drop-indicator {
+  position: relative;
+}
+.queue-drop-indicator::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 12px;
+  right: 12px;
+  height: 3px;
+  background: var(--brand, #1DB954);
+  border-radius: 9999px;
+  box-shadow: 0 0 10px var(--brand, #1DB954);
+  z-index: 40;
+}
+
 /* ── Prevent zoom on input focus (iOS) ── */
 @media (max-width: 768px) {
   input, select, textarea { font-size: 16px !important; }

@@ -1,7 +1,11 @@
 import nodemailer from 'nodemailer'
 import crypto from 'crypto'
 import dotenv from 'dotenv'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+dotenv.config({ path: path.resolve(__dirname, '../../.env') })
 dotenv.config()
 
 /**
@@ -151,14 +155,19 @@ async function sendViaGmailRestApi({ to, subject, htmlContent }) {
 
     const accessToken = tokenData.access_token
 
-    // 2. Build RFC 2822 MIME message
+    // 2. Build RFC 2822 MIME message with standard RFC headers
     const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString('base64')}?=`
+    const messageId = `<soundwave-${crypto.randomBytes(16).toString('hex')}@soundwave.io>`
     const messageParts = [
       `From: SoundWave Security <${senderEmail}>`,
       `To: ${to.trim().toLowerCase()}`,
+      `Date: ${new Date().toUTCString()}`,
+      `Message-ID: ${messageId}`,
       `Subject: ${utf8Subject}`,
       'MIME-Version: 1.0',
       'Content-Type: text/html; charset=utf-8',
+      'X-Mailer: SoundWave Security Mailer 2.0',
+      `Reply-To: SoundWave Security <${senderEmail}>`,
       '',
       htmlContent
     ]
@@ -194,12 +203,12 @@ async function sendViaGmailRestApi({ to, subject, htmlContent }) {
 }
 
 /**
- * Send OTP Email via Gmail REST API, Resend REST API, or Safe Dev Fallback
+ * Send OTP Email via Resend REST API, Gmail REST API, or Safe Dev Fallback
  * 
  * @param {Object} params
  * @param {string} params.email - Recipient email
  * @param {string} params.otp - 8-digit OTP string
- * @param {'signup' | 'login' | '2fa'} params.purpose - Verification purpose
+ * @param {'signup' | 'login' | '2fa' | 'google'} params.purpose - Verification purpose
  * @returns {Promise<{ success: boolean, provider: string, message?: string }>}
  */
 export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
@@ -212,14 +221,12 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
     : `SoundWave - Login Security Passcode: ${otp}`
   const htmlContent = renderOtpEmailTemplate({ otp, purpose, email })
 
-  // 1. Try Google Gmail REST API (Official HTTPS port 443 OAuth2 - sends to ANY recipient for free)
-  const gmailRestResult = await sendViaGmailRestApi({ to: email, subject, htmlContent })
-  if (gmailRestResult) {
-    return gmailRestResult
-  }
-
-  // 2. Try Resend REST API (https://api.resend.com/emails)
+  const cleanRecipient = email.trim().toLowerCase()
   const resendApiKey = process.env.RESEND_API_KEY
+  const senderEmail = (process.env.GMAIL_SENDER_EMAIL || process.env.GMAIL_USER || '').trim().toLowerCase()
+  const isSelfSend = senderEmail && cleanRecipient === senderEmail
+
+  // 1. If Resend is configured, try Resend first (guarantees delivery from an external domain into Primary Inbox)
   if (resendApiKey && resendApiKey.startsWith('re_')) {
     try {
       const fromEmail = process.env.RESEND_FROM_EMAIL || 'SoundWave Security <onboarding@resend.dev>'
@@ -232,7 +239,7 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
         },
         body: JSON.stringify({
           from: fromEmail,
-          to: [email.trim().toLowerCase()],
+          to: [cleanRecipient],
           subject,
           html: htmlContent
         })
@@ -240,52 +247,60 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
 
       const data = await response.json()
       if (response.ok && data.id) {
-        console.log(`[Email Service] ✉️ Resend email dispatched to ${email}. ID:`, data.id)
+        console.log(`[Email Service] ✉️ Resend email dispatched to ${cleanRecipient}. ID:`, data.id)
+
+        // If self-send, also dispatch via Gmail REST API so it's present across both channels
+        if (isSelfSend) {
+          sendViaGmailRestApi({ to: cleanRecipient, subject, htmlContent }).catch(() => {})
+        }
+
         return { success: true, provider: 'resend', messageId: data.id }
       } else if (response.status === 403 && data.message && data.message.includes('only send testing emails to your own email address')) {
-        // Extract the verified developer email from Resend's error message (e.g., malithrajamanthri@gmail.com)
-        const match = data.message.match(/\(([^)]+)\)/)
-        const devRecipient = match ? match[1] : (process.env.RESEND_DEV_EMAIL || 'malithrajamanthri@gmail.com')
-        
-        console.warn(`[Email Service] ⚠️ Resend Sandbox restriction: Cannot send directly to "${email}". Rerouting to verified dev email: ${devRecipient}`)
-        
-        const sandboxNotice = `
-          <div style="background-color: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.4); border-radius: 10px; padding: 14px; margin-bottom: 20px; font-size: 13px; color: #fef08a; line-height: 1.5;">
-            <strong>🛠️ Resend Sandbox Mode Active:</strong><br>
-            This verification code was requested for <strong>${email}</strong>.<br>
-            Since Resend free sandbox (<em>onboarding@resend.dev</em>) only delivers to your registered account, this email was safely routed to your inbox: <strong>${devRecipient}</strong>.
-          </div>
-        `
-        const routedHtml = htmlContent.replace('<!-- Security Warning -->', sandboxNotice + '<!-- Security Warning -->')
-        const routedSubject = `[For ${email}] ${subject}`
-
-        const retryResponse = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${resendApiKey.trim()}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            from: fromEmail,
-            to: [devRecipient],
-            subject: routedSubject,
-            html: routedHtml
-          })
-        })
-
-        const retryData = await retryResponse.json()
-        if (retryResponse.ok && retryData.id) {
-          console.log(`[Email Service] ✉️ Resend sandbox email delivered to ${devRecipient} for requested user ${email}. ID:`, retryData.id)
-          return { success: true, provider: 'resend-sandbox-routed', messageId: retryData.id }
-        } else {
-          console.error('[Email Service] Failed retrying Resend sandbox email:', retryData)
-        }
+        console.warn(`[Email Service] ⚠️ Resend sandbox restriction for "${cleanRecipient}". Falling back to Google Gmail REST API.`)
       } else {
         console.error('[Email Service] Resend API error response:', data)
       }
     } catch (resendErr) {
       console.error('[Email Service] Failed sending via Resend API:', resendErr.message)
     }
+  }
+
+  // 2. Try Brevo REST API (Sendinblue) if BREVO_API_KEY is configured
+  const brevoApiKey = process.env.BREVO_API_KEY
+  if (brevoApiKey) {
+    try {
+      const senderEmail = process.env.BREVO_SENDER_EMAIL || 'support@soundwave.io'
+      const senderName = process.env.BREVO_SENDER_NAME || 'SoundWave Security'
+      const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'api-key': brevoApiKey.trim(),
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: senderName, email: senderEmail },
+          to: [{ email: cleanRecipient }],
+          subject,
+          htmlContent
+        })
+      })
+      const brevoData = await brevoRes.json()
+      if (brevoRes.ok && brevoData.messageId) {
+        console.log(`[Email Service] ✉️ Brevo email dispatched to ${cleanRecipient}. ID:`, brevoData.messageId)
+        return { success: true, provider: 'brevo', messageId: brevoData.messageId }
+      } else {
+        console.warn('[Email Service] Brevo API response:', brevoData)
+      }
+    } catch (brevoErr) {
+      console.error('[Email Service] Failed sending via Brevo API:', brevoErr.message)
+    }
+  }
+
+  // 3. Try Google Gmail REST API (Official HTTPS port 443 OAuth2 - sends to ANY recipient in the world)
+  const gmailRestResult = await sendViaGmailRestApi({ to: cleanRecipient, subject, htmlContent })
+  if (gmailRestResult) {
+    return gmailRestResult
   }
 
   // 2. Try Gmail SMTP / Nodemailer fallback

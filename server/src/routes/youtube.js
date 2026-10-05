@@ -95,16 +95,18 @@ router.get('/search', async (req, res) => {
 // Stream info endpoint: returns streamable status and audio metadata
 router.get('/info/:videoId', async (req, res) => {
   const { videoId } = req.params
+  const quality = (req.query.quality || 'auto').toLowerCase()
   if (!videoId || videoId.length < 5) {
     return res.status(400).json({ success: false, error: 'Invalid videoId' })
   }
 
+  const cacheKey = `${videoId}_${quality}`
   try {
-    const cached = streamCache.get(videoId)
+    const cached = streamCache.get(cacheKey) || streamCache.get(videoId)
     if (cached && cached.expiresAt > Date.now()) {
       return res.json({
         success: true,
-        streamUrl: `/api/youtube/stream/${videoId}`,
+        streamUrl: `/api/youtube/stream/${videoId}?quality=${quality}`,
         mimeType: cached.mimeType,
         contentLength: cached.contentLength,
         duration: cached.duration
@@ -114,25 +116,35 @@ router.get('/info/:videoId', async (req, res) => {
     const yt = await getInnertube()
     const info = await yt.getBasicInfo(videoId)
     const adaptive = info.streaming_data?.adaptive_formats || []
-    const format = adaptive.find(f => (f.itag === 140 || f.itag === 139) && f.url) ||
-                   adaptive.find(f => f.mime_type?.startsWith('audio/') && f.url)
+    
+    // Choose format matching quality preference
+    let format = null
+    if (quality === 'low') {
+      format = adaptive.find(f => f.itag === 139 && f.url) ||
+               adaptive.find(f => f.mime_type?.startsWith('audio/') && f.url)
+    } else {
+      format = adaptive.find(f => (f.itag === 140 || f.itag === 251) && f.url) ||
+               adaptive.find(f => f.mime_type?.startsWith('audio/') && f.url)
+    }
 
     if (!format?.url) {
       return res.status(404).json({ success: false, error: 'Direct audio format not found' })
     }
 
     const duration = info.basic_info?.duration || 0
-    streamCache.set(videoId, {
+    const entry = {
       url: format.url,
       mimeType: format.mime_type || 'audio/mp4',
       contentLength: format.content_length,
       duration,
       expiresAt: Date.now() + 2 * 60 * 60 * 1000
-    })
+    }
+    streamCache.set(cacheKey, entry)
+    streamCache.set(videoId, entry)
 
     return res.json({
       success: true,
-      streamUrl: `/api/youtube/stream/${videoId}`,
+      streamUrl: `/api/youtube/stream/${videoId}?quality=${quality}`,
       mimeType: format.mime_type || 'audio/mp4',
       contentLength: format.content_length,
       duration
@@ -143,21 +155,42 @@ router.get('/info/:videoId', async (req, res) => {
   }
 })
 
-// Audio streaming proxy: pipes YouTube audio with byte-range support into Web Audio/Howler
+// CORS preflight for audio streaming
+router.options('/stream/:videoId', (req, res) => {
+  res.set({
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+    'Access-Control-Allow-Headers': 'Range, Origin, Content-Type, Accept, Cache-Control',
+    'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
+    'Access-Control-Max-Age': '86400',
+  })
+  res.sendStatus(204)
+})
+
+// Audio streaming proxy: pipes YouTube audio with byte-range support into Web Audio/Native Audio
 router.get('/stream/:videoId', async (req, res) => {
   const { videoId } = req.params
+  const quality = (req.query.quality || 'auto').toLowerCase()
   if (!videoId || videoId.length < 5) {
     return res.status(400).end('Invalid videoId')
   }
 
+  const cacheKey = `${videoId}_${quality}`
   try {
-    let cached = streamCache.get(videoId)
+    let cached = streamCache.get(cacheKey) || streamCache.get(videoId)
     if (!cached || cached.expiresAt <= Date.now()) {
       const yt = await getInnertube()
       const info = await yt.getBasicInfo(videoId)
       const adaptive = info.streaming_data?.adaptive_formats || []
-      const format = adaptive.find(f => (f.itag === 140 || f.itag === 139) && f.url) ||
-                     adaptive.find(f => f.mime_type?.startsWith('audio/') && f.url)
+      
+      let format = null
+      if (quality === 'low') {
+        format = adaptive.find(f => f.itag === 139 && f.url) ||
+                 adaptive.find(f => f.mime_type?.startsWith('audio/') && f.url)
+      } else {
+        format = adaptive.find(f => (f.itag === 140 || f.itag === 251) && f.url) ||
+                 adaptive.find(f => f.mime_type?.startsWith('audio/') && f.url)
+      }
 
       if (!format?.url) {
         return res.status(404).json({ error: 'Direct audio format unavailable' })
@@ -170,6 +203,7 @@ router.get('/stream/:videoId', async (req, res) => {
         duration: info.basic_info?.duration || 0,
         expiresAt: Date.now() + 2 * 60 * 60 * 1000
       }
+      streamCache.set(cacheKey, cached)
       streamCache.set(videoId, cached)
     }
 
@@ -194,6 +228,9 @@ router.get('/stream/:videoId', async (req, res) => {
       'Content-Type': cached.mimeType || 'audio/mp4',
       'Accept-Ranges': 'bytes',
       'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+      'Access-Control-Allow-Headers': 'Range, Origin, Content-Type, Accept, Cache-Control',
+      'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
       'Cache-Control': 'public, max-age=3600',
     }
 
