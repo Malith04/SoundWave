@@ -1,5 +1,4 @@
 import { Router } from 'express'
-import { Innertube, ClientType } from 'youtubei.js'
 import { Readable } from 'stream'
 
 const router = Router()
@@ -17,13 +16,17 @@ let innertubePromise = null
 async function getInnertube() {
   if (innertubeInstance) return innertubeInstance
   if (!innertubePromise) {
-    innertubePromise = Innertube.create({
-      client_type: ClientType.IOS
-    }).then(instance => {
+    innertubePromise = (async () => {
+      // Dynamic import to maintain 100% compatibility across ESM and Netlify CJS bundles
+      const { Innertube, ClientType } = await import('youtubei.js')
+      const instance = await Innertube.create({
+        client_type: ClientType.IOS
+      })
       innertubeInstance = instance
       return instance
-    }).catch(err => {
+    })().catch(err => {
       innertubePromise = null
+      console.error('[YouTube Engine] Failed to initialize Innertube:', err.message)
       throw err
     })
   }

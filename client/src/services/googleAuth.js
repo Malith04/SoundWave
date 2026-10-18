@@ -24,6 +24,7 @@ export function requestGoogleProfile() {
         prompt: 'select_account',
         callback: async (tokenResponse) => {
           if (tokenResponse.error) {
+            console.error('[GIS Error Response]', tokenResponse)
             if (tokenResponse.error === 'access_denied') {
               return reject({ code: 'auth/popup-closed-by-user', message: 'Sign-in cancelled' })
             }

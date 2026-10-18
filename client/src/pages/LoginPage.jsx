@@ -132,6 +132,7 @@ export default function LoginPage() {
 
       handleLoginSuccess(res)
     } catch (err) {
+      console.error('[Google Sign-In Error]', err)
       const isCancelled = [
         'auth/popup-closed-by-user',
         'auth/cancelled-popup-request',
@@ -139,11 +140,14 @@ export default function LoginPage() {
         'auth/user-cancelled'
       ].includes(err.code)
       if (!isCancelled) {
-        if (err.code === 'auth/unauthorized-domain' || err.message?.includes('origin_mismatch')) {
-          toast.error('Domain not authorized. Please add soundwave-official.netlify.app to Google Cloud Console authorized origins.')
+        const currentOrigin = window.location.origin
+        if (err.code === 'auth/unauthorized-domain' || err.message?.includes('origin_mismatch') || err.message?.includes('idpiframe_initialization_failed')) {
+          toast.error(`Domain not authorized. Please add "${currentOrigin}" to Authorized JavaScript Origins in Google Cloud Console.`, { duration: 6000 })
+        } else if (err.message?.includes('Failed to fetch') || err.status >= 500 || err.message?.includes('NetworkError') || err.message?.includes('ECONNREFUSED')) {
+          toast.error('Cannot reach backend server. Please verify your backend server and database are running.', { duration: 6000 })
         } else {
           const cleanMsg = err.message?.replace(/^Firebase:\s*/i, '').replace(/\s*\(auth\/[^)]+\)\.?/i, '').trim()
-          toast.error(cleanMsg && cleanMsg !== 'Error' ? cleanMsg : 'Google sign-in could not be completed. Check authorized domains.')
+          toast.error(cleanMsg && cleanMsg !== 'Error' ? cleanMsg : `Google sign-in error: Please check Authorized Origins in Google Cloud Console for ${currentOrigin}`)
         }
       }
     } finally {
