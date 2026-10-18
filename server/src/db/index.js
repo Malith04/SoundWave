@@ -4,6 +4,9 @@ import path from 'path'
 import dotenv from 'dotenv'
 
 dotenv.config()
+if (fs.existsSync(path.resolve(process.cwd(), 'server', '.env'))) {
+  dotenv.config({ path: path.resolve(process.cwd(), 'server', '.env') })
+}
 
 const { Pool } = pg
 
