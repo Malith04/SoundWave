@@ -463,7 +463,7 @@ class SoundWaveAudioEngine {
   }
 
   isPlaying() {
-    return !!(this.audio && !this.audio.paused && !this.audio.ended && this.audio.readyState > 2)
+    return !!(this.audio && !this.audio.paused && !this.audio.ended)
   }
 }
 

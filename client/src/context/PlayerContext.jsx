@@ -144,8 +144,8 @@ export function PlayerProvider({ children }) {
     const create = () => {
       try {
         ytPlayerRef.current = new window.YT.Player(divId, {
-          height: '0', width: '0',
-          playerVars: { autoplay: 1, controls: 0, playsinline: 1 },
+          height: '100%', width: '100%',
+          playerVars: { autoplay: 1, controls: 0, playsinline: 1, disablekb: 1 },
           events: {
             onReady: () => {
               ytReadyRef.current = true
@@ -154,21 +154,43 @@ export function PlayerProvider({ children }) {
                 try { ytPlayerRef.current.setPlaybackRate(settings.speed) } catch(_) {}
               }
               if (pendingYTRef.current) {
-                ytPlayerRef.current.loadVideoById(pendingYTRef.current)
+                const pending = pendingYTRef.current
                 pendingYTRef.current = null
+                if (typeof pending === 'object' && pending.videoId) {
+                  ytPlayerRef.current.loadVideoById(pending)
+                } else {
+                  ytPlayerRef.current.loadVideoById(pending)
+                }
               }
             },
             onStateChange: (e) => {
               const S = window.YT.PlayerState
               if (e.data === S.PLAYING) { 
-                setIsPlaying(true); setIsLoading(false)
+                setIsPlaying(true)
+                setIsLoading(false)
+                if (progressInterval.current) clearInterval(progressInterval.current)
+                progressInterval.current = setInterval(() => {
+                  if (ytPlayerRef.current?.getCurrentTime) {
+                    try {
+                      const cur = ytPlayerRef.current.getCurrentTime() || 0
+                      const dur = ytPlayerRef.current.getDuration() || 0
+                      setCurrentTime(cur)
+                      if (dur > 0) {
+                        setDuration(dur)
+                        setProgress(cur / dur)
+                      }
+                    } catch (_) {}
+                  }
+                }, 250)
               } else if (e.data === S.PAUSED) {
+                if (progressInterval.current) clearInterval(progressInterval.current)
                 if (document.hidden && isPlayingRef.current) {
                   try { ytPlayerRef.current?.playVideo() } catch (_) {}
                   return
                 }
                 setIsPlaying(false)
               } else if (e.data === S.ENDED) {
+                if (progressInterval.current) clearInterval(progressInterval.current)
                 handleEnd()
               } else if (e.data === S.BUFFERING) {
                 setIsLoading(true)
@@ -176,6 +198,7 @@ export function PlayerProvider({ children }) {
             },
             onError: (e) => {
               console.warn('YouTube player error:', e)
+              if (progressInterval.current) clearInterval(progressInterval.current)
               setIsLoading(false)
               setError('Playback error')
             },
@@ -199,7 +222,7 @@ export function PlayerProvider({ children }) {
         }
       }
     } catch (_) {}
-  }, [settings?.speed])
+  }, [settings?.speed, handleEnd])
 
   const loadAndPlayRef = useRef(null)
 
@@ -290,17 +313,21 @@ export function PlayerProvider({ children }) {
   }, [handleEnd])
 
   const playWithYouTubeIframe = useCallback((song, videoId, startAt = 0) => {
-    console.log('playWithYouTubeIframe fallback called for:', videoId)
+    console.log('🎬 YouTube Player playing FULL track:', song.title, videoId)
     setEngine('youtube')
     audioEngine.stop()
-    setProgress(0); setCurrentTime(0); setDuration(0)
-    setIsLoading(true); setError(null)
+    setCurrentTime(startAt)
+    if (song.duration) {
+      setDuration(song.duration / 1000)
+    }
+    setIsLoading(true)
+    setError(null)
 
-    if (ytReadyRef.current && ytPlayerRef.current) {
+    if (ytReadyRef.current && ytPlayerRef.current?.loadVideoById) {
       ytPlayerRef.current.setVolume(mutedRef.current ? 0 : volumeRef.current)
       ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startAt })
     } else {
-      pendingYTRef.current = videoId
+      pendingYTRef.current = { videoId, startSeconds: startAt }
     }
   }, [])
 
@@ -322,9 +349,9 @@ export function PlayerProvider({ children }) {
       setIsLoading(false)
     } catch (err) {
       console.warn('Primary stream playback note:', err)
-      // Fallback: If YouTube stream fails, try direct audioUrl
-      if (song.audioUrl && audioUrl !== song.audioUrl) {
-        console.log('Falling back to direct audioUrl...')
+      // Fallback: If YouTube stream fails, try direct audioUrl ONLY if it's a full track (not an iTunes 30s preview)
+      if (song.audioUrl && audioUrl !== song.audioUrl && song.source !== 'itunes') {
+        console.log('Falling back to full direct audioUrl...')
         try {
           await audioEngine.play(song.audioUrl, startAt)
           setIsPlaying(true)
@@ -335,13 +362,32 @@ export function PlayerProvider({ children }) {
         }
       }
 
-      // Secondary fallback: YouTube IFrame
+      // Secondary fallback: YouTube IFrame player (Plays the FULL SONG!)
       const query = `${song.artist} - ${song.title}`
       const vId = song.videoId || song.youtubeId || getCachedYouTubeId(song.id, query)
       if (vId) {
-        console.log('Fallback to YouTube IFrame player...')
+        console.log('Fallback to YouTube player for FULL song...')
         playWithYouTubeIframe(song, vId, startAt)
       } else {
+        try {
+          const discoveredId = await searchYouTube(`${song.artist} - ${song.title} official audio`, song.id)
+          if (discoveredId) {
+            console.log('Discovered YouTube videoId, playing FULL song:', discoveredId)
+            playWithYouTubeIframe(song, discoveredId, startAt)
+            return
+          }
+        } catch (_) {}
+
+        // Last resort: preview audioUrl if available
+        if (song.audioUrl) {
+          try {
+            await audioEngine.play(song.audioUrl, startAt)
+            setIsPlaying(true)
+            setIsLoading(false)
+            return
+          } catch (_) {}
+        }
+
         setIsLoading(false)
         setError('Playback error: could not load audio stream')
         setIsPlaying(false)
@@ -356,15 +402,21 @@ export function PlayerProvider({ children }) {
 
     if (cachedVideoId) {
       const streamUrl = `/api/youtube/stream/${cachedVideoId}?quality=${quality}`
-      console.log('⚡ Instant YouTube Stream (Equalizer 100% Active):', streamUrl)
-      await playTrackAudio(song, streamUrl, startAt, 'youtube')
-      return
+      console.log('⚡ Checking YouTube Stream (Equalizer 100% Active):', streamUrl)
+      try {
+        await playTrackAudio(song, streamUrl, startAt, 'youtube')
+        return
+      } catch (_) {
+        // Direct stream failed -> immediately use YouTube player for FULL track
+        playWithYouTubeIframe(song, cachedVideoId, startAt)
+        return
+      }
     }
 
     // Play preview while discovering full YouTube stream so user hears music with 0ms delay
     if (song.audioUrl) {
       console.log('Playing preview while searching YouTube stream...')
-      await playTrackAudio(song, song.audioUrl, startAt, 'youtube')
+      await playTrackAudio(song, song.audioUrl, startAt, 'preview')
     } else {
       setIsLoading(true)
     }
@@ -372,15 +424,20 @@ export function PlayerProvider({ children }) {
     try {
       const videoId = await searchYouTube(`${song.artist} - ${song.title} official audio`, song.id)
       if (videoId) {
-        const streamUrl = `/api/youtube/stream/${videoId}?quality=${quality}`
-        console.log('⚡ YouTube Stream Discovered (Equalizer 100% Active):', streamUrl)
         const curTime = audioEngine.getCurrentTime() || startAt
-        await playTrackAudio(song, streamUrl, curTime, 'youtube')
+        const streamUrl = `/api/youtube/stream/${videoId}?quality=${quality}`
+        console.log('⚡ YouTube Stream Discovered for FULL song:', streamUrl)
+        try {
+          await playTrackAudio(song, streamUrl, curTime, 'youtube')
+        } catch (_) {
+          // Direct backend stream failed -> seamlessly switch to YouTube player for the FULL track
+          playWithYouTubeIframe(song, videoId, curTime)
+        }
       }
     } catch (error) {
       console.warn('YouTube search upgrade note:', error)
     }
-  }, [settings?.streamQuality, playTrackAudio])
+  }, [settings?.streamQuality, playTrackAudio, playWithYouTubeIframe])
 
   const loadAndPlay = useCallback((song, songQueue = [], index = 0, startAt = 0) => {
     if (!song || !song.id) {
@@ -496,44 +553,47 @@ export function PlayerProvider({ children }) {
   }, [user?.uid])
 
   const togglePlay = useCallback(() => {
-    if (engineRef.current === 'youtube') {
-      const p = ytPlayerRef.current
-      if (!p) return null
-      const isCurrentlyPlaying = p.getPlayerState ? p.getPlayerState() === 1 : isPlayingRef.current
-      if (isCurrentlyPlaying) {
-        p.pauseVideo()
-        setIsPlaying(false)
-        return false
-      } else {
-        p.playVideo()
-        setIsPlaying(true)
-        return true
+    // 1. If currently playing, ALWAYS pause immediately
+    if (isPlayingRef.current) {
+      audioEngine.pause()
+      if (ytPlayerRef.current?.pauseVideo) {
+        try { ytPlayerRef.current.pauseVideo() } catch (_) {}
       }
-    } else {
-      if (audioEngine.isPlaying()) {
-        audioEngine.pause()
-        setIsPlaying(false)
-        return false
-      } else {
-        const song = currentSongRef.current
-        if (!song) return null
-        if (!audioEngine.audio?.src || audioEngine.audio.src === '') {
-          loadAndPlay(song, queueRef.current, queueIndexRef.current, currentTimeRef.current)
-          return true
-        }
-        audioEngine.resume()
-        setIsPlaying(true)
-        return true
-      }
+      setIsPlaying(false)
+      return false
     }
+
+    // 2. If currently paused, resume playback:
+    if (engineRef.current === 'youtube' && ytPlayerRef.current?.playVideo) {
+      try {
+        ytPlayerRef.current.playVideo()
+        setIsPlaying(true)
+        return true
+      } catch (_) {}
+    }
+
+    if (audioEngine.audio?.src && audioEngine.audio.src !== '' && !audioEngine.audio.src.endsWith('/')) {
+      audioEngine.resume()
+      setIsPlaying(true)
+      return true
+    }
+
+    const song = currentSongRef.current
+    if (song) {
+      loadAndPlay(song, queueRef.current, queueIndexRef.current, currentTimeRef.current)
+      return true
+    }
+
+    return null
   }, [loadAndPlay])
 
   const seek = useCallback(fraction => {
-    if (engineRef.current === 'youtube' && ytPlayerRef.current?.getPlayerState) {
+    if (engineRef.current === 'youtube' && ytPlayerRef.current?.seekTo) {
       const p = ytPlayerRef.current
       const dur = p.getDuration?.() || duration || 0
       p.seekTo(fraction * dur, true)
-      setProgress(fraction); setCurrentTime(fraction * dur)
+      setProgress(fraction)
+      setCurrentTime(fraction * dur)
     } else {
       const dur = audioEngine.getDuration() || duration || 0
       if (dur > 0) {
@@ -554,12 +614,14 @@ export function PlayerProvider({ children }) {
 
   const previous = useCallback(() => {
     if (currentTimeRef.current > 3) {
-      if (engineRef.current === 'youtube' && ytPlayerRef.current?.getPlayerState) {
+      if (engineRef.current === 'youtube' && ytPlayerRef.current?.seekTo) {
         ytPlayerRef.current.seekTo(0, true)
-        setProgress(0); setCurrentTime(0)
+        setProgress(0)
+        setCurrentTime(0)
       } else {
         audioEngine.seek(0)
-        setProgress(0); setCurrentTime(0)
+        setProgress(0)
+        setCurrentTime(0)
       }
       return
     }
