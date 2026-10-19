@@ -196,11 +196,40 @@ export function PlayerProvider({ children }) {
                 setIsLoading(true)
               }
             },
-            onError: (e) => {
-              console.warn('YouTube player error:', e)
+            onError: async (e) => {
+              console.warn('YouTube player error code:', e?.data)
               if (progressInterval.current) clearInterval(progressInterval.current)
               setIsLoading(false)
-              setError('Playback error')
+
+              const song = currentSongRef.current
+              if (!song) return
+
+              // Error 150/101 = embed disabled by video owner (common for official VEVO/Universal tracks)
+              if (e?.data === 150 || e?.data === 101 || e?.data === 100) {
+                console.log('Embedding restricted on this video, searching for unblocked audio/lyrics version...')
+                try {
+                  const { searchYouTube } = await import('../services/musicApi')
+                  const altId = await searchYouTube(`${song.artist} - ${song.title} lyrics`, `${song.id}_alt`)
+                  if (altId && ytPlayerRef.current?.loadVideoById) {
+                    ytPlayerRef.current.loadVideoById({ videoId: altId, startSeconds: currentTimeRef.current || 0 })
+                    setError(null)
+                    return
+                  }
+                } catch (_) {}
+              }
+
+              // Fallback to direct audioUrl so music never cuts out
+              if (song.audioUrl) {
+                console.log('Falling back to direct audio source...')
+                try {
+                  await audioEngine.play(song.audioUrl, currentTimeRef.current || 0)
+                  setIsPlaying(true)
+                  setError(null)
+                  return
+                } catch (_) {}
+              }
+
+              setError('Playback unavailable')
             },
           },
         })
@@ -384,6 +413,7 @@ export function PlayerProvider({ children }) {
             await audioEngine.play(song.audioUrl, startAt)
             setIsPlaying(true)
             setIsLoading(false)
+            setError(null)
             return
           } catch (_) {}
         }

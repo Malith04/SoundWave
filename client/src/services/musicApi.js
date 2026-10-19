@@ -166,6 +166,24 @@ export async function searchYouTube(query, songId = null) {
     console.warn('Backend YouTube search endpoint unreachable, falling back:', backendErr.message)
   }
 
+  // Layer 2.5: Direct CORS Proxy YouTube search fallback
+  try {
+    const corsUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://www.youtube.com/results?search_query=${encodeURIComponent(query + ' audio')}`)}`
+    const res = await fetchWithTimeout(corsUrl, 6000, {}, 1)
+    if (res?.ok) {
+      const data = await res.json()
+      const html = data?.contents || ''
+      const match = html.match(/\/watch\?v=([a-zA-Z0-9_-]{11})/) || html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/)
+      if (match && match[1]) {
+        console.log('⚡ YouTube Web Search via Proxy found:', match[1])
+        setCachedYouTubeId(songId, query, match[1])
+        return match[1]
+      }
+    }
+  } catch (proxyErr) {
+    console.warn('Proxy YouTube search fallback note:', proxyErr.message)
+  }
+
   // Layer 3: Fallback to Google YouTube Data API v3
   if (YT_API_KEY) {
     try {

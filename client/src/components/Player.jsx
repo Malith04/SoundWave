@@ -983,7 +983,7 @@ export default function Player() {
               layout="inline"
               showTimes={true}
             />
-            {error && <p className="text-xs text-orange-400 truncate">{error}</p>}
+            {error && !isPlaying && <p className="text-xs text-orange-400 truncate">{error}</p>}
           </div>
 
           {/* Right: volume + extras */}
