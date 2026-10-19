@@ -22,7 +22,7 @@ export const pool = new Pool({
   ssl: isRemoteDb ? { rejectUnauthorized: false } : false,
   max: 5,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
+  connectionTimeoutMillis: 30000,
 })
 
 // Query helper with logging
@@ -42,29 +42,37 @@ export const query = async (text, params) => {
 }
 
 // Automatic schema initialization
-export async function initDb() {
-  try {
-    console.log('🔌 Connecting to PostgreSQL...')
-    const client = await pool.connect()
-    console.log('✅ PostgreSQL connected successfully!')
+export async function initDb(retries = 2) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`🔌 Connecting to PostgreSQL...`)
+      const client = await pool.connect()
+      console.log('✅ PostgreSQL connected successfully!')
 
-    const possiblePaths = [
-      path.join(process.cwd(), 'server', 'src', 'db', 'schema.sql'),
-      path.join(process.cwd(), 'src', 'db', 'schema.sql'),
-      path.join(process.cwd(), 'schema.sql')
-    ]
-    const schemaPath = possiblePaths.find(p => fs.existsSync(p))
-    if (schemaPath) {
-      const sql = fs.readFileSync(schemaPath, 'utf8')
-      console.log('⚡ Initializing database schema...')
-      await client.query(sql)
-      console.log('✅ Database schema verified and up to date!')
+      const possiblePaths = [
+        path.join(process.cwd(), 'server', 'src', 'db', 'schema.sql'),
+        path.join(process.cwd(), 'src', 'db', 'schema.sql'),
+        path.join(process.cwd(), 'schema.sql')
+      ]
+      const schemaPath = possiblePaths.find(p => fs.existsSync(p))
+      if (schemaPath) {
+        const sql = fs.readFileSync(schemaPath, 'utf8')
+        console.log('⚡ Initializing database schema...')
+        await client.query(sql)
+        console.log('✅ Database schema verified and up to date!')
+      }
+      client.release()
+      return true
+    } catch (err) {
+      console.warn(`⚠️ PostgreSQL connection attempt ${attempt} notice:`, err.message)
+      if (attempt < retries) {
+        console.log('⏳ Waiting 2s for cloud database to wake up...')
+        await new Promise(r => setTimeout(r, 2000))
+      } else {
+        console.error('❌ PostgreSQL connection error:', err.message)
+        console.warn('⚠️  Ensure your PostgreSQL server is running and DATABASE_URL is set in server/.env')
+        return false
+      }
     }
-    client.release()
-    return true
-  } catch (err) {
-    console.error('❌ PostgreSQL connection error:', err.message)
-    console.warn('⚠️  Ensure your PostgreSQL server is running and DATABASE_URL is set in server/.env')
-    return false
   }
 }
