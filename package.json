@@ -8,6 +8,7 @@
     "build": "npm --prefix client install --include=dev && npm --prefix client run build",
     "start": "cd client && npm run preview",
     "dev": "cd client && npm run dev",
+    "dev:all": "concurrently -n \"SERVER,CLIENT\" -c \"cyan,magenta\" \"npm run server:dev\" \"npm run dev\",
     "install-client": "cd client && npm install",
     "server": "cd server && npm start",
     "server:dev": "cd server && npm run dev",
@@ -39,5 +40,8 @@
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
   }
 }
