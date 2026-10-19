@@ -60,6 +60,8 @@ export function PlayerProvider({ children }) {
   const ytReadyRef = useRef(false)
   const pendingYTRef = useRef(null)
   const wasPlayingRef = useRef(false)
+  const loadAndPlayRef = useRef(null)
+  const handleEndRef = useRef(null)
 
   const [currentSong, setCurrentSong] = useState(null)
   const [queue, setQueue] = useState([])
@@ -139,6 +141,50 @@ export function PlayerProvider({ children }) {
     return () => clearInterval(t)
   }, [user?.uid])
 
+  // ── Queue End & Autoplay Transition ────────────────────────
+  const handleEnd = useCallback(async () => {
+    setProgress(1)
+    const q = queueRef.current
+    const idx = queueIndexRef.current
+    const repeat = repeatRef.current
+    const shuffle = shuffleRef.current
+
+    if (repeat === 'one') {
+      audioEngine.seek(0)
+      audioEngine.resume()
+      return
+    }
+
+    const nextIdx = shuffle ? Math.floor(Math.random() * q.length) : idx + 1
+    if (nextIdx < q.length) {
+      loadAndPlayRef.current?.(q[nextIdx], q, nextIdx)
+    } else if (repeat === 'all' && q.length > 0) {
+      loadAndPlayRef.current?.(q[0], q, 0)
+    } else if (settings?.autoplay && q.length > 0) {
+      // Autoplay: fetch recommended similar song
+      try {
+        const lastSong = q[q.length - 1]
+        console.log('Autoplay: fetching next track similar to', lastSong.title)
+        const { recommendationEngine } = await import('../services/recommendationService')
+        const recs = await recommendationEngine.getMoodRecommendations('happy', 5)
+        if (recs && recs.length > 0) {
+          const nextSong = recs.find(s => s.id !== lastSong.id) || recs[0]
+          loadAndPlayRef.current?.(nextSong, [...q, nextSong], q.length)
+          return
+        }
+      } catch (err) {
+        console.warn('Autoplay error:', err)
+      }
+      setIsPlaying(false)
+    } else {
+      setIsPlaying(false)
+    }
+  }, [settings?.autoplay])
+
+  useEffect(() => {
+    handleEndRef.current = handleEnd
+  }, [handleEnd])
+
   // ── YouTube IFrame API (Fallback for restricted content) ───
   const initYTPlayer = useCallback((divId) => {
     const create = () => {
@@ -191,7 +237,7 @@ export function PlayerProvider({ children }) {
                 setIsPlaying(false)
               } else if (e.data === S.ENDED) {
                 if (progressInterval.current) clearInterval(progressInterval.current)
-                handleEnd()
+                handleEndRef.current?.()
               } else if (e.data === S.BUFFERING) {
                 setIsLoading(true)
               }
@@ -251,49 +297,7 @@ export function PlayerProvider({ children }) {
         }
       }
     } catch (_) {}
-  }, [settings?.speed, handleEnd])
-
-  const loadAndPlayRef = useRef(null)
-
-  // ── Queue End & Autoplay Transition ────────────────────────
-  const handleEnd = useCallback(async () => {
-    setProgress(1)
-    const q = queueRef.current
-    const idx = queueIndexRef.current
-    const repeat = repeatRef.current
-    const shuffle = shuffleRef.current
-
-    if (repeat === 'one') {
-      audioEngine.seek(0)
-      audioEngine.resume()
-      return
-    }
-
-    const nextIdx = shuffle ? Math.floor(Math.random() * q.length) : idx + 1
-    if (nextIdx < q.length) {
-      loadAndPlayRef.current?.(q[nextIdx], q, nextIdx)
-    } else if (repeat === 'all' && q.length > 0) {
-      loadAndPlayRef.current?.(q[0], q, 0)
-    } else if (settings?.autoplay && q.length > 0) {
-      // Autoplay: fetch recommended similar song
-      try {
-        const lastSong = q[q.length - 1]
-        console.log('Autoplay: fetching next track similar to', lastSong.title)
-        const { recommendationEngine } = await import('../services/recommendationService')
-        const recs = await recommendationEngine.getMoodRecommendations('happy', 5)
-        if (recs && recs.length > 0) {
-          const nextSong = recs.find(s => s.id !== lastSong.id) || recs[0]
-          loadAndPlayRef.current?.(nextSong, [...q, nextSong], q.length)
-          return
-        }
-      } catch (err) {
-        console.warn('Autoplay error:', err)
-      }
-      setIsPlaying(false)
-    } else {
-      setIsPlaying(false)
-    }
-  }, [settings?.autoplay])
+  }, [settings?.speed])
 
   // ── Universal Audio Engine Event Listeners ─────────────────
   useEffect(() => {
@@ -319,7 +323,7 @@ export function PlayerProvider({ children }) {
     })
 
     const unsubEnd = audioEngine.on('ended', () => {
-      handleEnd()
+      handleEndRef.current?.()
     })
 
     const unsubLoading = audioEngine.on('loading', loading => {
@@ -339,7 +343,7 @@ export function PlayerProvider({ children }) {
       unsubLoading()
       unsubError()
     }
-  }, [handleEnd])
+  }, [])
 
   const playWithYouTubeIframe = useCallback((song, videoId, startAt = 0) => {
     console.log('🎬 YouTube Player playing FULL track:', song.title, videoId)
