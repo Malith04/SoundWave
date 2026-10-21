@@ -23,6 +23,17 @@ async function start() {
   })
 }
 
+// Process-level resilience against network stream disconnects
+process.on('uncaughtException', (err) => {
+  if (err?.name === 'AbortError' || err?.code === 'ERR_STREAM_PREMATURE_CLOSE') return
+  console.error('[Process Error] Uncaught exception:', err.message)
+})
+
+process.on('unhandledRejection', (reason) => {
+  if (reason?.name === 'AbortError') return
+  console.error('[Process Error] Unhandled rejection:', reason?.message || reason)
+})
+
 start().catch(err => {
   console.error('Failed to start server:', err)
 })

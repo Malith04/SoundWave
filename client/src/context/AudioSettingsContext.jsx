@@ -29,7 +29,7 @@ export const DEFAULT = {
   eqEnabled: false,
   eqPreset: 'flat',
   spatialEnabled: false,
-  spatialWidth: 1.0,
+  spatialWidth: 1.4,
   bassBoost: 0,
   normalize: false,
   mono: false,
@@ -146,33 +146,33 @@ export function AudioSettingsProvider({ children }) {
   const update = useCallback((key, value) => {
     setSettings(s => {
       const next = { ...s, [key]: value }
-      setTimeout(() => applyAudioChain(next), 0)
+      audioEngine.applySettings(next)
       return next
     })
-  }, [applyAudioChain])
+  }, [])
 
   const applyPreset = useCallback((name) => {
     const preset = EQ_PRESETS[name]
     if (!preset) return
     setSettings(s => {
       const next = { ...s, eq: { ...preset }, eqPreset: name, eqEnabled: true }
-      setTimeout(() => applyAudioChain(next), 0)
+      audioEngine.applySettings(next)
       return next
     })
-  }, [applyAudioChain])
+  }, [])
 
   const setEqBand = useCallback((freq, gain) => {
     setSettings(s => {
       const next = { ...s, eq: { ...s.eq, [freq]: gain }, eqPreset: 'custom', eqEnabled: true }
-      setTimeout(() => applyAudioChain(next), 0)
+      audioEngine.applySettings(next)
       return next
     })
-  }, [applyAudioChain])
+  }, [])
 
   const reset = useCallback(() => {
     setSettings({ ...DEFAULT })
-    setTimeout(() => applyAudioChain({ ...DEFAULT }), 0)
-  }, [applyAudioChain])
+    audioEngine.applySettings({ ...DEFAULT })
+  }, [])
 
   return (
     <AudioSettingsContext.Provider value={{ settings, update, applyPreset, setEqBand, reset, applyAudioChain }}>

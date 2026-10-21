@@ -28,6 +28,7 @@ class SoundWaveAudioEngine {
     this.bassFilter = null
     this.eqFilters = {}
     this.compressor = null
+    this.normGain = null
     this.loudGain = null
     this.splitter = null
     this.merger = null
@@ -35,6 +36,9 @@ class SoundWaveAudioEngine {
     this.crossL = null
     this.directR = null
     this.crossR = null
+    this.crossDelayL = null
+    this.crossDelayR = null
+    this.limiter = null
 
     // State
     this.isInitialized = false
@@ -124,10 +128,10 @@ class SoundWaveAudioEngine {
     this.masterInput = ctx.createGain()
     this.masterInput.gain.value = 1.0
 
-    // 1. Bass Boost Filter (lowshelf at 80Hz)
+    // 1. Bass Boost Filter (lowshelf at 90Hz)
     this.bassFilter = ctx.createBiquadFilter()
     this.bassFilter.type = 'lowshelf'
-    this.bassFilter.frequency.value = 80
+    this.bassFilter.frequency.value = 90
     this.bassFilter.gain.value = 0
 
     // 2. 10-Band Equalizer (32Hz to 16kHz)
@@ -140,19 +144,22 @@ class SoundWaveAudioEngine {
       this.eqFilters[freq] = f
     })
 
-    // 3. Audio Normalization (Studio Dynamics Compressor)
+    // 3. Audio Normalization (Studio Dynamics Compressor + Makeup Gain)
     this.compressor = ctx.createDynamicsCompressor()
     this.compressor.threshold.value = 0
-    this.compressor.knee.value = 30
+    this.compressor.knee.value = 25
     this.compressor.ratio.value = 1
     this.compressor.attack.value = 0.003
     this.compressor.release.value = 0.25
+
+    this.normGain = ctx.createGain()
+    this.normGain.gain.value = 1.0
 
     // 4. Loud Volume Headroom Booster Gain
     this.loudGain = ctx.createGain()
     this.loudGain.gain.value = 1.0
 
-    // 5. 3D Spatial Audio & Mono Downmix Stereo Matrix
+    // 5. 3D Spatial Audio & Mono Downmix Stereo Matrix with Haas delay
     this.splitter = ctx.createChannelSplitter(2)
     this.merger = ctx.createChannelMerger(2)
 
@@ -161,13 +168,26 @@ class SoundWaveAudioEngine {
     this.directR = ctx.createGain()
     this.crossR = ctx.createGain()
 
+    this.crossDelayL = ctx.createDelay()
+    this.crossDelayR = ctx.createDelay()
+    this.crossDelayL.delayTime.value = 0.0
+    this.crossDelayR.delayTime.value = 0.0
+
     this.directL.gain.value = 1.0
     this.crossL.gain.value = 0.0
     this.directR.gain.value = 1.0
     this.crossR.gain.value = 0.0
 
+    // 6. Master Studio Soft Limiter (Zero Digital Distortion)
+    this.limiter = ctx.createDynamicsCompressor()
+    this.limiter.threshold.value = -0.5
+    this.limiter.knee.value = 0.0
+    this.limiter.ratio.value = 20.0
+    this.limiter.attack.value = 0.001
+    this.limiter.release.value = 0.05
+
     // Wire DSP Nodes in series:
-    // masterInput -> bassFilter -> eq[0] -> ... -> eq[9] -> compressor -> loudGain -> splitter
+    // masterInput -> bassFilter -> eq[0] -> ... -> eq[9] -> compressor -> normGain -> loudGain -> splitter
     let prev = this.masterInput
     prev.connect(this.bassFilter)
     prev = this.bassFilter
@@ -178,16 +198,20 @@ class SoundWaveAudioEngine {
     })
 
     prev.connect(this.compressor)
-    this.compressor.connect(this.loudGain)
+    this.compressor.connect(this.normGain)
+    this.normGain.connect(this.loudGain)
     this.loudGain.connect(this.splitter)
 
-    // Splitter ch 0 (Left) -> directL & crossL
+    // Direct path
     this.splitter.connect(this.directL, 0)
-    this.splitter.connect(this.crossL, 0)
-
-    // Splitter ch 1 (Right) -> directR & crossR
     this.splitter.connect(this.directR, 1)
-    this.splitter.connect(this.crossR, 1)
+
+    // Cross-feed with Haas acoustic interaural delay for 3D soundstage widening
+    this.splitter.connect(this.crossDelayL, 0)
+    this.crossDelayL.connect(this.crossL)
+
+    this.splitter.connect(this.crossDelayR, 1)
+    this.crossDelayR.connect(this.crossR)
 
     // Sum into merger:
     // Merger ch 0 (Left out): directL + crossR
@@ -198,8 +222,9 @@ class SoundWaveAudioEngine {
     this.directR.connect(this.merger, 0, 1)
     this.crossL.connect(this.merger, 0, 1)
 
-    // Merger -> Speakers/Headphones destination
-    this.merger.connect(ctx.destination)
+    // Merger -> Studio Limiter -> Destination
+    this.merger.connect(this.limiter)
+    this.limiter.connect(ctx.destination)
   }
 
   _wireHowler() {
@@ -298,14 +323,21 @@ class SoundWaveAudioEngine {
       // If switching to a new URL
       if (this.audio.src !== url && !this.audio.src.endsWith(url)) {
         this.audio.src = url
-        this.audio.load()
       }
 
       this.audio.playbackRate = this.currentSpeed
       this._updateEffectiveVolume()
 
       if (startAt > 0) {
-        this.audio.currentTime = startAt
+        if (this.audio.readyState >= 1) {
+          try { this.audio.currentTime = startAt } catch (_) {}
+        } else {
+          const onMeta = () => {
+            try { this.audio.currentTime = startAt } catch (_) {}
+            this.audio.removeEventListener('loadedmetadata', onMeta)
+          }
+          this.audio.addEventListener('loadedmetadata', onMeta, { once: true })
+        }
       }
 
       const playPromise = this.audio.play()
@@ -387,35 +419,38 @@ class SoundWaveAudioEngine {
 
     const now = ctx.currentTime
 
-    // 1. Bass Boost
+    // 1. Bass Boost (lowshelf 90Hz)
     if (this.bassFilter) {
       const bassVal = Math.max(0, Math.min(12, s.bassBoost ?? 0))
       this.bassFilter.gain.setTargetAtTime(bassVal, now, 0.02)
     }
 
-    // 2. 10-Band Equalizer (Active across all 3 engines)
+    // 2. 10-Band Equalizer (Active across all engines)
     EQ_BANDS.forEach(freq => {
       const node = this.eqFilters[freq]
       if (node) {
-        const gain = s.eqEnabled ? (s.eq?.[freq] ?? 0) : 0
-        node.gain.setTargetAtTime(Math.max(-12, Math.min(12, gain)), now, 0.02)
+        const raw = s.eq?.[freq] ?? s.eq?.[String(freq)] ?? 0
+        const gain = s.eqEnabled ? Math.max(-12, Math.min(12, Number(raw) || 0)) : 0
+        node.gain.setTargetAtTime(gain, now, 0.02)
       }
     })
 
-    // 3. Audio Normalization (Studio Dynamics Compressor)
-    if (this.compressor) {
+    // 3. Audio Normalization (Studio Dynamics Compressor + Makeup Gain)
+    if (this.compressor && this.normGain) {
       if (s.normalize) {
         this.compressor.threshold.setTargetAtTime(-24, now, 0.02)
-        this.compressor.ratio.setTargetAtTime(12, now, 0.02)
+        this.compressor.ratio.setTargetAtTime(8, now, 0.02)
+        this.normGain.gain.setTargetAtTime(1.35, now, 0.02)
       } else {
         this.compressor.threshold.setTargetAtTime(0, now, 0.02)
         this.compressor.ratio.setTargetAtTime(1, now, 0.02)
+        this.normGain.gain.setTargetAtTime(1.0, now, 0.02)
       }
     }
 
     // 4. Loud Volume Headroom Boost
     if (this.loudGain) {
-      const loudMultiplier = s.loudVolume ? 1.5 : 1.0
+      const loudMultiplier = s.loudVolume ? 1.4 : 1.0
       this.loudGain.gain.setTargetAtTime(loudMultiplier, now, 0.02)
     }
 
@@ -423,20 +458,28 @@ class SoundWaveAudioEngine {
     if (this.directL && this.crossL && this.directR && this.crossR) {
       let d = 1.0
       let c = 0.0
+      let delay = 0.0
 
       if (s.mono) {
         d = 0.5
         c = 0.5
+        delay = 0.0
       } else if (s.spatialEnabled) {
-        const w = s.spatialWidth ?? 1.0
+        const w = s.spatialWidth !== undefined && s.spatialWidth !== null && s.spatialWidth !== 1.0 ? s.spatialWidth : 1.45
         d = (1 + w) / 2
         c = (1 - w) / 2
+        delay = 0.00035 // 0.35ms Haas ITD delay for genuine 3D acoustic immersion
       }
 
       this.directL.gain.setTargetAtTime(d, now, 0.02)
       this.directR.gain.setTargetAtTime(d, now, 0.02)
       this.crossL.gain.setTargetAtTime(c, now, 0.02)
       this.crossR.gain.setTargetAtTime(c, now, 0.02)
+
+      if (this.crossDelayL && this.crossDelayR) {
+        this.crossDelayL.delayTime.setTargetAtTime(delay, now, 0.02)
+        this.crossDelayR.delayTime.setTargetAtTime(delay, now, 0.02)
+      }
     }
 
     // 6. Playback Speed

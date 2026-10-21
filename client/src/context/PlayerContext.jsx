@@ -155,7 +155,20 @@ export function PlayerProvider({ children }) {
       return
     }
 
-    const nextIdx = shuffle ? Math.floor(Math.random() * q.length) : idx + 1
+    let nextIdx = idx + 1
+    if (shuffle) {
+      if (settings?.smartShuffle && q.length > 2) {
+        const unplayed = q.map((_, i) => i).filter(i => i !== idx)
+        const current = q[idx]
+        const matched = unplayed.filter(i => q[i].artist === current?.artist || q[i].genre === current?.genre)
+        nextIdx = matched.length > 0
+          ? matched[Math.floor(Math.random() * matched.length)]
+          : unplayed[Math.floor(Math.random() * unplayed.length)]
+      } else {
+        nextIdx = Math.floor(Math.random() * q.length)
+      }
+    }
+
     if (nextIdx < q.length) {
       loadAndPlayRef.current?.(q[nextIdx], q, nextIdx)
     } else if (repeat === 'all' && q.length > 0) {
@@ -179,7 +192,7 @@ export function PlayerProvider({ children }) {
     } else {
       setIsPlaying(false)
     }
-  }, [settings?.autoplay])
+  }, [settings?.autoplay, settings?.smartShuffle])
 
   useEffect(() => {
     handleEndRef.current = handleEnd
@@ -378,8 +391,12 @@ export function PlayerProvider({ children }) {
       audioEngine.setVolume(mutedRef.current ? 0 : volumeRef.current / 100, mutedRef.current)
 
       await audioEngine.play(audioUrl, startAt)
+      if (ytPlayerRef.current?.stopVideo) {
+        try { ytPlayerRef.current.stopVideo() } catch (_) {}
+      }
       setIsPlaying(true)
       setIsLoading(false)
+      return true
     } catch (err) {
       console.warn('Primary stream playback note:', err)
       // Fallback: If YouTube stream fails, try direct audioUrl ONLY if it's a full track (not an iTunes 30s preview)
@@ -387,9 +404,12 @@ export function PlayerProvider({ children }) {
         console.log('Falling back to full direct audioUrl...')
         try {
           await audioEngine.play(song.audioUrl, startAt)
+          if (ytPlayerRef.current?.stopVideo) {
+            try { ytPlayerRef.current.stopVideo() } catch (_) {}
+          }
           setIsPlaying(true)
           setIsLoading(false)
-          return
+          return true
         } catch (e) {
           console.error('Fallback audioUrl error:', e)
         }
@@ -407,7 +427,7 @@ export function PlayerProvider({ children }) {
           if (discoveredId) {
             console.log('Discovered YouTube videoId, playing FULL song:', discoveredId)
             playWithYouTubeIframe(song, discoveredId, startAt)
-            return
+            return false
           }
         } catch (_) {}
 
@@ -415,16 +435,20 @@ export function PlayerProvider({ children }) {
         if (song.audioUrl) {
           try {
             await audioEngine.play(song.audioUrl, startAt)
+            if (ytPlayerRef.current?.stopVideo) {
+              try { ytPlayerRef.current.stopVideo() } catch (_) {}
+            }
             setIsPlaying(true)
             setIsLoading(false)
             setError(null)
-            return
+            return true
           } catch (_) {}
         }
 
         setIsLoading(false)
         setError('Playback error: could not load audio stream')
         setIsPlaying(false)
+        return false
       }
     }
   }, [settings, playWithYouTubeIframe])
@@ -438,13 +462,12 @@ export function PlayerProvider({ children }) {
       const streamUrl = `/api/youtube/stream/${cachedVideoId}?quality=${quality}`
       console.log('⚡ Checking YouTube Stream (Equalizer 100% Active):', streamUrl)
       try {
-        await playTrackAudio(song, streamUrl, startAt, 'youtube')
-        return
-      } catch (_) {
-        // Direct stream failed -> immediately use YouTube player for FULL track
-        playWithYouTubeIframe(song, cachedVideoId, startAt)
-        return
-      }
+        const ok = await playTrackAudio(song, streamUrl, startAt, 'youtube')
+        if (ok) return
+      } catch (_) {}
+      // Direct stream failed -> fallback to YouTube iframe
+      playWithYouTubeIframe(song, cachedVideoId, startAt)
+      return
     }
 
     // Play preview while discovering full YouTube stream so user hears music with 0ms delay
@@ -462,16 +485,34 @@ export function PlayerProvider({ children }) {
         const streamUrl = `/api/youtube/stream/${videoId}?quality=${quality}`
         console.log('⚡ YouTube Stream Discovered for FULL song:', streamUrl)
         try {
-          await playTrackAudio(song, streamUrl, curTime, 'youtube')
-        } catch (_) {
-          // Direct backend stream failed -> seamlessly switch to YouTube player for the FULL track
-          playWithYouTubeIframe(song, videoId, curTime)
-        }
+          const ok = await playTrackAudio(song, streamUrl, curTime, 'youtube')
+          if (ok) return
+        } catch (_) {}
+        // Direct backend stream failed -> switch to YouTube player
+        playWithYouTubeIframe(song, videoId, curTime)
       }
     } catch (error) {
       console.warn('YouTube search upgrade note:', error)
     }
   }, [settings?.streamQuality, playTrackAudio, playWithYouTubeIframe])
+
+  // ── Gapless Pre-caching ───────────────────────────────────
+  useEffect(() => {
+    if (!settings?.gapless || !isPlaying || duration < 15) return
+    const rem = duration - currentTime
+    if (rem > 0 && rem <= 8) {
+      const q = queueRef.current
+      const idx = queueIndexRef.current
+      const nextSong = q && q[idx + 1]
+      if (nextSong) {
+        const query = `${nextSong.artist} - ${nextSong.title}`
+        const vId = nextSong.videoId || nextSong.youtubeId || getCachedYouTubeId(nextSong.id, query)
+        if (vId) {
+          fetch(`/api/youtube/stream/${vId}?quality=${settings?.streamQuality || 'auto'}`, { method: 'HEAD' }).catch(() => {})
+        }
+      }
+    }
+  }, [currentTime, duration, isPlaying, settings?.gapless, settings?.streamQuality])
 
   const loadAndPlay = useCallback((song, songQueue = [], index = 0, startAt = 0) => {
     if (!song || !song.id) {
@@ -642,9 +683,21 @@ export function PlayerProvider({ children }) {
   const next = useCallback(() => {
     const q = queueRef.current
     const idx = queueIndexRef.current
-    const nextIdx = shuffleRef.current ? Math.floor(Math.random() * q.length) : idx + 1
+    let nextIdx = idx + 1
+    if (shuffleRef.current) {
+      if (settings?.smartShuffle && q.length > 2) {
+        const unplayed = q.map((_, i) => i).filter(i => i !== idx)
+        const current = q[idx]
+        const matched = unplayed.filter(i => q[i].artist === current?.artist || q[i].genre === current?.genre)
+        nextIdx = matched.length > 0
+          ? matched[Math.floor(Math.random() * matched.length)]
+          : unplayed[Math.floor(Math.random() * unplayed.length)]
+      } else {
+        nextIdx = Math.floor(Math.random() * q.length)
+      }
+    }
     if (nextIdx < q.length) loadAndPlay(q[nextIdx], q, nextIdx)
-  }, [loadAndPlay])
+  }, [loadAndPlay, settings?.smartShuffle])
 
   const previous = useCallback(() => {
     if (currentTimeRef.current > 3) {

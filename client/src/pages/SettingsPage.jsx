@@ -263,6 +263,9 @@ function AudioTab({ settings, update, applyPreset, setEqBand, reset }) {
           value={settings.spatialEnabled}
           onChange={v => {
             update('spatialEnabled', v)
+            if (v && (!settings.spatialWidth || settings.spatialWidth === 1.0)) {
+              update('spatialWidth', 1.4)
+            }
             toast.success(v ? '3D Spatial Audio enabled' : '3D Spatial Audio disabled')
           }}
         />

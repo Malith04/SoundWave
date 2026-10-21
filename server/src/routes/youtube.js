@@ -222,10 +222,47 @@ router.get('/stream/:videoId', async (req, res) => {
       try { controller.abort() } catch (_) {}
     })
 
-    const ytRes = await fetch(cached.url, {
+    // Handle stale/expired cache (HTTP 403 / 410 from YouTube CDN)
+    let ytRes = await fetch(cached.url, {
       headers: reqHeaders,
       signal: controller.signal
     })
+
+    if (!ytRes.ok && (ytRes.status === 403 || ytRes.status === 410)) {
+      console.log(`Cache entry for ${videoId} expired (HTTP ${ytRes.status}), refreshing format...`)
+      streamCache.delete(cacheKey)
+      streamCache.delete(videoId)
+
+      const yt = await getInnertube()
+      const info = await yt.getBasicInfo(videoId)
+      const adaptive = info.streaming_data?.adaptive_formats || []
+      
+      let format = null
+      if (quality === 'low') {
+        format = adaptive.find(f => f.itag === 139 && f.url) ||
+                 adaptive.find(f => f.mime_type?.startsWith('audio/') && f.url)
+      } else {
+        format = adaptive.find(f => (f.itag === 140 || f.itag === 251) && f.url) ||
+                 adaptive.find(f => f.mime_type?.startsWith('audio/') && f.url)
+      }
+
+      if (format?.url) {
+        cached = {
+          url: format.url,
+          mimeType: format.mime_type || 'audio/mp4',
+          contentLength: format.content_length,
+          duration: info.basic_info?.duration || 0,
+          expiresAt: Date.now() + 2 * 60 * 60 * 1000
+        }
+        streamCache.set(cacheKey, cached)
+        streamCache.set(videoId, cached)
+
+        ytRes = await fetch(cached.url, {
+          headers: reqHeaders,
+          signal: controller.signal
+        })
+      }
+    }
 
     const resHeaders = {
       'Content-Type': cached.mimeType || 'audio/mp4',
@@ -243,7 +280,17 @@ router.get('/stream/:videoId', async (req, res) => {
     if (cr) resHeaders['Content-Range'] = cr
 
     res.writeHead(ytRes.status, resHeaders)
-    Readable.fromWeb(ytRes.body).pipe(res)
+
+    const nodeStream = Readable.fromWeb(ytRes.body)
+    nodeStream.on('error', (err) => {
+      // Normal when browser pauses, skips, or seeks
+      if (err.name === 'AbortError' || err.code === 'ERR_STREAM_PREMATURE_CLOSE') return
+      console.warn(`Stream transfer notice for ${videoId}:`, err.message)
+    })
+    res.on('error', () => {
+      try { controller.abort() } catch (_) {}
+    })
+    nodeStream.pipe(res)
   } catch (err) {
     if (err.name === 'AbortError') return
     console.error(`Stream proxy error for ${videoId}:`, err.message)
