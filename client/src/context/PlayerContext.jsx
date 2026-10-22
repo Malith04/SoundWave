@@ -538,7 +538,7 @@ export function PlayerProvider({ children }) {
 
     if (currentEngine === 'studio') {
       // 🎧 Studio Audio Engine: Pure studio sound with uncompressed EQ & Spatial Audio
-      if (song.source === 'jamendo' && song.audioUrl) {
+      if (song.audioUrl) {
         playTrackAudio(song, song.audioUrl, startAt, 'studio')
       } else {
         playWithYouTube(song, startAt, 'very_high')
@@ -548,7 +548,7 @@ export function PlayerProvider({ children }) {
       playWithYouTube(song, startAt, settings?.streamQuality || 'normal')
     } else {
       // ✨ Smart Auto Engine: Chooses best stream with 10-Band EQ & Spatial Audio
-      if (song.source === 'jamendo' && song.audioUrl) {
+      if (song.audioUrl) {
         playTrackAudio(song, song.audioUrl, startAt, 'auto')
       } else {
         playWithYouTube(song, startAt, settings?.streamQuality || 'auto')
@@ -559,10 +559,12 @@ export function PlayerProvider({ children }) {
   const switchEngine = useCallback((targetEngine) => {
     const song = currentSongRef.current
     if (!song) return
-    const curTime = audioEngine.getCurrentTime() || currentTimeRef.current
+    const curTime = (engineRef.current === 'youtube' && ytPlayerRef.current?.getCurrentTime 
+      ? ytPlayerRef.current.getCurrentTime() 
+      : audioEngine.getCurrentTime()) || currentTimeRef.current || 0
 
     if (targetEngine === 'studio') {
-      if (song.source === 'jamendo' && song.audioUrl) {
+      if (song.audioUrl) {
         playTrackAudio(song, song.audioUrl, curTime, 'studio')
       } else {
         playWithYouTube(song, curTime, 'very_high')
@@ -570,7 +572,12 @@ export function PlayerProvider({ children }) {
     } else if (targetEngine === 'youtube') {
       playWithYouTube(song, curTime, settings?.streamQuality || 'normal')
     } else {
-      loadAndPlayRef.current?.(song, queueRef.current, queueIndexRef.current, curTime)
+      // auto
+      if (song.audioUrl) {
+        playTrackAudio(song, song.audioUrl, curTime, 'auto')
+      } else {
+        playWithYouTube(song, curTime, settings?.streamQuality || 'auto')
+      }
     }
   }, [playTrackAudio, playWithYouTube, settings?.streamQuality])
 

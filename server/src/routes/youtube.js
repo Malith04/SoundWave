@@ -196,7 +196,29 @@ router.get('/stream/:videoId', async (req, res) => {
       }
 
       if (!format?.url) {
-        return res.status(404).json({ error: 'Direct audio format unavailable' })
+        // Try direct stream via Innertube download with ANDROID client
+        try {
+          const downloadStream = await yt.download(videoId, { type: 'audio', client: 'ANDROID' })
+          if (downloadStream) {
+            res.writeHead(200, {
+              'Content-Type': 'audio/mp4',
+              'Transfer-Encoding': 'chunked',
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+              'Access-Control-Allow-Headers': 'Range, Origin, Content-Type, Accept, Cache-Control',
+              'Cache-Control': 'public, max-age=3600',
+            })
+            const nodeStream = Readable.fromWeb(downloadStream)
+            nodeStream.on('error', (err) => {
+              if (err.name === 'AbortError' || err.code === 'ERR_STREAM_PREMATURE_CLOSE') return
+              console.warn(`Download stream transfer notice for ${videoId}:`, err.message)
+            })
+            return nodeStream.pipe(res)
+          }
+        } catch (dlErr) {
+          console.warn(`yt.download fallback failed for ${videoId}:`, dlErr.message)
+        }
+        return res.status(404).json({ error: 'Direct audio format unavailable', videoId })
       }
 
       cached = {
@@ -223,18 +245,21 @@ router.get('/stream/:videoId', async (req, res) => {
     })
 
     // Handle stale/expired cache (HTTP 403 / 410 from YouTube CDN)
-    let ytRes = await fetch(cached.url, {
-      headers: reqHeaders,
-      signal: controller.signal
-    })
+    let ytRes = null
+    try {
+      ytRes = await fetch(cached.url, {
+        headers: reqHeaders,
+        signal: controller.signal
+      })
+    } catch (_) {}
 
-    if (!ytRes.ok && (ytRes.status === 403 || ytRes.status === 410)) {
-      console.log(`Cache entry for ${videoId} expired (HTTP ${ytRes.status}), refreshing format...`)
+    if (!ytRes || !ytRes.ok && (ytRes.status === 403 || ytRes.status === 410)) {
+      console.log(`Cache entry for ${videoId} expired or failed, refreshing format...`)
       streamCache.delete(cacheKey)
       streamCache.delete(videoId)
 
       const yt = await getInnertube()
-      const info = await yt.getBasicInfo(videoId)
+      const info = await yt.getBasicInfo(videoId).catch(() => ({}))
       const adaptive = info.streaming_data?.adaptive_formats || []
       
       let format = null
@@ -261,6 +286,29 @@ router.get('/stream/:videoId', async (req, res) => {
           headers: reqHeaders,
           signal: controller.signal
         })
+      } else {
+        // Try yt.download fallback
+        try {
+          const downloadStream = await yt.download(videoId, { type: 'audio', client: 'ANDROID' })
+          if (downloadStream) {
+            res.writeHead(200, {
+              'Content-Type': 'audio/mp4',
+              'Transfer-Encoding': 'chunked',
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+              'Access-Control-Allow-Headers': 'Range, Origin, Content-Type, Accept, Cache-Control',
+              'Cache-Control': 'public, max-age=3600',
+            })
+            const nodeStream = Readable.fromWeb(downloadStream)
+            nodeStream.on('error', (err) => {
+              if (err.name === 'AbortError' || err.code === 'ERR_STREAM_PREMATURE_CLOSE') return
+              console.warn(`Download stream transfer notice for ${videoId}:`, err.message)
+            })
+            return nodeStream.pipe(res)
+          }
+        } catch (e) {
+          return res.status(404).json({ error: 'Stream unavailable', videoId })
+        }
       }
     }
 
