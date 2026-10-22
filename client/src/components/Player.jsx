@@ -581,11 +581,13 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
               <button
                 type="button"
                 onClick={() => switchEngine?.(engine === 'youtube' ? 'studio' : 'youtube')}
-                title="Switch audio engine (10-Band EQ active across all engines)"
+                title="Switch audio engine (Studio mode enables real-time 10-Band EQ & 3D Spatial Audio)"
                 className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-all hover:scale-105 active:scale-95 cursor-pointer ${
-                  currentSong.source === 'jamendo' ? 'bg-brand/20 text-brand' : 'bg-purple-500/20 text-purple-400'
+                  engine === 'youtube'
+                    ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
+                    : 'bg-brand/20 text-brand hover:bg-brand/30'
                 }`}>
-                {currentSong.source === 'jamendo' ? 'Studio EQ (Lossless)' : engine === 'youtube' ? 'YouTube Stream (EQ Active)' : 'Studio Audio (EQ Active)'}
+                {engine === 'youtube' ? '🎬 YouTube (Tap for Studio EQ)' : '🎧 Studio (10-Band EQ Active)'}
               </button>
               <button
                 onClick={() => onOpenQuickAdd?.()}
@@ -933,21 +935,18 @@ export default function Player() {
                   {currentSong.artist}
                 </Link>
               </p>
-              {currentSong.source === 'itunes' && (
-                <button
-                  type="button"
-                  onClick={() => switchEngine?.(engine === 'youtube' ? 'studio' : 'youtube')}
-                  title="Switch audio engine (Studio mode enables real-time 10-Band EQ & 3D Spatial Audio)"
-                  className={`text-[11px] px-2 py-0.5 rounded-full font-semibold transition-all hover:scale-105 active:scale-95 cursor-pointer ${
-                    engine === 'youtube'
-                      ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
-                      : 'bg-brand/20 text-brand hover:bg-brand/30'
-                  }`}
-                >
-                  {engine === 'youtube' ? '🎬 YouTube (Tap for Studio EQ)' : '🎧 Studio (10-Band EQ Active)'}
-                </button>
-              )}
-              {currentSong.source === 'jamendo' && <span className="text-xs text-brand font-medium">🎧 Studio (10-Band EQ Active)</span>}
+              <button
+                type="button"
+                onClick={() => switchEngine?.(engine === 'youtube' ? 'studio' : 'youtube')}
+                title="Switch audio engine (Studio mode enables real-time 10-Band EQ & 3D Spatial Audio)"
+                className={`text-[11px] px-2 py-0.5 rounded-full font-semibold transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+                  engine === 'youtube'
+                    ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
+                    : 'bg-brand/20 text-brand hover:bg-brand/30'
+                }`}
+              >
+                {engine === 'youtube' ? '🎬 YouTube (Tap for Studio EQ)' : '🎧 Studio (10-Band EQ Active)'}
+              </button>
             </div>
             <button onClick={handleLike} className={`touch-target shrink-0 transition-all active:scale-125 ${liked ? 'text-brand' : 'text-gray-500 hover:text-white'}`}>
               <Heart size={16} fill={liked ? 'currentColor' : 'none'} />

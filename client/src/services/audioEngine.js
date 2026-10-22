@@ -421,37 +421,59 @@ class SoundWaveAudioEngine {
 
     // 1. Bass Boost (lowshelf 90Hz)
     if (this.bassFilter) {
-      const bassVal = Math.max(0, Math.min(12, s.bassBoost ?? 0))
-      this.bassFilter.gain.setTargetAtTime(bassVal, now, 0.02)
+      const bassVal = Math.max(0, Math.min(12, Number(s.bassBoost) || 0))
+      try {
+        this.bassFilter.gain.cancelScheduledValues(now)
+        this.bassFilter.gain.setValueAtTime(bassVal, now)
+      } catch (_) {
+        this.bassFilter.gain.value = bassVal
+      }
     }
 
-    // 2. 10-Band Equalizer (Active across all engines)
+    // 2. 10-Band Equalizer (Active with zero latency)
+    const isEqOn = s.eqEnabled !== false
     EQ_BANDS.forEach(freq => {
       const node = this.eqFilters[freq]
       if (node) {
         const raw = s.eq?.[freq] ?? s.eq?.[String(freq)] ?? 0
-        const gain = s.eqEnabled ? Math.max(-12, Math.min(12, Number(raw) || 0)) : 0
-        node.gain.setTargetAtTime(gain, now, 0.02)
+        const gain = isEqOn ? Math.max(-12, Math.min(12, Number(raw) || 0)) : 0
+        try {
+          node.gain.cancelScheduledValues(now)
+          node.gain.setValueAtTime(gain, now)
+        } catch (_) {
+          node.gain.value = gain
+        }
       }
     })
 
     // 3. Audio Normalization (Studio Dynamics Compressor + Makeup Gain)
     if (this.compressor && this.normGain) {
-      if (s.normalize) {
-        this.compressor.threshold.setTargetAtTime(-24, now, 0.02)
-        this.compressor.ratio.setTargetAtTime(8, now, 0.02)
-        this.normGain.gain.setTargetAtTime(1.35, now, 0.02)
-      } else {
-        this.compressor.threshold.setTargetAtTime(0, now, 0.02)
-        this.compressor.ratio.setTargetAtTime(1, now, 0.02)
-        this.normGain.gain.setTargetAtTime(1.0, now, 0.02)
+      const thresh = s.normalize ? -24 : 0
+      const ratio = s.normalize ? 8 : 1
+      const makeup = s.normalize ? 1.35 : 1.0
+      try {
+        this.compressor.threshold.cancelScheduledValues(now)
+        this.compressor.threshold.setValueAtTime(thresh, now)
+        this.compressor.ratio.cancelScheduledValues(now)
+        this.compressor.ratio.setValueAtTime(ratio, now)
+        this.normGain.gain.cancelScheduledValues(now)
+        this.normGain.gain.setValueAtTime(makeup, now)
+      } catch (_) {
+        this.compressor.threshold.value = thresh
+        this.compressor.ratio.value = ratio
+        this.normGain.gain.value = makeup
       }
     }
 
     // 4. Loud Volume Headroom Boost
     if (this.loudGain) {
       const loudMultiplier = s.loudVolume ? 1.4 : 1.0
-      this.loudGain.gain.setTargetAtTime(loudMultiplier, now, 0.02)
+      try {
+        this.loudGain.gain.cancelScheduledValues(now)
+        this.loudGain.gain.setValueAtTime(loudMultiplier, now)
+      } catch (_) {
+        this.loudGain.gain.value = loudMultiplier
+      }
     }
 
     // 5. Stereo Matrix (3D Spatial Audio & Mono Downmix)
@@ -471,14 +493,27 @@ class SoundWaveAudioEngine {
         delay = 0.00035 // 0.35ms Haas ITD delay for genuine 3D acoustic immersion
       }
 
-      this.directL.gain.setTargetAtTime(d, now, 0.02)
-      this.directR.gain.setTargetAtTime(d, now, 0.02)
-      this.crossL.gain.setTargetAtTime(c, now, 0.02)
-      this.crossR.gain.setTargetAtTime(c, now, 0.02)
+      try {
+        this.directL.gain.cancelScheduledValues(now)
+        this.directL.gain.setValueAtTime(d, now)
+        this.directR.gain.cancelScheduledValues(now)
+        this.directR.gain.setValueAtTime(d, now)
+        this.crossL.gain.cancelScheduledValues(now)
+        this.crossL.gain.setValueAtTime(c, now)
+        this.crossR.gain.cancelScheduledValues(now)
+        this.crossR.gain.setValueAtTime(c, now)
 
-      if (this.crossDelayL && this.crossDelayR) {
-        this.crossDelayL.delayTime.setTargetAtTime(delay, now, 0.02)
-        this.crossDelayR.delayTime.setTargetAtTime(delay, now, 0.02)
+        if (this.crossDelayL && this.crossDelayR) {
+          this.crossDelayL.delayTime.cancelScheduledValues(now)
+          this.crossDelayL.delayTime.setValueAtTime(delay, now)
+          this.crossDelayR.delayTime.cancelScheduledValues(now)
+          this.crossDelayR.delayTime.setValueAtTime(delay, now)
+        }
+      } catch (_) {
+        this.directL.gain.value = d
+        this.directR.gain.value = d
+        this.crossL.gain.value = c
+        this.crossR.gain.value = c
       }
     }
 

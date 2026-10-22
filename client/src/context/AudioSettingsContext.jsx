@@ -26,7 +26,7 @@ if (typeof window !== 'undefined' && Howler) {
 
 export const DEFAULT = {
   eq: { 32:0, 64:0, 125:0, 250:0, 500:0, 1000:0, 2000:0, 4000:0, 8000:0, 16000:0 },
-  eqEnabled: false,
+  eqEnabled: true,
   eqPreset: 'flat',
   spatialEnabled: false,
   spatialWidth: 1.4,
@@ -39,7 +39,7 @@ export const DEFAULT = {
   autoplay: true,
   smartShuffle: false,
   streamQuality: 'auto',
-  audioEngine: 'auto', // 'auto' | 'studio' | 'youtube'
+  audioEngine: 'studio', // 'studio' | 'auto' | 'youtube'
   loudVolume: false,
   rememberQueue: true,
   showRecent: true,
@@ -71,7 +71,19 @@ export const EQ_PRESETS = {
 }
 
 function load(key) {
-  try { return { ...DEFAULT, ...JSON.parse(localStorage.getItem(key)) } } catch { return { ...DEFAULT } }
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return { ...DEFAULT }
+    const parsed = JSON.parse(raw)
+    return {
+      ...DEFAULT,
+      ...parsed,
+      eqEnabled: parsed.eqEnabled !== undefined ? parsed.eqEnabled : true,
+      audioEngine: parsed.audioEngine || 'studio'
+    }
+  } catch {
+    return { ...DEFAULT }
+  }
 }
 
 function darkenHex(hex, amount) {

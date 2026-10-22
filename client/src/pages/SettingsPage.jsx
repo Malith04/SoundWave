@@ -92,12 +92,79 @@ function Section({ title, children }) {
 function AudioTab({ settings, update, applyPreset, setEqBand, reset }) {
   const { currentSong, engine, switchEngine } = usePlayer()
 
-  const currentEngine = settings.audioEngine || 'auto'
+  const currentEngine = settings.audioEngine || 'studio'
 
-  const engineLabels = {
-    auto: '✨ Smart Auto',
-    studio: '🎧 Studio Audio Engine',
-    youtube: '🎬 YouTube Stream'
+  const ensureStudioDsp = (actionName = '') => {
+    if (engine === 'youtube') {
+      update('audioEngine', 'studio')
+      switchEngine?.('studio')
+      if (actionName) {
+        toast.success(`🎧 Switched to Studio Audio: ${actionName} applied!`, { id: 'eq-engine-switch', icon: '🎛️' })
+      }
+      return true
+    }
+    return false
+  }
+
+  const handleApplyPreset = (name) => {
+    const switched = ensureStudioDsp(`${name.toUpperCase()} preset`)
+    applyPreset(name)
+    if (!switched) {
+      toast.success(`${name.toUpperCase()} preset applied`, { icon: '🎛️' })
+    }
+  }
+
+  const handleSetEqBand = (freq, gain) => {
+    ensureStudioDsp('Real-time 10-Band EQ')
+    setEqBand(freq, gain)
+  }
+
+  const handleBassBoost = (val) => {
+    if (val > 0) ensureStudioDsp('Bass Boost')
+    update('bassBoost', val)
+  }
+
+  const handleSpatialAudio = (val) => {
+    if (val) ensureStudioDsp('3D Spatial Audio')
+    update('spatialEnabled', val)
+    if (val && (!settings.spatialWidth || settings.spatialWidth === 1.0)) {
+      update('spatialWidth', 1.4)
+    }
+    toast.success(val ? '3D Spatial Audio enabled' : '3D Spatial Audio disabled')
+  }
+
+  const handleSpatialWidth = (val) => {
+    ensureStudioDsp('Stereo Width')
+    update('spatialWidth', val)
+  }
+
+  const handleNormalize = (val) => {
+    if (val) ensureStudioDsp('Audio Normalization')
+    update('normalize', val)
+    toast.success(val ? 'Audio normalization enabled' : 'Audio normalization disabled')
+  }
+
+  const handleMono = (val) => {
+    ensureStudioDsp('Mono downmix')
+    update('mono', val)
+    toast.success(val ? 'Mono audio downmix enabled' : 'Stereo audio restored')
+  }
+
+  const handleSoundProfile = (p) => {
+    const switched = ensureStudioDsp(`${p.name} Profile`)
+    applyPreset(p.preset)
+    if (!switched) {
+      toast.success(`${p.name} profile applied`, { icon: '🎛️' })
+    }
+  }
+
+  const handleToggleEq = () => {
+    const nextVal = !settings.eqEnabled
+    if (nextVal) {
+      ensureStudioDsp('Equalizer')
+    }
+    update('eqEnabled', nextVal)
+    toast.success(nextVal ? 'Equalizer enabled' : 'Equalizer bypassed (flat)')
   }
 
   return (
@@ -179,16 +246,46 @@ function AudioTab({ settings, update, applyPreset, setEqBand, reset }) {
           </div>
           <button
             type="button"
-            onClick={() => {
-              const nextVal = !settings.eqEnabled
-              update('eqEnabled', nextVal)
-              toast.success(nextVal ? 'Equalizer enabled' : 'Equalizer bypassed (flat)')
-            }}
+            onClick={handleToggleEq}
             className={`relative w-12 h-6 rounded-full transition-colors duration-200 shrink-0 overflow-hidden ${settings.eqEnabled ? 'bg-brand' : 'bg-surface-4'}`}
           >
             <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${settings.eqEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
           </button>
         </div>
+
+        {/* Live DSP Status indicator */}
+        {engine === 'youtube' && (
+          <div className="my-3 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="text-xs text-amber-200 leading-relaxed">
+              <span className="font-bold">⚠️ YouTube Video Iframe Active:</span> Browser security isolates iframe audio from Web Audio API. Tap below to switch to Studio Audio for live 10-Band EQ & 3D Spatial Audio!
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                update('audioEngine', 'studio')
+                switchEngine?.('studio')
+                toast.success('Studio Audio Engine activated! 10-Band EQ & 3D Spatial LIVE')
+              }}
+              className="px-3.5 py-1.5 rounded-lg bg-brand text-black text-xs font-bold shrink-0 hover:scale-105 active:scale-95 transition-transform shadow-md"
+            >
+              🎧 Switch to Studio EQ
+            </button>
+          </div>
+        )}
+
+        {engine !== 'youtube' && currentSong && (
+          <div className="my-2.5 px-3.5 py-2 rounded-xl bg-brand/10 border border-brand/25 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-2.5 h-2.5 rounded-full bg-brand animate-pulse shrink-0" />
+              <span className="text-xs text-brand font-medium truncate">
+                DSP Pipeline Live · 10-Band EQ & 3D Spatial Audio actively shaping: <span className="font-bold text-white">{currentSong.title}</span>
+              </span>
+            </div>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand/20 text-brand font-mono font-bold shrink-0">
+              0ms LATENCY
+            </span>
+          </div>
+        )}
 
         {/* Real-time Preset Toolbar */}
         <div className="py-4">
@@ -197,7 +294,7 @@ function AudioTab({ settings, update, applyPreset, setEqBand, reset }) {
             <button
               type="button"
               onClick={() => {
-                applyPreset('flat')
+                handleApplyPreset('flat')
                 toast.success('Equalizer reset to Flat Reference')
               }}
               className="text-xs text-gray-400 hover:text-brand flex items-center gap-1 transition-colors"
@@ -210,10 +307,7 @@ function AudioTab({ settings, update, applyPreset, setEqBand, reset }) {
               <button
                 key={name}
                 type="button"
-                onClick={() => {
-                  applyPreset(name)
-                  toast.success(`${name.toUpperCase()} preset applied`)
-                }}
+                onClick={() => handleApplyPreset(name)}
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize transition-all ${
                   settings.eqPreset === name && settings.eqEnabled ? 'bg-brand text-black shadow-md' : 'bg-surface-3 text-gray-300 hover:bg-surface-4'
                 }`}
@@ -242,7 +336,7 @@ function AudioTab({ settings, update, applyPreset, setEqBand, reset }) {
                       max={12}
                       step={1}
                       value={gain}
-                      onChange={e => setEqBand(freq, parseInt(e.target.value))}
+                      onChange={e => handleSetEqBand(freq, parseInt(e.target.value))}
                       className="eq-slider"
                       style={{ height: '80px', cursor: 'pointer', accentColor: 'var(--brand)' }}
                     />
@@ -261,13 +355,7 @@ function AudioTab({ settings, update, applyPreset, setEqBand, reset }) {
           desc="Widens stereo field for an immersive 3D-like experience"
           badge="NEW"
           value={settings.spatialEnabled}
-          onChange={v => {
-            update('spatialEnabled', v)
-            if (v && (!settings.spatialWidth || settings.spatialWidth === 1.0)) {
-              update('spatialWidth', 1.4)
-            }
-            toast.success(v ? '3D Spatial Audio enabled' : '3D Spatial Audio disabled')
-          }}
+          onChange={handleSpatialAudio}
         />
         <div className={settings.spatialEnabled ? '' : 'opacity-40 pointer-events-none'}>
           <RangeSlider
@@ -278,7 +366,7 @@ function AudioTab({ settings, update, applyPreset, setEqBand, reset }) {
             max={2}
             step={0.1}
             unit="x"
-            onChange={v => update('spatialWidth', v)}
+            onChange={handleSpatialWidth}
           />
         </div>
       </Section>
@@ -292,25 +380,19 @@ function AudioTab({ settings, update, applyPreset, setEqBand, reset }) {
           max={12}
           step={1}
           unit=" dB"
-          onChange={v => update('bassBoost', v)}
+          onChange={handleBassBoost}
         />
         <Toggle
           label="Audio Normalization"
           desc="Keeps volume consistent across all tracks using studio dynamics compressor"
           value={settings.normalize}
-          onChange={v => {
-            update('normalize', v)
-            toast.success(v ? 'Audio normalization enabled' : 'Audio normalization disabled')
-          }}
+          onChange={handleNormalize}
         />
         <Toggle
           label="Mono Audio"
           desc="Combine left and right channels into a balanced mono stream"
           value={settings.mono}
-          onChange={v => {
-            update('mono', v)
-            toast.success(v ? 'Mono audio downmix enabled' : 'Stereo audio restored')
-          }}
+          onChange={handleMono}
         />
       </Section>
 
@@ -327,10 +409,7 @@ function AudioTab({ settings, update, applyPreset, setEqBand, reset }) {
             <button
               key={p.name}
               type="button"
-              onClick={() => {
-                applyPreset(p.preset)
-                toast.success(`${p.name} profile applied`)
-              }}
+              onClick={() => handleSoundProfile(p)}
               className={`flex items-start gap-3 p-3.5 rounded-xl border transition-all text-left hover:scale-[1.02] ${
                 settings.eqPreset === p.preset ? 'border-brand bg-brand/10' : 'border-white/10 bg-surface-3 hover:border-white/20'
               }`}

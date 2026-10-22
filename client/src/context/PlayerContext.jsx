@@ -2,7 +2,7 @@ import { createContext, useContext, useRef, useState, useCallback, useEffect } f
 import { Howl, Howler } from 'howler'
 import { useAuth } from './AuthContext'
 import { addToRecentlyPlayed } from '../services/userService'
-import { searchYouTube, getCachedYouTubeId } from '../services/musicApi'
+import { searchYouTube, getCachedYouTubeId, searchiTunes } from '../services/musicApi'
 import { upsertSong, incrementPlayCount } from '../services/songService'
 import { useAudioSettings } from './AudioSettingsContext'
 import { audioEngine } from '../services/audioEngine'
@@ -533,7 +533,7 @@ export function PlayerProvider({ children }) {
       addToRecentlyPlayed(user.uid, song.id).catch(() => {})
     }
 
-    const currentEngine = settings?.audioEngine || 'auto'
+    const currentEngine = settings?.audioEngine || 'studio'
     console.log(`🎵 Engine selected: [${currentEngine}] for track:`, song.title)
 
     if (currentEngine === 'studio') {
@@ -541,7 +541,19 @@ export function PlayerProvider({ children }) {
       if (song.audioUrl) {
         playTrackAudio(song, song.audioUrl, startAt, 'studio')
       } else {
-        playWithYouTube(song, startAt, 'very_high')
+        setIsLoading(true)
+        searchiTunes(`${song.artist} ${song.title}`, 1)
+          .then(results => {
+            if (results && results[0]?.audioUrl) {
+              song.audioUrl = results[0].audioUrl
+              playTrackAudio(song, results[0].audioUrl, startAt, 'studio')
+            } else {
+              playWithYouTube(song, startAt, 'very_high')
+            }
+          })
+          .catch(() => {
+            playWithYouTube(song, startAt, 'very_high')
+          })
       }
     } else if (currentEngine === 'youtube') {
       // 🎬 YouTube Stream Engine: Full track with 10-Band EQ & Spatial Audio
@@ -564,15 +576,33 @@ export function PlayerProvider({ children }) {
       : audioEngine.getCurrentTime()) || currentTimeRef.current || 0
 
     if (targetEngine === 'studio') {
+      if (ytPlayerRef.current?.stopVideo) {
+        try { ytPlayerRef.current.stopVideo() } catch (_) {}
+      }
       if (song.audioUrl) {
         playTrackAudio(song, song.audioUrl, curTime, 'studio')
       } else {
-        playWithYouTube(song, curTime, 'very_high')
+        setIsLoading(true)
+        searchiTunes(`${song.artist} ${song.title}`, 1)
+          .then(results => {
+            if (results && results[0]?.audioUrl) {
+              song.audioUrl = results[0].audioUrl
+              playTrackAudio(song, results[0].audioUrl, curTime, 'studio')
+            } else {
+              playWithYouTube(song, curTime, 'very_high')
+            }
+          })
+          .catch(() => {
+            playWithYouTube(song, curTime, 'very_high')
+          })
       }
     } else if (targetEngine === 'youtube') {
       playWithYouTube(song, curTime, settings?.streamQuality || 'normal')
     } else {
       // auto
+      if (ytPlayerRef.current?.stopVideo) {
+        try { ytPlayerRef.current.stopVideo() } catch (_) {}
+      }
       if (song.audioUrl) {
         playTrackAudio(song, song.audioUrl, curTime, 'auto')
       } else {
