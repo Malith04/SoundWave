@@ -2,9 +2,10 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import multer from 'multer'
 import { query } from '../db/index.js'
-import { authenticate, generateToken } from '../middleware/auth.js'
+import { authenticate, generateToken, revokeSession } from '../middleware/auth.js'
 import { uploadProfileImage } from '../services/storage.js'
 import { generateOtpCode, sendOtpEmail } from '../services/email.js'
+import { cacheClient } from '../services/redis.js'
 
 const router = Router()
 
@@ -246,7 +247,7 @@ router.post('/register', async (req, res) => {
     )
 
     const user = result.rows[0]
-    const token = generateToken(user)
+    const token = await generateToken(user)
 
     return res.status(201).json({
       token,
@@ -408,7 +409,7 @@ router.post('/login', async (req, res) => {
       user.email_verified = true
     }
 
-    const token = generateToken(user)
+    const token = await generateToken(user)
 
     return res.json({
       token,
@@ -600,7 +601,7 @@ router.post('/google', async (req, res) => {
       }
     }
 
-    const token = generateToken(user)
+    const token = await generateToken(user)
 
     return res.json({
       token,
@@ -740,6 +741,7 @@ router.get('/me', authenticate, async (req, res) => {
       isAdmin: user.is_admin,
       favoriteSongs,
       recentlyPlayed,
+      refreshedToken: res.getHeader('X-Refreshed-Token') || undefined,
       createdAt: user.created_at
     })
   } catch (err) {
@@ -928,6 +930,18 @@ router.delete('/account', authenticate, async (req, res) => {
   } catch (err) {
     console.error('Delete account error:', err)
     return res.status(500).json({ error: 'Failed to delete account.' })
+  }
+})
+
+// ── 9. Logout & Revoke Session ───────────────────────────────
+router.post('/logout', authenticate, async (req, res) => {
+  try {
+    if (req.token) {
+      await revokeSession(req.token)
+    }
+    return res.json({ success: true, message: 'Signed out successfully.' })
+  } catch (err) {
+    return res.json({ success: true })
   }
 })
 

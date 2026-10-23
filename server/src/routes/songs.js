@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { query } from '../db/index.js'
 import { optionalAuth, requireAdmin } from '../middleware/auth.js'
+import { cacheMiddleware, invalidateCache } from '../middleware/cache.js'
 
 const router = Router()
 
@@ -59,7 +60,10 @@ router.post('/', async (req, res) => {
       ]
     )
 
-    return res.json(mapSongRow(result.rows[0]))
+    const saved = mapSongRow(result.rows[0])
+    invalidateCache('/songs').catch(() => {})
+    invalidateCache('/api/songs').catch(() => {})
+    return res.json(saved)
   } catch (err) {
     console.error('Upsert song error:', err)
     return res.status(500).json({ error: 'Failed to save song.' })
@@ -67,7 +71,7 @@ router.post('/', async (req, res) => {
 })
 
 // ── 2. Get Song by ID ───────────────────────────────────────
-router.get('/:id', async (req, res) => {
+router.get('/:id', cacheMiddleware(300), async (req, res) => {
   try {
     const result = await query('SELECT * FROM songs WHERE id = $1', [req.params.id])
     if (result.rows.length === 0) {
@@ -93,7 +97,7 @@ router.post('/:id/play', async (req, res) => {
 })
 
 // ── 4. Query Songs (Trending, Genre, Search) ────────────────
-router.get('/', async (req, res) => {
+router.get('/', cacheMiddleware(180), async (req, res) => {
   try {
     const { genre, search, sort = 'trending', limit = 50 } = req.query
     let sql = 'SELECT * FROM songs WHERE 1=1'
@@ -132,6 +136,8 @@ router.get('/', async (req, res) => {
 router.delete('/:id', optionalAuth, requireAdmin, async (req, res) => {
   try {
     await query('DELETE FROM songs WHERE id = $1', [req.params.id])
+    invalidateCache('/songs').catch(() => {})
+    invalidateCache('/api/songs').catch(() => {})
     return res.json({ message: 'Song deleted.' })
   } catch (err) {
     return res.status(500).json({ error: 'Failed to delete song.' })

@@ -45,10 +45,21 @@ const healthHandler = async (req, res) => {
     gmailSmtpConfigured: !!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)
   }
 
+  let cacheStatus = { engine: 'unknown' }
+  try {
+    const { cacheClient } = await import('./services/redis.js')
+    cacheStatus = cacheClient.getStatus()
+  } catch (_) {}
+
   res.json({
     status: 'ok',
     service: 'SoundWave PostgreSQL API (Netlify / Node)',
     database: dbStatus,
+    cache: cacheStatus,
+    session: {
+      activeWindow: '7 days',
+      inactivityLimit: '14 days'
+    },
     email: emailServices,
     time: new Date().toISOString()
   })
