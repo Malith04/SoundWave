@@ -251,8 +251,8 @@ function normalizeiTunes(track) {
     artist: track.artistName || 'Unknown Artist',
     album: track.collectionName || '',
     coverUrl: (track.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
-    audioUrl: track.previewUrl || '',
-    duration: track.trackTimeMillis || 30000,
+    previewUrl: track.previewUrl || '',
+    duration: track.trackTimeMillis && track.trackTimeMillis > 30000 ? track.trackTimeMillis : 210000,
     source: 'itunes',
     genre: track.primaryGenreName || '',
     searchQuery: `${track.trackName} ${track.artistName}`,
@@ -285,7 +285,7 @@ export async function searchiTunes(query, limit = 25) {
         data = JSON.parse(data.contents)
       }
       
-      const results = (data.results || []).filter(t => t.previewUrl).map(normalizeiTunes)
+      const results = (data.results || []).filter(t => t.trackName).map(normalizeiTunes)
       console.log(`🍎 iTunes found ${results.length} songs for "${query}" on attempt ${i + 1}`)
       return results
     } catch (e) {
@@ -343,7 +343,7 @@ export async function getTopChart(limit = 20) {
           }
           
           const results = (ld.results || [])
-            .filter(t => t.wrapperType === 'track' && t.previewUrl)
+            .filter(t => t.wrapperType === 'track' && t.trackName)
             .map(normalizeiTunes)
           
           if (results.length > 0) {

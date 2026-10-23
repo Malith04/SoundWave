@@ -50,7 +50,7 @@ export default function SongCard({ song, queue }) {
           {/* Source badge */}
           {song.source && (
             <span className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md text-white/90 border border-white/10 uppercase tracking-wider">
-              {song.source === 'jamendo' ? 'Full' : 'Preview'}
+              Full
             </span>
           )}
 

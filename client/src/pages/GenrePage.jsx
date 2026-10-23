@@ -16,7 +16,7 @@ export default function GenrePage() {
   const { play } = usePlayer()
   const [songs, setSongs] = useState([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('full') // full | preview
+  const [tab, setTab] = useState('full') // full | popular
 
   useEffect(() => {
     setLoading(true)
@@ -24,7 +24,7 @@ export default function GenrePage() {
       getJamendoByGenre(genre, 20),
       searchiTunesByGenre(genre, 15),
     ]).then(([jamendo, itunes]) => {
-      setSongs({ full: jamendo, preview: itunes })
+      setSongs({ full: jamendo, popular: itunes })
       setLoading(false)
     })
   }, [genre])
@@ -69,10 +69,10 @@ export default function GenrePage() {
             🎵 Full Tracks ({songs.full?.length || 0})
           </button>
           <button
-            onClick={() => setTab('preview')}
-            className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${tab === 'preview' ? 'bg-white text-black font-semibold' : 'bg-surface-2 text-gray-300 hover:bg-surface-3'}`}
+            onClick={() => setTab('popular')}
+            className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${tab === 'popular' ? 'bg-white text-black font-semibold' : 'bg-surface-2 text-gray-300 hover:bg-surface-3'}`}
           >
-            🎧 iTunes Previews ({songs.preview?.length || 0})
+            🎧 Popular Tracks ({songs.popular?.length || 0})
           </button>
         </div>
 

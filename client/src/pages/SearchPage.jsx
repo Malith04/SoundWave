@@ -24,8 +24,8 @@ import SongRow from '../components/SongRow'
 import ArtistCard from '../components/ArtistCard'
 
 const SOURCE_LABELS = {
-  itunes:  { label: '30s Preview', color: 'bg-blue-500/20 text-blue-400' },
-  jamendo: { label: 'Full Track',  color: 'bg-brand/20 text-brand' },
+  itunes:  { label: 'Full Track', color: 'bg-brand/20 text-brand' },
+  jamendo: { label: 'Full Track', color: 'bg-brand/20 text-brand' },
 }
 
 // ── Curated Artists to Discover ──
@@ -487,7 +487,7 @@ export default function SearchPage() {
               {[
                 { key: 'all',     label: `All (${results.all.length + artists.length})` },
                 ...(artists.length > 0 ? [{ key: 'artists', label: `🎤 Artists (${artists.length})` }] : []),
-                { key: 'itunes',  label: `🎧 Previews (${results.itunes.length})` },
+                { key: 'itunes',  label: `🎧 Top Tracks (${results.itunes.length})` },
                 { key: 'jamendo', label: `🎵 Full Tracks (${results.jamendo.length})` },
               ].map(t => (
                 <button

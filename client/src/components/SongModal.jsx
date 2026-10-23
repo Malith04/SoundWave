@@ -177,7 +177,7 @@ export default function SongModal({ song, queue, onClose }) {
                   )}
                   <span className="flex items-center gap-1 bg-white/10 px-2.5 py-1 rounded-full border border-white/5">
                     <Disc3 size={12} className="text-brand" />
-                    {song.source === 'jamendo' ? 'Full Track (HQ)' : '30s Preview'}
+                    Full Track (HQ)
                   </span>
                 </div>
 

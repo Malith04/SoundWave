@@ -169,7 +169,7 @@ function SpotlightBillboard({ song, queue, onPlay, isPlaying, currentSong }) {
             </p>
             <div className="flex items-center gap-2 mt-1.5 text-[11px] sm:text-xs text-gray-400">
               <span className="bg-white/10 px-2 py-0.5 rounded-md font-medium text-white/80">
-                {song.source === 'jamendo' ? 'Full Track' : 'Preview'}
+                Full Track
               </span>
               {song.genre && <span className="truncate">• {song.genre}</span>}
             </div>
