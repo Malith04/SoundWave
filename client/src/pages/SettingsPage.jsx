@@ -94,75 +94,48 @@ function AudioTab({ settings, update, applyPreset, setEqBand, reset }) {
 
   const currentEngine = settings.audioEngine || 'studio'
 
-  const ensureStudioDsp = (actionName = '') => {
-    if (engine === 'youtube') {
-      update('audioEngine', 'studio')
-      switchEngine?.('studio')
-      if (actionName) {
-        toast.success(`🎧 Switched to Studio Audio: ${actionName} applied!`, { id: 'eq-engine-switch', icon: '🎛️' })
-      }
-      return true
-    }
-    return false
-  }
-
   const handleApplyPreset = (name) => {
-    const switched = ensureStudioDsp(`${name.toUpperCase()} preset`)
     applyPreset(name)
-    if (!switched) {
-      toast.success(`${name.toUpperCase()} preset applied`, { icon: '🎛️' })
-    }
+    toast.success(`${name.toUpperCase()} preset applied`, { icon: '🎛️' })
   }
 
   const handleSetEqBand = (freq, gain) => {
-    ensureStudioDsp('Real-time 10-Band EQ')
     setEqBand(freq, gain)
   }
 
   const handleBassBoost = (val) => {
-    if (val > 0) ensureStudioDsp('Bass Boost')
     update('bassBoost', val)
   }
 
   const handleSpatialAudio = (val) => {
-    if (val) ensureStudioDsp('3D Spatial Audio')
     update('spatialEnabled', val)
     if (val && (!settings.spatialWidth || settings.spatialWidth === 1.0)) {
-      update('spatialWidth', 1.4)
+      update('spatialWidth', 1.45)
     }
     toast.success(val ? '3D Spatial Audio enabled' : '3D Spatial Audio disabled')
   }
 
   const handleSpatialWidth = (val) => {
-    ensureStudioDsp('Stereo Width')
     update('spatialWidth', val)
   }
 
   const handleNormalize = (val) => {
-    if (val) ensureStudioDsp('Audio Normalization')
     update('normalize', val)
     toast.success(val ? 'Audio normalization enabled' : 'Audio normalization disabled')
   }
 
   const handleMono = (val) => {
-    ensureStudioDsp('Mono downmix')
     update('mono', val)
     toast.success(val ? 'Mono audio downmix enabled' : 'Stereo audio restored')
   }
 
   const handleSoundProfile = (p) => {
-    const switched = ensureStudioDsp(`${p.name} Profile`)
     applyPreset(p.preset)
-    if (!switched) {
-      toast.success(`${p.name} profile applied`, { icon: '🎛️' })
-    }
+    toast.success(`${p.name} profile applied`, { icon: '🎛️' })
   }
 
   const handleToggleEq = () => {
     const nextVal = !settings.eqEnabled
-    if (nextVal) {
-      ensureStudioDsp('Equalizer')
-    }
     update('eqEnabled', nextVal)
     toast.success(nextVal ? 'Equalizer enabled' : 'Equalizer bypassed (flat)')
   }
@@ -254,31 +227,12 @@ function AudioTab({ settings, update, applyPreset, setEqBand, reset }) {
         </div>
 
         {/* Live DSP Status indicator */}
-        {engine === 'youtube' && (
-          <div className="my-3 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="text-xs text-amber-200 leading-relaxed">
-              <span className="font-bold">⚠️ YouTube Video Iframe Active:</span> Browser security isolates iframe audio from Web Audio API. Tap below to switch to Studio Audio for live 10-Band EQ & 3D Spatial Audio!
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                update('audioEngine', 'studio')
-                switchEngine?.('studio')
-                toast.success('Studio Audio Engine activated! 10-Band EQ & 3D Spatial LIVE')
-              }}
-              className="px-3.5 py-1.5 rounded-lg bg-brand text-black text-xs font-bold shrink-0 hover:scale-105 active:scale-95 transition-transform shadow-md"
-            >
-              🎧 Switch to Studio EQ
-            </button>
-          </div>
-        )}
-
-        {engine !== 'youtube' && currentSong && (
+        {currentSong && (
           <div className="my-2.5 px-3.5 py-2 rounded-xl bg-brand/10 border border-brand/25 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <span className="w-2.5 h-2.5 rounded-full bg-brand animate-pulse shrink-0" />
               <span className="text-xs text-brand font-medium truncate">
-                DSP Pipeline Live · 10-Band EQ & 3D Spatial Audio actively shaping: <span className="font-bold text-white">{currentSong.title}</span>
+                Universal DSP Pipeline Live · 10-Band EQ & 3D Spatial Audio actively shaping: <span className="font-bold text-white">{currentSong.title}</span>
               </span>
             </div>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand/20 text-brand font-mono font-bold shrink-0">

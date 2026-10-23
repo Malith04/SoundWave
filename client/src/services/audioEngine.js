@@ -1,54 +1,16 @@
 /**
- * SoundWave Universal High-Fidelity Web Audio Engine
+ * SoundWave Universal High-Fidelity Audio Bridge
  * 
- * Provides a single, unified, hardware-accelerated audio pipeline that guarantees:
- * 1. 10-Band Equalizer (32Hz - 16kHz) is 100% ACTIVE across ALL audio sources (YouTube Stream, Studio Audio, Smart Auto).
- * 2. 3D Spatial Audio stereo field widening & Mono downmix.
- * 3. Studio Dynamics Compressor for audio normalization.
- * 4. High-impact Bass Boost (lowshelf 80Hz).
- * 5. Loud Volume Level headroom boost (up to 1.5x).
- * 6. Zero MediaElementSource reconnection bugs (persistent single-source pipeline).
- * 7. Background playback watchdog (never pauses on tab switch or minimize).
- * 8. Real-time instant slider response with audio parameter smoothing.
+ * Bridges audio engine controls directly into Howler and the Universal Web Audio DSP pipeline.
  */
 
 import { Howler } from 'howler'
+import { EQ_BANDS, EQ_PRESETS } from '../context/AudioSettingsContext'
 
-export const EQ_BANDS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
+export { EQ_BANDS, EQ_PRESETS }
 
-class SoundWaveAudioEngine {
+class SoundWaveAudioBridge {
   constructor() {
-    this.ctx = null
-    this.audio = null
-    this.sourceNode = null
-    this.howlerSourceConnected = false
-
-    // DSP Nodes
-    this.masterInput = null
-    this.bassFilter = null
-    this.eqFilters = {}
-    this.compressor = null
-    this.normGain = null
-    this.loudGain = null
-    this.splitter = null
-    this.merger = null
-    this.directL = null
-    this.crossL = null
-    this.directR = null
-    this.crossR = null
-    this.crossDelayL = null
-    this.crossDelayR = null
-    this.limiter = null
-
-    // State
-    this.isInitialized = false
-    this.currentSettings = null
-    this.currentSpeed = 1.0
-    this.currentVolume = 0.8
-    this.isMuted = false
-    this.isCrossfading = false
-
-    // Event callbacks
     this.listeners = {
       timeupdate: new Set(),
       play: new Set(),
@@ -58,238 +20,33 @@ class SoundWaveAudioEngine {
       loading: new Set(),
       durationchange: new Set()
     }
+  }
 
-    if (typeof window !== 'undefined') {
-      this._init()
+  get ctx() {
+    return Howler?.ctx || null
+  }
+
+  applySettings(settings) {
+    if (typeof window !== 'undefined' && window.__soundwave_applyAudioChain) {
+      window.__soundwave_applyAudioChain(settings)
     }
   }
 
-  _init() {
-    if (this.isInitialized) return
-
-    try {
-      // 1. Create or adopt AudioContext
-      const AudioCtxClass = window.AudioContext || window.webkitAudioContext
-      if (!AudioCtxClass) {
-        console.warn('Web Audio API not supported by browser')
-        return
-      }
-
-      this.ctx = Howler?.ctx || new AudioCtxClass()
-
-      // 2. Create single, permanent HTMLAudioElement with full CORS
-      this.audio = new Audio()
-      this.audio.id = 'soundwave-master-audio'
-      this.audio.crossOrigin = 'anonymous'
-      this.audio.preload = 'auto'
-      this.audio.playsInline = true
-      this.audio.style.display = 'none'
-      document.body.appendChild(this.audio)
-
-      // 3. Create permanent MediaElementAudioSourceNode
-      this.sourceNode = this.ctx.createMediaElementSource(this.audio)
-
-      // 4. Build the complete DSP graph
-      this._buildDspGraph()
-
-      // 5. Connect permanent source into masterInput
-      this.sourceNode.connect(this.masterInput)
-
-      // 6. Connect Howler's masterGain into our DSP graph as well
-      this._wireHowler()
-
-      // 7. Setup native audio event listeners
-      this._setupAudioListeners()
-
-      // 8. Auto-unlock AudioContext on first user interaction
-      const unlock = () => {
-        if (this.ctx && this.ctx.state === 'suspended') {
-          this.ctx.resume().catch(() => {})
-        }
-        window.removeEventListener('click', unlock)
-        window.removeEventListener('keydown', unlock)
-        window.removeEventListener('touchstart', unlock)
-      }
-      window.addEventListener('click', unlock, { passive: true })
-      window.addEventListener('keydown', unlock, { passive: true })
-      window.addEventListener('touchstart', unlock, { passive: true })
-
-      this.isInitialized = true
-      console.log('⚡ SoundWave Universal High-Fidelity Audio DSP Engine successfully initialized!')
-    } catch (err) {
-      console.error('Failed to initialize SoundWave Audio Engine:', err)
+  setPlaybackRate(speed) {
+    const s = Math.max(0.25, Math.min(4.0, Number(speed) || 1.0))
+    if (typeof window !== 'undefined' && Howler?._howls) {
+      Howler._howls.forEach(h => {
+        try { h.rate(s) } catch (_) {}
+      })
     }
   }
 
-  _buildDspGraph() {
-    const ctx = this.ctx
-
-    // Input Gain Stage
-    this.masterInput = ctx.createGain()
-    this.masterInput.gain.value = 1.0
-
-    // 1. Bass Boost Filter (lowshelf at 90Hz)
-    this.bassFilter = ctx.createBiquadFilter()
-    this.bassFilter.type = 'lowshelf'
-    this.bassFilter.frequency.value = 90
-    this.bassFilter.gain.value = 0
-
-    // 2. 10-Band Equalizer (32Hz to 16kHz)
-    EQ_BANDS.forEach((freq, idx) => {
-      const f = ctx.createBiquadFilter()
-      f.type = idx === 0 ? 'lowshelf' : idx === EQ_BANDS.length - 1 ? 'highshelf' : 'peaking'
-      f.frequency.value = freq
-      f.Q.value = 1.4
-      f.gain.value = 0
-      this.eqFilters[freq] = f
-    })
-
-    // 3. Audio Normalization (Studio Dynamics Compressor + Makeup Gain)
-    this.compressor = ctx.createDynamicsCompressor()
-    this.compressor.threshold.value = 0
-    this.compressor.knee.value = 25
-    this.compressor.ratio.value = 1
-    this.compressor.attack.value = 0.003
-    this.compressor.release.value = 0.25
-
-    this.normGain = ctx.createGain()
-    this.normGain.gain.value = 1.0
-
-    // 4. Loud Volume Headroom Booster Gain
-    this.loudGain = ctx.createGain()
-    this.loudGain.gain.value = 1.0
-
-    // 5. 3D Spatial Audio & Mono Downmix Stereo Matrix with Haas delay
-    this.splitter = ctx.createChannelSplitter(2)
-    this.merger = ctx.createChannelMerger(2)
-
-    this.directL = ctx.createGain()
-    this.crossL = ctx.createGain()
-    this.directR = ctx.createGain()
-    this.crossR = ctx.createGain()
-
-    this.crossDelayL = ctx.createDelay()
-    this.crossDelayR = ctx.createDelay()
-    this.crossDelayL.delayTime.value = 0.0
-    this.crossDelayR.delayTime.value = 0.0
-
-    this.directL.gain.value = 1.0
-    this.crossL.gain.value = 0.0
-    this.directR.gain.value = 1.0
-    this.crossR.gain.value = 0.0
-
-    // 6. Master Studio Soft Limiter (Zero Digital Distortion)
-    this.limiter = ctx.createDynamicsCompressor()
-    this.limiter.threshold.value = -0.5
-    this.limiter.knee.value = 0.0
-    this.limiter.ratio.value = 20.0
-    this.limiter.attack.value = 0.001
-    this.limiter.release.value = 0.05
-
-    // Wire DSP Nodes in series:
-    // masterInput -> bassFilter -> eq[0] -> ... -> eq[9] -> compressor -> normGain -> loudGain -> splitter
-    let prev = this.masterInput
-    prev.connect(this.bassFilter)
-    prev = this.bassFilter
-
-    EQ_BANDS.forEach(freq => {
-      prev.connect(this.eqFilters[freq])
-      prev = this.eqFilters[freq]
-    })
-
-    prev.connect(this.compressor)
-    this.compressor.connect(this.normGain)
-    this.normGain.connect(this.loudGain)
-    this.loudGain.connect(this.splitter)
-
-    // Direct path
-    this.splitter.connect(this.directL, 0)
-    this.splitter.connect(this.directR, 1)
-
-    // Cross-feed with Haas acoustic interaural delay for 3D soundstage widening
-    this.splitter.connect(this.crossDelayL, 0)
-    this.crossDelayL.connect(this.crossL)
-
-    this.splitter.connect(this.crossDelayR, 1)
-    this.crossDelayR.connect(this.crossR)
-
-    // Sum into merger:
-    // Merger ch 0 (Left out): directL + crossR
-    this.directL.connect(this.merger, 0, 0)
-    this.crossR.connect(this.merger, 0, 0)
-
-    // Merger ch 1 (Right out): directR + crossL
-    this.directR.connect(this.merger, 0, 1)
-    this.crossL.connect(this.merger, 0, 1)
-
-    // Merger -> Studio Limiter -> Destination
-    this.merger.connect(this.limiter)
-    this.limiter.connect(ctx.destination)
-  }
-
-  _wireHowler() {
-    if (this.howlerSourceConnected || !Howler?.masterGain) return
-    try {
-      // Disconnect Howler from destination and route through our DSP graph
-      Howler.masterGain.disconnect()
-      Howler.masterGain.connect(this.masterInput)
-      this.howlerSourceConnected = true
-      console.log('✅ Howler masterGain routed through Universal DSP Graph')
-    } catch (_) {}
-  }
-
-  _setupAudioListeners() {
-    const a = this.audio
-    if (!a) return
-
-    a.addEventListener('timeupdate', () => {
-      this._emit('timeupdate', {
-        currentTime: a.currentTime || 0,
-        duration: a.duration || 0,
-        progress: a.duration ? a.currentTime / a.duration : 0
-      })
-    })
-
-    a.addEventListener('durationchange', () => {
-      this._emit('durationchange', a.duration || 0)
-    })
-
-    a.addEventListener('play', () => {
-      this._emit('play')
-    })
-
-    a.addEventListener('pause', () => {
-      this._emit('pause')
-    })
-
-    a.addEventListener('ended', () => {
-      this._emit('ended')
-    })
-
-    a.addEventListener('waiting', () => {
-      this._emit('loading', true)
-    })
-
-    a.addEventListener('playing', () => {
-      this._emit('loading', false)
-    })
-
-    a.addEventListener('canplay', () => {
-      this._emit('loading', false)
-    })
-
-    a.addEventListener('error', (e) => {
-      console.warn('SoundWave Audio Engine media error:', a.error)
-      this._emit('error', a.error)
-    })
-  }
-
-  _emit(event, data) {
-    const set = this.listeners[event]
-    if (set) {
-      set.forEach(cb => {
-        try { cb(data) } catch (err) { console.error('Audio event error:', err) }
-      })
+  setVolume(volume, isMuted = false) {
+    const vol = isMuted ? 0 : Math.max(0, Math.min(1.0, Number(volume) || 0))
+    if (typeof window !== 'undefined' && Howler) {
+      Howler.volume(vol)
+      if (isMuted) Howler.mute(true)
+      else Howler.mute(false)
     }
   }
 
@@ -306,244 +63,14 @@ class SoundWaveAudioEngine {
     }
   }
 
-  // ── Playback Controls ──────────────────────────────────────
-  async play(url, startAt = 0) {
-    this._init()
-    this._wireHowler()
-
-    if (this.ctx && this.ctx.state === 'suspended') {
-      try { await this.ctx.resume() } catch (_) {}
+  emit(event, data) {
+    const set = this.listeners[event]
+    if (set) {
+      set.forEach(cb => {
+        try { cb(data) } catch (err) { console.error('Audio bridge error:', err) }
+      })
     }
-
-    if (!this.audio) return
-
-    try {
-      this._emit('loading', true)
-      
-      // If switching to a new URL
-      if (this.audio.src !== url && !this.audio.src.endsWith(url)) {
-        this.audio.src = url
-      }
-
-      this.audio.playbackRate = this.currentSpeed
-      this._updateEffectiveVolume()
-
-      if (startAt > 0) {
-        if (this.audio.readyState >= 1) {
-          try { this.audio.currentTime = startAt } catch (_) {}
-        } else {
-          const onMeta = () => {
-            try { this.audio.currentTime = startAt } catch (_) {}
-            this.audio.removeEventListener('loadedmetadata', onMeta)
-          }
-          this.audio.addEventListener('loadedmetadata', onMeta, { once: true })
-        }
-      }
-
-      const playPromise = this.audio.play()
-      if (playPromise !== undefined) {
-        await playPromise
-      }
-      this._emit('loading', false)
-    } catch (err) {
-      this._emit('loading', false)
-      console.warn('SoundWave Audio Engine playback error:', err)
-      throw err
-    }
-  }
-
-  pause() {
-    if (this.audio) {
-      this.audio.pause()
-    }
-  }
-
-  resume() {
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(() => {})
-    }
-    if (this.audio) {
-      return this.audio.play()
-    }
-  }
-
-  stop() {
-    if (this.audio) {
-      this.audio.pause()
-      this.audio.currentTime = 0
-    }
-  }
-
-  seek(time) {
-    if (this.audio && !isNaN(time)) {
-      this.audio.currentTime = Math.max(0, time)
-    }
-  }
-
-  setPlaybackRate(speed) {
-    this.currentSpeed = Math.max(0.25, Math.min(4.0, speed))
-    if (this.audio) {
-      this.audio.playbackRate = this.currentSpeed
-    }
-  }
-
-  setVolume(volume, isMuted = false) {
-    this.currentVolume = Math.max(0, Math.min(1.0, volume))
-    this.isMuted = isMuted
-    this._updateEffectiveVolume()
-  }
-
-  _updateEffectiveVolume() {
-    if (!this.audio) return
-    const vol = this.isMuted ? 0 : this.currentVolume
-    // Use masterInput gain node to control overall volume smoothly
-    if (this.masterInput && this.ctx) {
-      this.masterInput.gain.setValueAtTime(vol, this.ctx.currentTime)
-    }
-    this.audio.volume = 1.0 // Audio element outputs unity into Web Audio graph
-  }
-
-  // ── Real-Time Audio DSP Settings ───────────────────────────
-  applySettings(s) {
-    if (!s) return
-    this.currentSettings = s
-    this._init()
-    this._wireHowler()
-
-    const ctx = this.ctx
-    if (!ctx) return
-
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {})
-    }
-
-    const now = ctx.currentTime
-
-    // 1. Bass Boost (lowshelf 90Hz)
-    if (this.bassFilter) {
-      const bassVal = Math.max(0, Math.min(12, Number(s.bassBoost) || 0))
-      try {
-        this.bassFilter.gain.cancelScheduledValues(now)
-        this.bassFilter.gain.setValueAtTime(bassVal, now)
-      } catch (_) {
-        this.bassFilter.gain.value = bassVal
-      }
-    }
-
-    // 2. 10-Band Equalizer (Active with zero latency)
-    const isEqOn = s.eqEnabled !== false
-    EQ_BANDS.forEach(freq => {
-      const node = this.eqFilters[freq]
-      if (node) {
-        const raw = s.eq?.[freq] ?? s.eq?.[String(freq)] ?? 0
-        const gain = isEqOn ? Math.max(-12, Math.min(12, Number(raw) || 0)) : 0
-        try {
-          node.gain.cancelScheduledValues(now)
-          node.gain.setValueAtTime(gain, now)
-        } catch (_) {
-          node.gain.value = gain
-        }
-      }
-    })
-
-    // 3. Audio Normalization (Studio Dynamics Compressor + Makeup Gain)
-    if (this.compressor && this.normGain) {
-      const thresh = s.normalize ? -24 : 0
-      const ratio = s.normalize ? 8 : 1
-      const makeup = s.normalize ? 1.35 : 1.0
-      try {
-        this.compressor.threshold.cancelScheduledValues(now)
-        this.compressor.threshold.setValueAtTime(thresh, now)
-        this.compressor.ratio.cancelScheduledValues(now)
-        this.compressor.ratio.setValueAtTime(ratio, now)
-        this.normGain.gain.cancelScheduledValues(now)
-        this.normGain.gain.setValueAtTime(makeup, now)
-      } catch (_) {
-        this.compressor.threshold.value = thresh
-        this.compressor.ratio.value = ratio
-        this.normGain.gain.value = makeup
-      }
-    }
-
-    // 4. Loud Volume Headroom Boost
-    if (this.loudGain) {
-      const loudMultiplier = s.loudVolume ? 1.4 : 1.0
-      try {
-        this.loudGain.gain.cancelScheduledValues(now)
-        this.loudGain.gain.setValueAtTime(loudMultiplier, now)
-      } catch (_) {
-        this.loudGain.gain.value = loudMultiplier
-      }
-    }
-
-    // 5. Stereo Matrix (3D Spatial Audio & Mono Downmix)
-    if (this.directL && this.crossL && this.directR && this.crossR) {
-      let d = 1.0
-      let c = 0.0
-      let delay = 0.0
-
-      if (s.mono) {
-        d = 0.5
-        c = 0.5
-        delay = 0.0
-      } else if (s.spatialEnabled) {
-        const w = s.spatialWidth !== undefined && s.spatialWidth !== null && s.spatialWidth !== 1.0 ? s.spatialWidth : 1.45
-        d = (1 + w) / 2
-        c = (1 - w) / 2
-        delay = 0.00035 // 0.35ms Haas ITD delay for genuine 3D acoustic immersion
-      }
-
-      try {
-        this.directL.gain.cancelScheduledValues(now)
-        this.directL.gain.setValueAtTime(d, now)
-        this.directR.gain.cancelScheduledValues(now)
-        this.directR.gain.setValueAtTime(d, now)
-        this.crossL.gain.cancelScheduledValues(now)
-        this.crossL.gain.setValueAtTime(c, now)
-        this.crossR.gain.cancelScheduledValues(now)
-        this.crossR.gain.setValueAtTime(c, now)
-
-        if (this.crossDelayL && this.crossDelayR) {
-          this.crossDelayL.delayTime.cancelScheduledValues(now)
-          this.crossDelayL.delayTime.setValueAtTime(delay, now)
-          this.crossDelayR.delayTime.cancelScheduledValues(now)
-          this.crossDelayR.delayTime.setValueAtTime(delay, now)
-        }
-      } catch (_) {
-        this.directL.gain.value = d
-        this.directR.gain.value = d
-        this.crossL.gain.value = c
-        this.crossR.gain.value = c
-      }
-    }
-
-    // 6. Playback Speed
-    if (s.speed !== undefined && s.speed !== null) {
-      this.setPlaybackRate(s.speed)
-    }
-  }
-
-  // Fade volume smoothly for crossfading
-  fadeVolume(fromVol, toVol, durationSec = 2) {
-    if (!this.masterInput || !this.ctx || durationSec <= 0) return
-    const now = this.ctx.currentTime
-    this.masterInput.gain.cancelScheduledValues(now)
-    this.masterInput.gain.setValueAtTime(fromVol, now)
-    this.masterInput.gain.linearRampToValueAtTime(toVol, now + durationSec)
-  }
-
-  getCurrentTime() {
-    return this.audio?.currentTime || 0
-  }
-
-  getDuration() {
-    return this.audio?.duration || 0
-  }
-
-  isPlaying() {
-    return !!(this.audio && !this.audio.paused && !this.audio.ended)
   }
 }
 
-// Global Singleton Export
-export const audioEngine = new SoundWaveAudioEngine()
+export const audioEngine = new SoundWaveAudioBridge()

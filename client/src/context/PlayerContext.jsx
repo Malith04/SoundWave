@@ -5,10 +5,8 @@ import { addToRecentlyPlayed } from '../services/userService'
 import { searchYouTube, getCachedYouTubeId, searchiTunes } from '../services/musicApi'
 import { upsertSong, incrementPlayCount } from '../services/songService'
 import { useAudioSettings } from './AudioSettingsContext'
-import { audioEngine } from '../services/audioEngine'
 
 // Prevent browsers from suspending audio when switching tabs or minimizing
-// and configure HTML5 audio elements to allow Web Audio API DSP processing (10-band EQ, 3D Spatial Audio, Bass Boost)
 if (typeof window !== 'undefined' && Howler) {
   Howler.autoSuspend = false
   Howler.autoUnlock = true
@@ -32,7 +30,6 @@ if (typeof window !== 'undefined' && Howler) {
 }
 
 const PlayerContext = createContext(null)
-const YT_API_KEY = import.meta.env.VITE_YT_API_KEY || ''
 
 function getStorageKey(userId) {
   return userId ? `sw_player_state_${userId}` : 'sw_player_state_guest'
@@ -59,7 +56,6 @@ export function PlayerProvider({ children }) {
   const ytPlayerRef = useRef(null)
   const ytReadyRef = useRef(false)
   const pendingYTRef = useRef(null)
-  const wasPlayingRef = useRef(false)
   const loadAndPlayRef = useRef(null)
   const handleEndRef = useRef(null)
 
@@ -76,7 +72,7 @@ export function PlayerProvider({ children }) {
   const [repeatMode, setRepeatMode] = useState('none')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [engine, setEngine] = useState('howler')
+  const [engine, setEngine] = useState('studio')
 
   const queueRef = useRef(queue)
   const queueIndexRef = useRef(queueIndex)
@@ -88,6 +84,7 @@ export function PlayerProvider({ children }) {
   const currentTimeRef = useRef(currentTime)
   const currentSongRef = useRef(currentSong)
   const isPlayingRef = useRef(isPlaying)
+  const settingsRef = useRef(settings)
 
   useEffect(() => { queueRef.current = queue }, [queue])
   useEffect(() => { queueIndexRef.current = queueIndex }, [queueIndex])
@@ -99,37 +96,41 @@ export function PlayerProvider({ children }) {
   useEffect(() => { currentTimeRef.current = currentTime }, [currentTime])
   useEffect(() => { currentSongRef.current = currentSong }, [currentSong])
   useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
+  useEffect(() => { settingsRef.current = settings }, [settings])
 
-  // ── Real-Time Audio Engine Synchronization ────────────────
+  // ── Sync audio settings in real-time ───────────────────────
   useEffect(() => {
-    audioEngine.applySettings(settings)
-    if (settings?.speed) {
-      audioEngine.setPlaybackRate(settings.speed)
+    applyAudioChain(settings)
+    if (howlRef.current && settings?.speed) {
+      try { howlRef.current.rate(settings.speed) } catch (_) {}
     }
-  }, [settings])
+  }, [settings, applyAudioChain])
 
+  // ── Sync volume in real-time ───────────────────────────────
   useEffect(() => {
-    audioEngine.setVolume(isMuted ? 0 : volume / 100, isMuted)
+    const vol = isMuted ? 0 : volume / 100
+    Howler.volume(vol)
+    if (howlRef.current) {
+      howlRef.current.volume(vol)
+    }
+    Howler.mute(isMuted)
   }, [volume, isMuted])
 
-  // ── Crossfade: Smooth fade-out near track end ──────────────
-  useEffect(() => {
-    const secs = settings?.crossfade ?? 0
-    if (secs <= 0 || !isPlaying) return
-
-    const interval = setInterval(() => {
-      const cur = audioEngine.getCurrentTime()
-      const dur = audioEngine.getDuration()
-      const rem = dur - cur
-      if (dur > 10 && rem > 0 && rem <= secs) {
-        const baseVol = mutedRef.current ? 0 : volumeRef.current / 100
-        const fadeVol = Math.max(0, (rem / secs) * baseVol)
-        audioEngine.setVolume(fadeVol, mutedRef.current)
+  // ── Progress tracking ──────────────────────────────────────
+  const startProgressTracking = useCallback(() => {
+    if (progressInterval.current) clearInterval(progressInterval.current)
+    progressInterval.current = setInterval(() => {
+      const h = howlRef.current
+      if (!h || !h.playing()) return
+      const s = h.seek() || 0
+      const d = h.duration() || 0
+      setCurrentTime(s)
+      if (d > 0) {
+        setDuration(d)
+        setProgress(s / d)
       }
-    }, 200)
-
-    return () => clearInterval(interval)
-  }, [settings?.crossfade, isPlaying])
+    }, 250)
+  }, [])
 
   // ── Session persistence timer ──────────────────────────────
   useEffect(() => {
@@ -141,6 +142,27 @@ export function PlayerProvider({ children }) {
     return () => clearInterval(t)
   }, [user?.uid])
 
+  // ── Crossfade: Smooth fade-out near track end ──────────────
+  useEffect(() => {
+    const secs = settings?.crossfade ?? 0
+    if (secs <= 0 || !isPlaying) return
+
+    const interval = setInterval(() => {
+      const h = howlRef.current
+      if (!h || !h.playing()) return
+      const cur = h.seek() || 0
+      const dur = h.duration() || 0
+      const rem = dur - cur
+      if (dur > 10 && rem > 0 && rem <= secs) {
+        const baseVol = mutedRef.current ? 0 : volumeRef.current / 100
+        const fadeVol = Math.max(0, (rem / secs) * baseVol)
+        h.volume(fadeVol)
+      }
+    }, 200)
+
+    return () => clearInterval(interval)
+  }, [settings?.crossfade, isPlaying])
+
   // ── Queue End & Autoplay Transition ────────────────────────
   const handleEnd = useCallback(async () => {
     setProgress(1)
@@ -150,8 +172,10 @@ export function PlayerProvider({ children }) {
     const shuffle = shuffleRef.current
 
     if (repeat === 'one') {
-      audioEngine.seek(0)
-      audioEngine.resume()
+      if (howlRef.current) {
+        howlRef.current.seek(0)
+        howlRef.current.play()
+      }
       return
     }
 
@@ -198,7 +222,144 @@ export function PlayerProvider({ children }) {
     handleEndRef.current = handleEnd
   }, [handleEnd])
 
-  // ── YouTube IFrame API (Fallback for restricted content) ───
+  // ── Universal Howler Web Audio Player (Equalizer, Bass Boost, 3D Spatial 100% Active) ──
+  const playWithHowler = useCallback((song, audioUrl, startAt = 0, engineType = 'studio') => {
+    console.log(`🎛️ Universal Web Audio DSP Playing [${engineType}]:`, song.title, audioUrl)
+    setEngine(engineType)
+    setError(null)
+    setIsLoading(true)
+
+    try {
+      if (howlRef.current) {
+        try {
+          howlRef.current.stop()
+          howlRef.current.unload()
+        } catch (_) {}
+        howlRef.current = null
+      }
+      if (progressInterval.current) clearInterval(progressInterval.current)
+      if (ytPlayerRef.current?.stopVideo) {
+        try { ytPlayerRef.current.stopVideo() } catch (_) {}
+      }
+
+      // Ensure AudioContext is un-suspended
+      if (Howler.ctx && Howler.ctx.state === 'suspended') {
+        Howler.ctx.resume().catch(() => {})
+      }
+
+      // Ensure DSP graph has active settings applied immediately
+      applyAudioChain(settingsRef.current)
+
+      const speed = settingsRef.current?.speed ?? 1.0
+      const baseVol = mutedRef.current ? 0 : volumeRef.current / 100
+      Howler.volume(baseVol)
+      Howler.mute(mutedRef.current)
+
+      // Primary: Web Audio API mode (html5: false) so Howler decodes buffer directly
+      // into Howler.ctx and streams through Howler.masterGain -> DSP graph
+      const howl = new Howl({
+        src: [audioUrl],
+        html5: false,
+        volume: baseVol,
+        rate: speed,
+        format: ['mp3', 'aac', 'm4a', 'ogg', 'wav'],
+        onload: () => {
+          const dur = howl.duration() || (song.duration ? song.duration / 1000 : 0)
+          if (dur > 0) setDuration(dur)
+          setIsLoading(false)
+        },
+        onplay: () => {
+          if (startAt > 0) {
+            try { howl.seek(startAt) } catch (_) {}
+          }
+          if (settingsRef.current?.speed && settingsRef.current.speed !== 1) {
+            try { howl.rate(settingsRef.current.speed) } catch (_) {}
+          }
+          // Apply DSP chain with active settings immediately
+          try {
+            applyAudioChain(settingsRef.current)
+          } catch (e) {
+            console.warn('DSP chain notice:', e)
+          }
+
+          setIsPlaying(true)
+          setIsLoading(false)
+          startProgressTracking()
+        },
+        onpause: () => {
+          setIsPlaying(false)
+          if (progressInterval.current) clearInterval(progressInterval.current)
+        },
+        onstop: () => {
+          setIsPlaying(false)
+          if (progressInterval.current) clearInterval(progressInterval.current)
+        },
+        onend: () => {
+          handleEndRef.current?.()
+        },
+        onloaderror: (id, error) => {
+          console.warn('Howler Web Audio buffer load note, falling back to HTML5 audio mode:', error)
+          // Fallback to HTML5 audio element
+          try {
+            const fallbackHowl = new Howl({
+              src: [audioUrl],
+              html5: true,
+              volume: baseVol,
+              rate: speed,
+              format: ['mp3', 'aac', 'm4a', 'ogg', 'wav'],
+              onload: () => {
+                const dur = fallbackHowl.duration() || (song.duration ? song.duration / 1000 : 0)
+                if (dur > 0) setDuration(dur)
+                setIsLoading(false)
+              },
+              onplay: () => {
+                try {
+                  const node = fallbackHowl._sounds?.[0]?._node
+                  if (node && !node._sourceNode && Howler.ctx) {
+                    node.crossOrigin = 'anonymous'
+                    const src = Howler.ctx.createMediaElementSource(node)
+                    src.connect(Howler.masterGain)
+                    node._sourceNode = src
+                    applyAudioChain(settingsRef.current)
+                  }
+                } catch (_) {}
+                setIsPlaying(true)
+                setIsLoading(false)
+                startProgressTracking()
+              },
+              onpause: () => { setIsPlaying(false); clearInterval(progressInterval.current) },
+              onstop: () => { setIsPlaying(false); clearInterval(progressInterval.current) },
+              onend: () => handleEndRef.current?.(),
+              onloaderror: () => { setIsLoading(false); setError('Could not load audio file'); setIsPlaying(false) },
+              onplayerror: () => { setIsLoading(false); setError('Playback error'); setIsPlaying(false) },
+            })
+            howlRef.current = fallbackHowl
+            fallbackHowl.play()
+          } catch (e) {
+            setIsLoading(false)
+            setError('Could not load audio')
+            setIsPlaying(false)
+          }
+        },
+        onplayerror: (id, error) => {
+          console.error('Howler play error:', error)
+          setIsLoading(false)
+          setError('Playback error')
+          setIsPlaying(false)
+        }
+      })
+
+      howlRef.current = howl
+      howl.play()
+    } catch (err) {
+      console.error('Error in playWithHowler:', err)
+      setIsLoading(false)
+      setError('Failed to initialize audio player')
+      setIsPlaying(false)
+    }
+  }, [applyAudioChain, startProgressTracking])
+
+  // ── YouTube IFrame API Support (Video sync / fallback) ──────
   const initYTPlayer = useCallback((divId) => {
     const create = () => {
       try {
@@ -209,97 +370,22 @@ export function PlayerProvider({ children }) {
             onReady: () => {
               ytReadyRef.current = true
               ytPlayerRef.current.setVolume(mutedRef.current ? 0 : volumeRef.current)
-              if (settings?.speed && settings.speed !== 1) {
-                try { ytPlayerRef.current.setPlaybackRate(settings.speed) } catch(_) {}
-              }
               if (pendingYTRef.current) {
                 const pending = pendingYTRef.current
                 pendingYTRef.current = null
-                if (typeof pending === 'object' && pending.videoId) {
-                  ytPlayerRef.current.loadVideoById(pending)
-                } else {
-                  ytPlayerRef.current.loadVideoById(pending)
-                }
+                ytPlayerRef.current.loadVideoById(pending)
               }
             },
-            onStateChange: (e) => {
-              const S = window.YT.PlayerState
-              if (e.data === S.PLAYING) { 
-                setIsPlaying(true)
-                setIsLoading(false)
-                if (progressInterval.current) clearInterval(progressInterval.current)
-                progressInterval.current = setInterval(() => {
-                  if (ytPlayerRef.current?.getCurrentTime) {
-                    try {
-                      const cur = ytPlayerRef.current.getCurrentTime() || 0
-                      const dur = ytPlayerRef.current.getDuration() || 0
-                      setCurrentTime(cur)
-                      if (dur > 0) {
-                        setDuration(dur)
-                        setProgress(cur / dur)
-                      }
-                    } catch (_) {}
-                  }
-                }, 250)
-              } else if (e.data === S.PAUSED) {
-                if (progressInterval.current) clearInterval(progressInterval.current)
-                if (document.hidden && isPlayingRef.current) {
-                  try { ytPlayerRef.current?.playVideo() } catch (_) {}
-                  return
-                }
-                setIsPlaying(false)
-              } else if (e.data === S.ENDED) {
-                if (progressInterval.current) clearInterval(progressInterval.current)
-                handleEndRef.current?.()
-              } else if (e.data === S.BUFFERING) {
-                setIsLoading(true)
-              }
-            },
-            onError: async (e) => {
-              console.warn('YouTube player error code:', e?.data)
-              if (progressInterval.current) clearInterval(progressInterval.current)
-              setIsLoading(false)
-
-              const song = currentSongRef.current
-              if (!song) return
-
-              // Error 150/101 = embed disabled by video owner (common for official VEVO/Universal tracks)
-              if (e?.data === 150 || e?.data === 101 || e?.data === 100) {
-                console.log('Embedding restricted on this video, searching for unblocked audio/lyrics version...')
-                try {
-                  const { searchYouTube } = await import('../services/musicApi')
-                  const altId = await searchYouTube(`${song.artist} - ${song.title} lyrics`, `${song.id}_alt`)
-                  if (altId && ytPlayerRef.current?.loadVideoById) {
-                    ytPlayerRef.current.loadVideoById({ videoId: altId, startSeconds: currentTimeRef.current || 0 })
-                    setError(null)
-                    return
-                  }
-                } catch (_) {}
-              }
-
-              // Fallback to direct audioUrl so music never cuts out
-              if (song.audioUrl) {
-                console.log('Falling back to direct audio source...')
-                try {
-                  await audioEngine.play(song.audioUrl, currentTimeRef.current || 0)
-                  setIsPlaying(true)
-                  setError(null)
-                  return
-                } catch (_) {}
-              }
-
-              setError('Playback unavailable')
-            },
-          },
+            onStateChange: () => {},
+            onError: () => {}
+          }
         })
-      } catch (error) {
-        console.error('Failed to create YouTube player:', error)
-      }
+      } catch (_) {}
     }
-    
+
     try {
-      if (window.YT && window.YT.Player) { 
-        create() 
+      if (window.YT && window.YT.Player) {
+        create()
       } else {
         window.onYouTubeIframeAPIReady = create
         if (!document.getElementById('yt-iframe-api')) {
@@ -310,210 +396,9 @@ export function PlayerProvider({ children }) {
         }
       }
     } catch (_) {}
-  }, [settings?.speed])
-
-  // ── Universal Audio Engine Event Listeners ─────────────────
-  useEffect(() => {
-    const unsubTime = audioEngine.on('timeupdate', ({ currentTime, duration, progress }) => {
-      setCurrentTime(currentTime)
-      if (duration > 0) {
-        setDuration(duration)
-        setProgress(progress)
-      }
-    })
-
-    const unsubDur = audioEngine.on('durationchange', dur => {
-      if (dur > 0) setDuration(dur)
-    })
-
-    const unsubPlay = audioEngine.on('play', () => {
-      setIsPlaying(true)
-      setIsLoading(false)
-    })
-
-    const unsubPause = audioEngine.on('pause', () => {
-      setIsPlaying(false)
-    })
-
-    const unsubEnd = audioEngine.on('ended', () => {
-      handleEndRef.current?.()
-    })
-
-    const unsubLoading = audioEngine.on('loading', loading => {
-      setIsLoading(loading)
-    })
-
-    const unsubError = audioEngine.on('error', err => {
-      console.warn('AudioEngine error received:', err)
-    })
-
-    return () => {
-      unsubTime()
-      unsubDur()
-      unsubPlay()
-      unsubPause()
-      unsubEnd()
-      unsubLoading()
-      unsubError()
-    }
   }, [])
 
-  const playWithYouTubeIframe = useCallback((song, videoId, startAt = 0) => {
-    console.log('🎬 YouTube Player playing FULL track:', song.title, videoId)
-    setEngine('youtube')
-    audioEngine.stop()
-    setCurrentTime(startAt)
-    if (song.duration) {
-      setDuration(song.duration / 1000)
-    }
-    setIsLoading(true)
-    setError(null)
-
-    if (ytReadyRef.current && ytPlayerRef.current?.loadVideoById) {
-      ytPlayerRef.current.setVolume(mutedRef.current ? 0 : volumeRef.current)
-      ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startAt })
-    } else {
-      pendingYTRef.current = { videoId, startSeconds: startAt }
-    }
-  }, [])
-
-  // ── Universal Track Player Core (Equalizer 100% Active) ────
-  const playTrackAudio = useCallback(async (song, audioUrl, startAt = 0, engineType = 'auto') => {
-    console.log(`🎛️ Universal AudioEngine playing [${engineType}]:`, song.title, audioUrl)
-    setEngine(engineType)
-    setError(null)
-    setIsLoading(true)
-
-    try {
-      // Ensure all DSP nodes have active settings applied
-      audioEngine.applySettings(settings)
-      audioEngine.setPlaybackRate(settings?.speed ?? 1.0)
-      audioEngine.setVolume(mutedRef.current ? 0 : volumeRef.current / 100, mutedRef.current)
-
-      await audioEngine.play(audioUrl, startAt)
-      if (ytPlayerRef.current?.stopVideo) {
-        try { ytPlayerRef.current.stopVideo() } catch (_) {}
-      }
-      setIsPlaying(true)
-      setIsLoading(false)
-      return true
-    } catch (err) {
-      console.warn('Primary stream playback note:', err)
-      // Fallback: If YouTube stream fails, try direct audioUrl ONLY if it's a full track (not an iTunes 30s preview)
-      if (song.audioUrl && audioUrl !== song.audioUrl && song.source !== 'itunes') {
-        console.log('Falling back to full direct audioUrl...')
-        try {
-          await audioEngine.play(song.audioUrl, startAt)
-          if (ytPlayerRef.current?.stopVideo) {
-            try { ytPlayerRef.current.stopVideo() } catch (_) {}
-          }
-          setIsPlaying(true)
-          setIsLoading(false)
-          return true
-        } catch (e) {
-          console.error('Fallback audioUrl error:', e)
-        }
-      }
-
-      // Secondary fallback: YouTube IFrame player (Plays the FULL SONG!)
-      const query = `${song.artist} - ${song.title}`
-      const vId = song.videoId || song.youtubeId || getCachedYouTubeId(song.id, query)
-      if (vId) {
-        console.log('Fallback to YouTube player for FULL song...')
-        playWithYouTubeIframe(song, vId, startAt)
-      } else {
-        try {
-          const discoveredId = await searchYouTube(`${song.artist} - ${song.title} official audio`, song.id)
-          if (discoveredId) {
-            console.log('Discovered YouTube videoId, playing FULL song:', discoveredId)
-            playWithYouTubeIframe(song, discoveredId, startAt)
-            return false
-          }
-        } catch (_) {}
-
-        // Last resort: preview audioUrl if available
-        if (song.audioUrl) {
-          try {
-            await audioEngine.play(song.audioUrl, startAt)
-            if (ytPlayerRef.current?.stopVideo) {
-              try { ytPlayerRef.current.stopVideo() } catch (_) {}
-            }
-            setIsPlaying(true)
-            setIsLoading(false)
-            setError(null)
-            return true
-          } catch (_) {}
-        }
-
-        setIsLoading(false)
-        setError('Playback error: could not load audio stream')
-        setIsPlaying(false)
-        return false
-      }
-    }
-  }, [settings, playWithYouTubeIframe])
-
-  const playWithYouTube = useCallback(async (song, startAt = 0, preferredQuality = null) => {
-    const quality = preferredQuality || settings?.streamQuality || 'auto'
-    const query = `${song.artist} - ${song.title}`
-    const cachedVideoId = song.videoId || song.youtubeId || getCachedYouTubeId(song.id, query)
-
-    if (cachedVideoId) {
-      const streamUrl = `/api/youtube/stream/${cachedVideoId}?quality=${quality}`
-      console.log('⚡ Checking YouTube Stream (Equalizer 100% Active):', streamUrl)
-      try {
-        const ok = await playTrackAudio(song, streamUrl, startAt, 'youtube')
-        if (ok) return
-      } catch (_) {}
-      // Direct stream failed -> fallback to YouTube iframe
-      playWithYouTubeIframe(song, cachedVideoId, startAt)
-      return
-    }
-
-    // Play preview while discovering full YouTube stream so user hears music with 0ms delay
-    if (song.audioUrl) {
-      console.log('Playing preview while searching YouTube stream...')
-      await playTrackAudio(song, song.audioUrl, startAt, 'preview')
-    } else {
-      setIsLoading(true)
-    }
-
-    try {
-      const videoId = await searchYouTube(`${song.artist} - ${song.title} official audio`, song.id)
-      if (videoId) {
-        const curTime = audioEngine.getCurrentTime() || startAt
-        const streamUrl = `/api/youtube/stream/${videoId}?quality=${quality}`
-        console.log('⚡ YouTube Stream Discovered for FULL song:', streamUrl)
-        try {
-          const ok = await playTrackAudio(song, streamUrl, curTime, 'youtube')
-          if (ok) return
-        } catch (_) {}
-        // Direct backend stream failed -> switch to YouTube player
-        playWithYouTubeIframe(song, videoId, curTime)
-      }
-    } catch (error) {
-      console.warn('YouTube search upgrade note:', error)
-    }
-  }, [settings?.streamQuality, playTrackAudio, playWithYouTubeIframe])
-
-  // ── Gapless Pre-caching ───────────────────────────────────
-  useEffect(() => {
-    if (!settings?.gapless || !isPlaying || duration < 15) return
-    const rem = duration - currentTime
-    if (rem > 0 && rem <= 8) {
-      const q = queueRef.current
-      const idx = queueIndexRef.current
-      const nextSong = q && q[idx + 1]
-      if (nextSong) {
-        const query = `${nextSong.artist} - ${nextSong.title}`
-        const vId = nextSong.videoId || nextSong.youtubeId || getCachedYouTubeId(nextSong.id, query)
-        if (vId) {
-          fetch(`/api/youtube/stream/${vId}?quality=${settings?.streamQuality || 'auto'}`, { method: 'HEAD' }).catch(() => {})
-        }
-      }
-    }
-  }, [currentTime, duration, isPlaying, settings?.gapless, settings?.streamQuality])
-
+  // ── Master Track Loader (Supports All 3 Engines: Auto, Studio, YouTube) ──
   const loadAndPlay = useCallback((song, songQueue = [], index = 0, startAt = 0) => {
     if (!song || !song.id) {
       setError('Invalid song data')
@@ -534,105 +419,77 @@ export function PlayerProvider({ children }) {
     }
 
     const currentEngine = settings?.audioEngine || 'studio'
-    console.log(`🎵 Engine selected: [${currentEngine}] for track:`, song.title)
+    console.log(`🎵 Engine active: [${currentEngine}] for track:`, song.title)
 
-    if (currentEngine === 'studio') {
-      // 🎧 Studio Audio Engine: Pure studio sound with uncompressed EQ & Spatial Audio
-      if (song.audioUrl) {
-        playTrackAudio(song, song.audioUrl, startAt, 'studio')
-      } else {
-        setIsLoading(true)
-        searchiTunes(`${song.artist} ${song.title}`, 1)
-          .then(results => {
-            if (results && results[0]?.audioUrl) {
-              song.audioUrl = results[0].audioUrl
-              playTrackAudio(song, results[0].audioUrl, startAt, 'studio')
-            } else {
-              playWithYouTube(song, startAt, 'very_high')
-            }
-          })
-          .catch(() => {
-            playWithYouTube(song, startAt, 'very_high')
-          })
-      }
-    } else if (currentEngine === 'youtube') {
-      // 🎬 YouTube Stream Engine: Full track with 10-Band EQ & Spatial Audio
-      playWithYouTube(song, startAt, settings?.streamQuality || 'normal')
+    // Play track across ALL 3 ENGINES with 10-Band EQ, Bass Boost, and 3D Spatial Audio!
+    if (song.audioUrl) {
+      playWithHowler(song, song.audioUrl, startAt, currentEngine)
     } else {
-      // ✨ Smart Auto Engine: Chooses best stream with 10-Band EQ & Spatial Audio
-      if (song.audioUrl) {
-        playTrackAudio(song, song.audioUrl, startAt, 'auto')
-      } else {
-        playWithYouTube(song, startAt, settings?.streamQuality || 'auto')
-      }
+      setIsLoading(true)
+      // Discover audioUrl via iTunes search in milliseconds
+      searchiTunes(`${song.artist} ${song.title}`, 1)
+        .then(results => {
+          if (results && results[0]?.audioUrl) {
+            song.audioUrl = results[0].audioUrl
+            playWithHowler(song, results[0].audioUrl, startAt, currentEngine)
+          } else {
+            // Fallback: try YouTube stream endpoint through Howler
+            const query = `${song.artist} - ${song.title}`
+            const vId = song.videoId || song.youtubeId || getCachedYouTubeId(song.id, query)
+            if (vId) {
+              const streamUrl = `/api/youtube/stream/${vId}?quality=${settings?.streamQuality || 'auto'}`
+              playWithHowler(song, streamUrl, startAt, currentEngine)
+            } else {
+              searchYouTube(`${song.artist} - ${song.title} official audio`, song.id)
+                .then(discoveredId => {
+                  if (discoveredId) {
+                    const streamUrl = `/api/youtube/stream/${discoveredId}?quality=${settings?.streamQuality || 'auto'}`
+                    playWithHowler(song, streamUrl, startAt, currentEngine)
+                  } else {
+                    setError('Playback unavailable for this track')
+                    setIsLoading(false)
+                  }
+                })
+                .catch(() => {
+                  setError('Playback unavailable for this track')
+                  setIsLoading(false)
+                })
+            }
+          }
+        })
+        .catch(() => {
+          setError('Playback unavailable for this track')
+          setIsLoading(false)
+        })
     }
-  }, [user, settings, playTrackAudio, playWithYouTube])
+  }, [user, settings, playWithHowler])
 
   const switchEngine = useCallback((targetEngine) => {
+    setEngine(targetEngine)
     const song = currentSongRef.current
     if (!song) return
-    const curTime = (engineRef.current === 'youtube' && ytPlayerRef.current?.getCurrentTime 
-      ? ytPlayerRef.current.getCurrentTime() 
-      : audioEngine.getCurrentTime()) || currentTimeRef.current || 0
-
-    if (targetEngine === 'studio') {
-      if (ytPlayerRef.current?.stopVideo) {
-        try { ytPlayerRef.current.stopVideo() } catch (_) {}
-      }
-      if (song.audioUrl) {
-        playTrackAudio(song, song.audioUrl, curTime, 'studio')
-      } else {
-        setIsLoading(true)
-        searchiTunes(`${song.artist} ${song.title}`, 1)
-          .then(results => {
-            if (results && results[0]?.audioUrl) {
-              song.audioUrl = results[0].audioUrl
-              playTrackAudio(song, results[0].audioUrl, curTime, 'studio')
-            } else {
-              playWithYouTube(song, curTime, 'very_high')
-            }
-          })
-          .catch(() => {
-            playWithYouTube(song, curTime, 'very_high')
-          })
-      }
-    } else if (targetEngine === 'youtube') {
-      playWithYouTube(song, curTime, settings?.streamQuality || 'normal')
-    } else {
-      // auto
-      if (ytPlayerRef.current?.stopVideo) {
-        try { ytPlayerRef.current.stopVideo() } catch (_) {}
-      }
-      if (song.audioUrl) {
-        playTrackAudio(song, song.audioUrl, curTime, 'auto')
-      } else {
-        playWithYouTube(song, curTime, settings?.streamQuality || 'auto')
-      }
+    const curTime = (howlRef.current ? howlRef.current.seek() : currentTimeRef.current) || 0
+    if (song.audioUrl) {
+      playWithHowler(song, song.audioUrl, curTime, targetEngine)
     }
-  }, [playTrackAudio, playWithYouTube, settings?.streamQuality])
+  }, [playWithHowler])
 
-  // keep ref in sync so handleEnd can call it without stale closure
+  // Keep ref in sync so handleEnd can call it without stale closure
   useEffect(() => { loadAndPlayRef.current = loadAndPlay }, [loadAndPlay])
-  // ── Restore last session on mount / user switch ─────────────────────────
+
+  // ── Restore last session on mount / user switch ────────────
   const prevUserRef = useRef(user?.uid)
 
   useEffect(() => {
-    // If user changed (e.g. login, logout, switch account):
     if (prevUserRef.current !== user?.uid) {
       prevUserRef.current = user?.uid
-      // Stop current playback
       if (howlRef.current) {
-        howlRef.current.stop()
-        howlRef.current.unload()
+        try { howlRef.current.stop(); howlRef.current.unload() } catch (_) {}
         howlRef.current = null
-      }
-      if (ytPlayerRef.current?.stopVideo) {
-        try { ytPlayerRef.current.stopVideo() } catch (_) {}
       }
       setIsPlaying(false)
       clearInterval(progressInterval.current)
 
-      // Restore the new user's saved state
       const saved = loadState(user?.uid)
       if (saved?.song) {
         setCurrentSong(saved.song)
@@ -654,7 +511,6 @@ export function PlayerProvider({ children }) {
 
     const saved = loadState(user?.uid)
     if (saved?.song) {
-      // Restore state but don't auto-play — just set the song info
       setCurrentSong(saved.song)
       setQueue(saved.queue || [saved.song])
       setQueueIndex(saved.index || 0)
@@ -664,28 +520,20 @@ export function PlayerProvider({ children }) {
     }
   }, [user?.uid])
 
+  // ── Play / Pause Toggle ────────────────────────────────────
   const togglePlay = useCallback(() => {
-    // 1. If currently playing, ALWAYS pause immediately
+    const h = howlRef.current
     if (isPlayingRef.current) {
-      audioEngine.pause()
-      if (ytPlayerRef.current?.pauseVideo) {
-        try { ytPlayerRef.current.pauseVideo() } catch (_) {}
-      }
+      if (h) h.pause()
       setIsPlaying(false)
       return false
     }
 
-    // 2. If currently paused, resume playback:
-    if (engineRef.current === 'youtube' && ytPlayerRef.current?.playVideo) {
-      try {
-        ytPlayerRef.current.playVideo()
-        setIsPlaying(true)
-        return true
-      } catch (_) {}
-    }
-
-    if (audioEngine.audio?.src && audioEngine.audio.src !== '' && !audioEngine.audio.src.endsWith('/')) {
-      audioEngine.resume()
+    if (h) {
+      if (Howler.ctx && Howler.ctx.state === 'suspended') {
+        Howler.ctx.resume().catch(() => {})
+      }
+      h.play()
       setIsPlaying(true)
       return true
     }
@@ -700,20 +548,14 @@ export function PlayerProvider({ children }) {
   }, [loadAndPlay])
 
   const seek = useCallback(fraction => {
-    if (engineRef.current === 'youtube' && ytPlayerRef.current?.seekTo) {
-      const p = ytPlayerRef.current
-      const dur = p.getDuration?.() || duration || 0
-      p.seekTo(fraction * dur, true)
+    const h = howlRef.current
+    if (!h) return
+    const dur = h.duration() || duration || 0
+    if (dur > 0) {
+      const target = fraction * dur
+      h.seek(target)
       setProgress(fraction)
-      setCurrentTime(fraction * dur)
-    } else {
-      const dur = audioEngine.getDuration() || duration || 0
-      if (dur > 0) {
-        const target = fraction * dur
-        audioEngine.seek(target)
-        setProgress(fraction)
-        setCurrentTime(target)
-      }
+      setCurrentTime(target)
     }
   }, [duration])
 
@@ -737,16 +579,12 @@ export function PlayerProvider({ children }) {
   }, [loadAndPlay, settings?.smartShuffle])
 
   const previous = useCallback(() => {
-    if (currentTimeRef.current > 3) {
-      if (engineRef.current === 'youtube' && ytPlayerRef.current?.seekTo) {
-        ytPlayerRef.current.seekTo(0, true)
-        setProgress(0)
-        setCurrentTime(0)
-      } else {
-        audioEngine.seek(0)
-        setProgress(0)
-        setCurrentTime(0)
-      }
+    const h = howlRef.current
+    const curTime = h ? h.seek() : currentTimeRef.current
+    if (curTime > 3) {
+      if (h) h.seek(0)
+      setProgress(0)
+      setCurrentTime(0)
       return
     }
     const idx = queueIndexRef.current
@@ -756,16 +594,18 @@ export function PlayerProvider({ children }) {
 
   const setVolume = useCallback(v => {
     setVolumeState(v)
-    audioEngine.setVolume(v / 100, false)
-    ytPlayerRef.current?.setVolume?.(v)
+    const vol = v / 100
+    Howler.volume(vol)
+    if (howlRef.current) {
+      howlRef.current.volume(vol)
+    }
     if (v > 0) setIsMuted(false)
   }, [])
 
   const toggleMute = useCallback(() => {
     setIsMuted(prev => {
       const muted = !prev
-      audioEngine.setVolume(volumeRef.current / 100, muted)
-      muted ? ytPlayerRef.current?.mute?.() : ytPlayerRef.current?.unMute?.()
+      Howler.mute(muted)
       return muted
     })
   }, [])
@@ -817,34 +657,19 @@ export function PlayerProvider({ children }) {
     })
   }, [user?.uid])
 
-  // Force apply all audio settings - useful for debugging
   const forceApplySettings = useCallback(() => {
-    console.log('🔧 FORCE APPLYING ALL AUDIO SETTINGS')
-    audioEngine.applySettings(settings)
-    if (settings?.speed) {
-      audioEngine.setPlaybackRate(settings.speed)
-    }
-    audioEngine.setVolume(mutedRef.current ? 0 : volumeRef.current / 100, mutedRef.current)
-  }, [settings])
+    applyAudioChain(settings)
+  }, [applyAudioChain, settings])
 
-  // ── Background Audio Persistence (Keep playing when minimized or switching tabs) ──
+  // ── Background Audio Persistence (Never pauses on tab blur/minimize) ──
   useEffect(() => {
     const keepAudioAlive = () => {
       if (isPlayingRef.current) {
-        // 1. Resume Web Audio context if browser suspended it on tab blur
-        if (audioEngine.ctx && audioEngine.ctx.state === 'suspended') {
-          audioEngine.ctx.resume().catch(() => {})
+        if (Howler.ctx && Howler.ctx.state === 'suspended') {
+          Howler.ctx.resume().catch(() => {})
         }
-        // 2. Keep audioEngine playing if it got interrupted
-        if (audioEngine.audio && audioEngine.audio.paused && isPlayingRef.current) {
-          try { audioEngine.audio.play() } catch (_) {}
-        }
-        // 3. Keep YouTube playing if it got paused while tab is backgrounded
-        if (engineRef.current === 'youtube' && ytPlayerRef.current?.getPlayerState) {
-          const state = ytPlayerRef.current.getPlayerState()
-          if (state === 2) { // 2 = PAUSED
-            try { ytPlayerRef.current.playVideo() } catch (_) {}
-          }
+        if (howlRef.current && !howlRef.current.playing()) {
+          try { howlRef.current.play() } catch (_) {}
         }
       }
     }
@@ -862,7 +687,7 @@ export function PlayerProvider({ children }) {
     }
   }, [])
 
-  // ── MediaSession API (OS Media Controls & Background Throttling Prevention) ──
+  // ── MediaSession API ───────────────────────────────────────
   useEffect(() => {
     if (typeof window === 'undefined' || !('mediaSession' in navigator)) return
 
@@ -918,7 +743,7 @@ export function PlayerProvider({ children }) {
       cycleRepeat: () => setRepeatMode(m => m === 'none' ? 'all' : m === 'all' ? 'one' : 'none'),
       initYTPlayer,
       switchEngine,
-      forceApplySettings, // Add this for debugging
+      forceApplySettings,
       reorderQueue,
       removeFromQueue,
     }}>
