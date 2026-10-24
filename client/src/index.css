@@ -512,8 +512,46 @@ input[type='range']::-moz-range-thumb {
   height: 100vh;
   height: 100dvh;
   z-index: 200;
-  overflow: hidden;
-  overscroll-behavior: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  scroll-snap-type: y proximity;
+}
+
+.player-snap-section {
+  scroll-snap-align: start;
+}
+
+/* ── 3D Vinyl Flip Card for Lyrics ── */
+.perspective-card {
+  perspective: 1200px;
+}
+
+.card-3d {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.65s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-3d.flipped {
+  transform: rotateY(180deg);
+}
+
+.card-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: 1rem;
+}
+
+.card-face-back {
+  transform: rotateY(180deg);
 }
 
 .mobile-safe-area {

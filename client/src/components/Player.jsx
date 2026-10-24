@@ -4,7 +4,7 @@ import WaveSeekBar from './WaveSeekBar'
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
   Volume2, VolumeX, Volume1, Heart, ListMusic, X, Music, Mic2,
-  ChevronDown, Maximize2, Timer, PlusCircle, ListPlus, Info,
+  ChevronDown, ChevronUp, RotateCcw, Maximize2, Timer, PlusCircle, ListPlus, Info,
   GripVertical, Trash2
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
@@ -136,6 +136,109 @@ function LyricsPanel({ song, currentTime, onClose, expanded = false }) {
             </div>
           ) : <pre className="text-base text-gray-300 whitespace-pre-wrap font-sans leading-7 select-text break-words">{plain}</pre>
         }
+      </div>
+    </div>
+  )
+}
+
+function LyricsFlipCard({ song, currentTime, seek, onFlipBack }) {
+  const [lines, setLines] = useState([])
+  const [plain, setPlain] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState(false)
+  const [synced, setSynced] = useState(false)
+  const activeRef = useRef(null)
+  const listRef = useRef(null)
+
+  useEffect(() => {
+    if (!song) return
+    setLoading(true); setErr(false); setLines([]); setPlain('')
+    fetch(`https://lrclib.net/api/search?track_name=${encodeURIComponent(song.title)}&artist_name=${encodeURIComponent(song.artist)}`)
+      .then(r => r.json()).then(res => {
+        const hit = res?.[0]
+        if (hit?.syncedLyrics) { setLines(parseLRC(hit.syncedLyrics)); setSynced(true) }
+        else if (hit?.plainLyrics) { setPlain(hit.plainLyrics); setSynced(false) }
+        else return fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(song.artist)}/${encodeURIComponent(song.title)}`)
+          .then(r => r.json()).then(d => d.lyrics ? (setPlain(d.lyrics), setSynced(false)) : setErr(true))
+      }).catch(() => setErr(true)).finally(() => setLoading(false))
+  }, [song?.id])
+
+  const activeIdx = synced ? lines.reduce((acc, l, i) => l.time <= currentTime ? i : acc, -1) : -1
+
+  // Container-scoped smooth scroll to keep current vocal line centered
+  useEffect(() => {
+    if (!activeRef.current || !listRef.current) return
+    const container = listRef.current
+    const el = activeRef.current
+    const target = el.offsetTop - (container.clientHeight / 2) + (el.clientHeight / 2)
+    container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' })
+  }, [activeIdx])
+
+  return (
+    <div className="w-full h-full rounded-2xl overflow-hidden shadow-2xl bg-black/85 backdrop-blur-2xl border border-white/15 flex flex-col p-3 select-none relative">
+      {/* Top subtle bar */}
+      <div className="flex items-center justify-between pb-1.5 mb-1 border-b border-white/10 shrink-0">
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-brand animate-pulse" />
+          <span className="text-[10px] font-bold tracking-wider uppercase text-brand">
+            {synced ? 'Live Synced' : 'Lyrics'}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={onFlipBack}
+          className="p-1 rounded-full hover:bg-white/15 text-gray-400 hover:text-white transition-colors touch-target cursor-pointer"
+          title="Flip back to album art"
+        >
+          <RotateCcw size={13} />
+        </button>
+      </div>
+
+      {/* Lyrics lines with gradient masks */}
+      <div className="relative flex-1 min-h-0 overflow-hidden">
+        {/* Subtle top & bottom shadow gradient masks for smooth fade */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-black/85 to-transparent z-10" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-black/85 to-transparent z-10" />
+
+        <div ref={listRef} className="h-full overflow-y-auto no-scrollbar py-3 px-2 space-y-3.5 scroll-smooth text-center">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center h-full gap-2">
+              <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+              <p className="text-[11px] text-gray-400">Loading lyrics...</p>
+            </div>
+          ) : err ? (
+            <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-1.5">
+              <Mic2 size={24} className="opacity-30" />
+              <p className="text-xs font-semibold text-gray-300">Lyrics not available</p>
+              <p className="text-[10px] text-gray-500">Lyrics aren't synced for this song yet</p>
+            </div>
+          ) : synced ? (
+            lines.map((line, i) => {
+              const isCurrent = i === activeIdx
+              return (
+                <p
+                  key={i}
+                  ref={isCurrent ? activeRef : null}
+                  onClick={() => seek?.(line.time)}
+                  className={`text-xs sm:text-sm transition-all duration-300 cursor-pointer hover:text-white active:scale-95 leading-relaxed ${
+                    isCurrent
+                      ? 'text-brand font-extrabold scale-105 drop-shadow-[0_0_12px_rgba(255,255,255,0.7)]'
+                      : i < activeIdx
+                        ? 'text-gray-500 font-medium'
+                        : 'text-gray-400 font-medium'
+                  }`}
+                  title={`Jump to ${formatTime(line.time)}`}
+                >
+                  {line.text || '♪'}
+                </p>
+              )
+            })
+          ) : (
+            <pre className="text-xs text-gray-300 whitespace-pre-wrap font-sans leading-5 text-left select-text">
+              {plain}
+            </pre>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -461,14 +564,22 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
   isShuffled, repeatMode, isLoading, error, engine, queue, queueIndex, liked, onLike, onClose,
   togglePlay, seek, next, previous, setVolume, toggleMute, toggleShuffle, cycleRepeat, play,
   showParticles, settings, switchEngine, onOpenQuickAdd, reorderQueue, removeFromQueue }) {
-  const [panel, setPanel] = useState(() => (settings?.autoLyrics ? 'lyrics' : null))
+  const [isLyricsFlipped, setIsLyricsFlipped] = useState(() => !!settings?.autoLyrics)
   const [viewMode, setViewMode] = useState('audio')
   const [videoId, setVideoId] = useState(null)
   const [loadingVideo, setLoadingVideo] = useState(false)
   const containerRef = useRef(null)
-  const scrollBodyRef = useRef(null)
+  const queueSectionRef = useRef(null)
   const VolumeIcon = isMuted || volume === 0 ? VolumeX : volume < 50 ? Volume1 : Volume2
   const RepeatIcon = repeatMode === 'one' ? Repeat1 : Repeat
+
+  const scrollToQueue = () => {
+    queueSectionRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const scrollToTop = () => {
+    containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   // Lock body scroll and anchor viewport at top whenever full player is mounted
   useEffect(() => {
@@ -479,12 +590,6 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
       document.body.style.overflow = prevOverflow
     }
   }, [])
-
-  // Keep parent player anchored to top when panel (lyrics/queue) opens or closes
-  useEffect(() => {
-    if (containerRef.current) containerRef.current.scrollTop = 0
-    window.scrollTo(0, 0)
-  }, [panel])
 
   useEffect(() => {
     if (viewMode === 'video' && !videoId && currentSong) {
@@ -498,20 +603,21 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
   }, [viewMode, currentSong, videoId])
 
   return (
-    <div ref={containerRef} className="mobile-expanded-player slide-up flex flex-col bg-black text-white overflow-hidden overscroll-none">
-      {/* Blurred background */}
-      <div className="absolute inset-0">
+    <div ref={containerRef} className="mobile-expanded-player slide-up flex flex-col bg-black text-white no-scrollbar select-none">
+      {/* Blurred background pinned to screen */}
+      <div className="fixed inset-0 pointer-events-none">
         <img src={currentSong.coverUrl || ''} alt="" className="w-full h-full object-cover scale-110"
           style={{ filter: 'blur(60px) brightness(0.25) saturate(2)' }} />
-        <div className="absolute inset-0 bg-black/50" />
+        <div className="absolute inset-0 bg-black/60" />
       </div>
       {isPlaying && showParticles && <Particles />}
 
-      <div className="relative z-10 flex flex-col h-full mobile-safe-area">
+      {/* ── SECTION 1: NOW PLAYING FULL SCREEN ── */}
+      <div className="player-snap-section relative z-10 min-h-screen min-h-[100dvh] flex flex-col justify-between mobile-safe-area shrink-0">
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-8 py-3 shrink-0 bg-transparent">
           <button onClick={onClose}
-            className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors touch-target"
+            className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors touch-target cursor-pointer"
             title="Minimize"
           >
             <ChevronDown size={22} />
@@ -519,42 +625,60 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
           <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold">Now Playing</p>
           <div className="flex items-center gap-0.5 bg-white/10 rounded-full p-1">
             {['audio','video'].map(m => (
-              <button key={m} onClick={() => setViewMode(m)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all capitalize ${viewMode === m ? 'bg-white text-black shadow-sm' : 'text-gray-300 hover:text-white'}`}>
+              <button key={m} onClick={() => {
+                setViewMode(m)
+                if (m === 'video') setIsLyricsFlipped(false)
+              }}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all capitalize cursor-pointer ${viewMode === m ? 'bg-white text-black shadow-sm' : 'text-gray-300 hover:text-white'}`}>
                 {m}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Non-scrollable centered body */}
-        <div ref={scrollBodyRef} className="flex-1 overflow-hidden px-4 sm:px-8 flex flex-col justify-center">
+        {/* Center Player Body */}
+        <div className="flex-1 overflow-hidden px-4 sm:px-8 flex flex-col justify-center">
           <div className="flex flex-col items-center gap-3 sm:gap-4 max-w-md sm:max-w-lg lg:max-w-xl mx-auto my-auto w-full py-1">
 
-            {/* Art / Video */}
-            <div className="relative w-full max-w-[210px] xs:max-w-[230px] sm:max-w-[260px] md:max-w-[280px] max-h-[29vh] sm:max-h-[31vh] shrink-0">
-              {viewMode === 'audio' ? (
-                <>
-                  <div className="absolute -inset-3 rounded-2xl opacity-30 blur-2xl" style={{ background: 'var(--brand)' }} />
-                  <div className={`relative w-full aspect-square rounded-2xl overflow-hidden shadow-2xl ${settings?.animatedArt && isPlaying ? 'album-glow' : ''}`}>
-                    <img src={currentSong.coverUrl || 'https://via.placeholder.com/300'} alt={currentSong.title}
-                      className={`w-full h-full object-cover transition-transform duration-500 ${settings?.animatedArt && isPlaying ? 'scale-105' : ''}`} />
-                  </div>
-                </>
-              ) : (
-                <div className="w-full aspect-square rounded-2xl overflow-hidden shadow-2xl bg-black">
-                  {loadingVideo
-                    ? <div className="w-full h-full flex items-center justify-center"><div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin" /></div>
-                    : videoId
-                      ? <iframe src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`}
-                          title={currentSong.title} className="w-full h-full" frameBorder="0"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-                      : <div className="w-full h-full flex flex-col items-center justify-center text-gray-500">
-                          <Music size={40} className="mb-2 opacity-30" /><p className="text-sm">No video found</p>
-                        </div>
-                  }
+            {/* Art / Video / 3D Vinyl Flip Lyrics Card */}
+            <div className="perspective-card relative w-full max-w-[210px] xs:max-w-[230px] sm:max-w-[260px] md:max-w-[280px] max-h-[29vh] sm:max-h-[31vh] aspect-square shrink-0">
+              <div className={`card-3d ${isLyricsFlipped ? 'flipped' : ''}`}>
+                {/* FRONT FACE: Album Artwork / Video */}
+                <div className="card-face card-face-front">
+                  {viewMode === 'audio' ? (
+                    <div className="relative w-full h-full">
+                      <div className="absolute -inset-3 rounded-2xl opacity-30 blur-2xl pointer-events-none" style={{ background: 'var(--brand)' }} />
+                      <div className={`relative w-full h-full rounded-2xl overflow-hidden shadow-2xl ${settings?.animatedArt && isPlaying ? 'album-glow' : ''}`}>
+                        <img src={currentSong.coverUrl || 'https://via.placeholder.com/300'} alt={currentSong.title}
+                          className={`w-full h-full object-cover transition-transform duration-500 ${settings?.animatedArt && isPlaying ? 'scale-105' : ''}`} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="w-full h-full rounded-2xl overflow-hidden shadow-2xl bg-black">
+                      {loadingVideo
+                        ? <div className="w-full h-full flex items-center justify-center"><div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin" /></div>
+                        : videoId
+                          ? <iframe src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`}
+                              title={currentSong.title} className="w-full h-full" frameBorder="0"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                          : <div className="w-full h-full flex flex-col items-center justify-center text-gray-500">
+                              <Music size={40} className="mb-2 opacity-30" /><p className="text-sm">No video found</p>
+                            </div>
+                      }
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {/* BACK FACE: 3D Live-Synced Lyrics Vinyl Sleeve */}
+                <div className="card-face card-face-back">
+                  <LyricsFlipCard
+                    song={currentSong}
+                    currentTime={currentTime}
+                    seek={seek}
+                    onFlipBack={() => setIsLyricsFlipped(false)}
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Song info */}
@@ -577,12 +701,12 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
 
             {/* Action buttons: Like & Quick Add */}
             <div className="flex items-center justify-between w-full px-2 sm:px-4">
-              <button onClick={onLike} className={`touch-target transition-all active:scale-90 ${liked ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title={liked ? 'Unlike' : 'Like'}>
+              <button onClick={onLike} className={`touch-target transition-all active:scale-90 cursor-pointer ${liked ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title={liked ? 'Unlike' : 'Like'}>
                 <Heart size={22} fill={liked ? 'currentColor' : 'none'} />
               </button>
               <button
                 onClick={() => onOpenQuickAdd?.()}
-                className="touch-target p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-all active:scale-90"
+                className="touch-target p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-all active:scale-90 cursor-pointer"
                 title="Add to playlist, queue, or liked"
               >
                 <PlusCircle size={22} />
@@ -606,30 +730,30 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
 
             {/* Controls */}
             <div className="flex items-center justify-between w-full px-2 sm:px-6">
-              <button onClick={toggleShuffle} className={`touch-target transition-colors ${isShuffled ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title="Shuffle">
+              <button onClick={toggleShuffle} className={`touch-target transition-colors cursor-pointer ${isShuffled ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title="Shuffle">
                 <Shuffle size={20} />
               </button>
-              <button onClick={previous} className="touch-target text-gray-300 hover:text-white transition-colors" title="Previous">
+              <button onClick={previous} className="touch-target text-gray-300 hover:text-white transition-colors cursor-pointer" title="Previous">
                 <SkipBack size={26} fill="currentColor" />
               </button>
               <button onClick={togglePlay} disabled={isLoading}
-                className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all shadow-2xl disabled:opacity-50"
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all shadow-2xl disabled:opacity-50 cursor-pointer"
                 title={isPlaying ? 'Pause' : 'Play'}>
                 {isLoading
                   ? <div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin" />
                   : isPlaying ? <Pause size={26} fill="currentColor" /> : <Play size={26} fill="currentColor" className="ml-1" />}
               </button>
-              <button onClick={next} className="touch-target text-gray-300 hover:text-white transition-colors" title="Next">
+              <button onClick={next} className="touch-target text-gray-300 hover:text-white transition-colors cursor-pointer" title="Next">
                 <SkipForward size={26} fill="currentColor" />
               </button>
-              <button onClick={cycleRepeat} className={`touch-target transition-colors ${repeatMode !== 'none' ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title="Repeat">
+              <button onClick={cycleRepeat} className={`touch-target transition-colors cursor-pointer ${repeatMode !== 'none' ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title="Repeat">
                 <RepeatIcon size={20} />
               </button>
             </div>
 
             {/* Volume */}
             <div className="flex items-center gap-3 w-full px-2 sm:px-6">
-              <button onClick={toggleMute} className="touch-target text-gray-400 hover:text-white transition-colors shrink-0" title="Mute/Unmute">
+              <button onClick={toggleMute} className="touch-target text-gray-400 hover:text-white transition-colors shrink-0 cursor-pointer" title={isMuted ? "Unmute" : "Mute"}>
                 <VolumeIcon size={18} />
               </button>
               <input type="range" min={0} max={100} step={1} value={isMuted ? 0 : volume}
@@ -638,47 +762,84 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
                 style={{ '--progress': `${isMuted ? 0 : volume}%` }} />
             </div>
 
-            {/* Bottom panel toggles: Lyrics & Queue */}
-            <div className="flex items-center justify-center gap-3.5 w-full pt-1">
-              <button onClick={() => setPanel(p => p === 'lyrics' ? null : 'lyrics')}
-                className={`touch-target flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2 rounded-full text-xs sm:text-sm font-semibold transition-all ${panel === 'lyrics' ? 'bg-brand text-black shadow-lg shadow-brand/30' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>
-                <Mic2 size={15} /> Lyrics
-              </button>
-              <button onClick={() => setPanel(p => p === 'queue' ? null : 'queue')}
-                className={`touch-target flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2 rounded-full text-xs sm:text-sm font-semibold transition-all ${panel === 'queue' ? 'bg-brand text-black shadow-lg shadow-brand/30' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>
-                <ListMusic size={15} /> Queue
+            {/* Centered Lyrics Toggle Button */}
+            <div className="flex items-center justify-center w-full pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (viewMode === 'video') setViewMode('audio')
+                  setIsLyricsFlipped(f => !f)
+                }}
+                className={`touch-target flex items-center gap-2 px-5 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all shadow-lg active:scale-95 cursor-pointer ${
+                  isLyricsFlipped
+                    ? 'bg-brand text-black shadow-brand/30 ring-2 ring-brand/40'
+                    : 'bg-white/10 text-gray-200 hover:bg-white/20 hover:text-white border border-white/10'
+                }`}
+                title={isLyricsFlipped ? "Flip to Album Cover" : "3D Flip to Live Lyrics"}
+              >
+                <Mic2 size={15} className={isLyricsFlipped ? "animate-pulse" : ""} />
+                <span>{isLyricsFlipped ? 'Show Cover' : 'Lyrics'}</span>
               </button>
             </div>
+
           </div>
         </div>
 
-        {/* Slide-up panel overlay */}
-        {panel && (
-          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-6" onClick={() => setPanel(null)}>
-            <div className="relative w-full sm:max-w-2xl bg-surface-2 rounded-t-3xl sm:rounded-3xl border border-white/10 h-[75vh] max-h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-slide-up"
-              onClick={e => e.stopPropagation()}>
-              <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mt-2.5 -mb-1 shrink-0 sm:hidden" />
-              <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 shrink-0">
-                <div className="flex items-center gap-2.5">
-                  <h3 className="font-bold text-base capitalize">{panel}</h3>
-                  {panel === 'queue' && (
-                    <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-brand/15 text-brand font-medium border border-brand/20">
-                      Hold to reorder
-                    </span>
-                  )}
-                </div>
-                <button onClick={() => setPanel(null)} className="touch-target p-1.5 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
-                  <X size={20} />
-                </button>
-              </div>
-              <div className="flex-1 min-h-0 overflow-hidden flex flex-col p-3 sm:p-4">
-                {panel === 'lyrics'
-                  ? <LyricsPanel song={currentSong} currentTime={currentTime} expanded />
-                  : <QueuePanel queue={queue} queueIndex={queueIndex} onPlay={play} reorderQueue={reorderQueue} removeFromQueue={removeFromQueue} expanded />}
-              </div>
+        {/* Scroll down to Queue cue at the bottom of Section 1 */}
+        <div className="w-full flex justify-center pb-2 shrink-0">
+          <button
+            type="button"
+            onClick={scrollToQueue}
+            className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-white transition-all py-1 px-4 rounded-full hover:bg-white/5 active:scale-95 group cursor-pointer"
+            title="Scroll down to Queue"
+          >
+            <span className="text-[11px] font-semibold tracking-wider uppercase text-gray-400 group-hover:text-brand transition-colors flex items-center gap-1.5">
+              <ListMusic size={13} className="text-brand" />
+              Queue ({queue.length})
+            </span>
+            <ChevronDown size={15} className="animate-bounce text-gray-500 group-hover:text-white" />
+          </button>
+        </div>
+      </div>
+
+      {/* ── SECTION 2: QUEUE DIRECTLY BELOW PLAYER ── */}
+      <div ref={queueSectionRef} className="player-snap-section relative z-10 w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 pb-20 shrink-0">
+        <div className="glass-card border border-white/10 rounded-3xl p-4 sm:p-6 shadow-2xl flex flex-col min-h-[480px] max-h-[82vh]">
+          {/* Queue Header */}
+          <div className="flex items-center justify-between pb-3 mb-2 border-b border-white/10 shrink-0">
+            <div className="flex items-center gap-2.5">
+              <ListMusic size={20} className="text-brand" />
+              <h3 className="font-bold text-base sm:text-lg text-white">Up Next</h3>
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-brand/15 text-brand font-medium border border-brand/20">
+                {queue.length} songs
+              </span>
+              <span className="text-[11px] text-gray-400 hidden sm:inline-block ml-2">
+                Hold song to reorder
+              </span>
             </div>
+            <button
+              type="button"
+              onClick={scrollToTop}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white transition-colors cursor-pointer touch-target"
+              title="Back to Player"
+            >
+              <ChevronUp size={16} />
+              <span>Player</span>
+            </button>
           </div>
-        )}
+
+          {/* Embedded Queue list */}
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            <QueuePanel
+              queue={queue}
+              queueIndex={queueIndex}
+              onPlay={play}
+              reorderQueue={reorderQueue}
+              removeFromQueue={removeFromQueue}
+              expanded={true}
+            />
+          </div>
+        </div>
       </div>
     </div>
   )
