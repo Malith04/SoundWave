@@ -289,7 +289,7 @@ export default function ArtistPage() {
   }
 
   const { artist, topSongs, albums, newReleases, upcomingReleases, collaborations } = profile
-  const displayedSongs = showAllTopSongs ? filteredTopSongs : filteredTopSongs.slice(0, 5)
+  const displayedSongs = (showAllTopSongs || activeTab === 'popular') ? filteredTopSongs : filteredTopSongs.slice(0, 10)
   const hasUpcoming = upcomingReleases && upcomingReleases.length > 0
 
   return (

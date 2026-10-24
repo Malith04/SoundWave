@@ -1,3 +1,8 @@
+import dns from 'node:dns'
+try {
+  dns.setDefaultResultOrder('ipv4first')
+} catch (_) {}
+
 import { Router } from 'express'
 
 const router = Router()
@@ -13,11 +18,24 @@ function getFromCache(key) {
     cache.delete(key)
     return null
   }
+  // Invalidate empty artist profiles
+  if (key.startsWith('artist_profile_') && item.data) {
+    const p = item.data
+    if ((!p.topSongs || p.topSongs.length === 0) && (!p.albums || p.albums.length === 0)) {
+      cache.delete(key)
+      return null
+    }
+  }
   return item.data
 }
 
 function setToCache(key, data) {
-  // Cap cache size at 300 entries to prevent memory growth
+  // Never cache empty artist profiles
+  if (key.startsWith('artist_profile_') && data) {
+    if ((!data.topSongs || data.topSongs.length === 0) && (!data.albums || data.albums.length === 0)) {
+      return
+    }
+  }
   if (cache.size > 300) {
     const firstKey = cache.keys().next().value
     cache.delete(firstKey)
@@ -25,15 +43,15 @@ function setToCache(key, data) {
   cache.set(key, { data, timestamp: Date.now() })
 }
 
-// Helper for timeout fetch
-async function fetchWithTimeout(url, ms = 8000) {
+// Helper for timeout fetch with resilient User-Agent
+async function fetchWithTimeout(url, ms = 7000) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), ms)
   try {
     const res = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'SoundWave/1.0 (Music Streaming Platform)'
+        'User-Agent': 'SoundWave/1.0 (Music Streaming Platform; +https://soundwave-official.netlify.app)'
       }
     })
     return res
@@ -57,12 +75,12 @@ router.get('/search', async (req, res) => {
 
     // Fetch from Deezer and iTunes in parallel
     const [deezerRes, itunesRes] = await Promise.allSettled([
-      fetchWithTimeout(`https://api.deezer.com/search/artist?q=${encodeURIComponent(cleanQuery)}&limit=6`),
-      fetchWithTimeout(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanQuery)}&media=music&entity=musicArtist&limit=6`)
+      fetchWithTimeout(`https://api.deezer.com/search/artist?q=${encodeURIComponent(cleanQuery)}&limit=8`, 6000),
+      fetchWithTimeout(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanQuery)}&media=music&entity=musicArtist&limit=6`, 6000)
     ])
 
     let deezerArtists = []
-    if (deezerRes.status === 'fulfilled' && deezerRes.value.ok) {
+    if (deezerRes.status === 'fulfilled' && deezerRes.value?.ok) {
       try {
         const d = await deezerRes.value.json()
         deezerArtists = d.data || []
@@ -70,7 +88,7 @@ router.get('/search', async (req, res) => {
     }
 
     let itunesArtists = []
-    if (itunesRes.status === 'fulfilled' && itunesRes.value.ok) {
+    if (itunesRes.status === 'fulfilled' && itunesRes.value?.ok) {
       try {
         const d = await itunesRes.value.json()
         itunesArtists = d.results || []
@@ -85,8 +103,9 @@ router.get('/search', async (req, res) => {
       if (!artistsMap.has(normName)) {
         artistsMap.set(normName, {
           id: `dz_${da.id}`,
+          deezerId: da.id,
           name: da.name,
-          picture: da.picture_xl || da.picture_big || da.picture_medium || da.picture,
+          picture: da.picture_xl || da.picture_big || da.picture_medium || da.picture || '',
           fanCount: da.nb_fan || 0,
           genre: 'Artist',
           albumsCount: da.nb_album || 0,
@@ -128,28 +147,12 @@ router.get('/search', async (req, res) => {
 
     const results = Array.from(artistsMap.values())
       .sort((a, b) => scoreArtist(b) - scoreArtist(a))
-      .slice(0, 8)
+      .slice(0, 10)
 
-    // Backfill photos & fan counts for top results that came from iTunes without Deezer photo
-    const missingPhotos = results.filter(a => !a.picture).slice(0, 3)
-    if (missingPhotos.length > 0) {
-      await Promise.allSettled(
-        missingPhotos.map(async a => {
-          try {
-            const res = await fetchWithTimeout(`https://api.deezer.com/search/artist?q=${encodeURIComponent(a.name)}&limit=1`, 3000)
-            if (res.ok) {
-              const d = await res.json()
-              if (d.data && d.data[0]) {
-                a.picture = d.data[0].picture_xl || d.data[0].picture_big || d.data[0].picture_medium || ''
-                a.fanCount = d.data[0].nb_fan || a.fanCount
-              }
-            }
-          } catch (_) {}
-        })
-      )
+    if (results.length > 0) {
+      setToCache(cacheKey, results)
     }
 
-    setToCache(cacheKey, results)
     return res.json(results)
   } catch (err) {
     console.error('Artist search error:', err)
@@ -157,7 +160,7 @@ router.get('/search', async (req, res) => {
   }
 })
 
-// ── 1.5 Get Album Details and Complete Track List ──
+// ── 2. Get Album Details and Complete Track List ──
 router.get('/album/:collectionId', async (req, res) => {
   try {
     const rawId = req.params.collectionId
@@ -166,127 +169,153 @@ router.get('/album/:collectionId', async (req, res) => {
       return res.status(400).json({ error: 'Album collectionId is required' })
     }
 
-    const cleanId = rawId.replace(/^alb_/, '').trim()
+    const cleanId = rawId.replace(/^(alb_|dz_|it_)/, '').trim()
     const cacheKey = `album_tracks_${cleanId}`
     const cached = getFromCache(cacheKey)
-    if (cached) return res.json(cached)
+    if (cached && cached.tracks?.length > 0) return res.json(cached)
 
     let albumData = null
     let tracks = []
 
-    // 1. Primary lookup via iTunes Lookup API (with proxies fallback)
-    const lookupUrls = [
-      `https://itunes.apple.com/lookup?id=${cleanId}&entity=song&limit=100`,
-      `https://api.allorigins.win/get?url=${encodeURIComponent(`https://itunes.apple.com/lookup?id=${cleanId}&entity=song&limit=100`)}`,
-      `https://corsproxy.io/?${encodeURIComponent(`https://itunes.apple.com/lookup?id=${cleanId}&entity=song&limit=100`)}`
-    ]
-
-    for (const url of lookupUrls) {
-      try {
-        const response = await fetchWithTimeout(url, 8000)
-        if (!response.ok) continue
-        let json = await response.json()
-        if (typeof json.contents === 'string') {
-          json = JSON.parse(json.contents)
-        }
-
-        if (json?.results && json.results.length > 0) {
-          const col = json.results.find(r => r.wrapperType === 'collection' || r.collectionType === 'Album') || json.results[0]
-          const year = col.releaseDate ? new Date(col.releaseDate).getFullYear() : 'N/A'
+    // 1. Check Deezer Album API first (fastest and most reliable)
+    try {
+      const dzRes = await fetchWithTimeout(`https://api.deezer.com/album/${cleanId}`, 6000)
+      if (dzRes.ok) {
+        const d = await dzRes.json()
+        if (d && d.id && !d.error) {
+          const year = d.release_date ? new Date(d.release_date).getFullYear() : 'N/A'
+          const cover = d.cover_xl || d.cover_big || d.cover_medium || ''
 
           albumData = {
-            id: `alb_${col.collectionId || cleanId}`,
-            collectionId: col.collectionId || cleanId,
-            title: col.collectionName || title || 'Album',
-            artist: col.artistName || artist || '',
-            coverUrl: (col.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
-            releaseDate: col.releaseDate || '',
+            id: `alb_${d.id}`,
+            collectionId: d.id,
+            title: d.title || title || 'Album',
+            artist: d.artist?.name || artist || '',
+            coverUrl: cover,
+            releaseDate: d.release_date || '',
             year,
-            genre: col.primaryGenreName || 'Music',
-            trackCount: col.trackCount || 0,
-            copyright: col.copyright || '',
-            viewUrl: col.collectionViewUrl || ''
+            genre: d.genres?.data?.[0]?.name || 'Music',
+            trackCount: d.nb_tracks || d.tracks?.data?.length || 0,
+            copyright: '',
+            viewUrl: d.link || ''
           }
 
-          tracks = json.results
-            .filter(r => r.wrapperType === 'track' || r.kind === 'song')
-            .map((t, idx) => ({
-              id: `it_${t.trackId}`,
-              trackId: t.trackId,
-              title: t.trackName || `Track ${idx + 1}`,
-              artist: t.artistName || albumData.artist,
-              album: t.collectionName || albumData.title,
-              coverUrl: (t.artworkUrl100 || albumData.coverUrl || '').replace('100x100bb', '600x600bb'),
-              audioUrl: t.previewUrl || '',
-              duration: t.trackTimeMillis ? Math.round(t.trackTimeMillis / 1000) : 180,
-              trackNumber: t.trackNumber || idx + 1,
-              source: 'itunes',
-              genre: t.primaryGenreName || albumData.genre,
+          if (Array.isArray(d.tracks?.data)) {
+            tracks = d.tracks.data.map((t, idx) => ({
+              id: `dz_${t.id}`,
+              trackId: t.id,
+              title: t.title,
+              artist: t.artist?.name || albumData.artist,
+              album: albumData.title,
+              coverUrl: cover,
+              audioUrl: t.preview || '',
+              duration: t.duration ? t.duration : 180,
+              trackNumber: t.track_position || idx + 1,
+              source: 'deezer',
+              genre: albumData.genre,
               isStreamable: true
             }))
-            .sort((a, b) => a.trackNumber - b.trackNumber)
-
-          if (tracks.length > 0) break
+          }
         }
-      } catch (_) {}
-    }
+      }
+    } catch (_) {}
 
-    // 2. Fallback: Search iTunes or Deezer for the album tracks if direct lookup returned empty
-    if (tracks.length === 0 && (title || artist)) {
-      try {
-        const queryTerm = [artist, title].filter(Boolean).join(' ')
-        const searchUrls = [
-          `https://itunes.apple.com/search?term=${encodeURIComponent(queryTerm)}&media=music&entity=song&limit=60`,
-          `https://api.allorigins.win/get?url=${encodeURIComponent(`https://itunes.apple.com/search?term=${encodeURIComponent(queryTerm)}&media=music&entity=song&limit=60`)}`
-        ]
+    // 2. If Deezer returned no tracks, try iTunes Lookup API (with proxies fallback)
+    if (tracks.length === 0) {
+      const lookupUrls = [
+        `https://itunes.apple.com/lookup?id=${cleanId}&entity=song&limit=100`,
+        `https://api.allorigins.win/get?url=${encodeURIComponent(`https://itunes.apple.com/lookup?id=${cleanId}&entity=song&limit=100`)}`,
+        `https://corsproxy.io/?${encodeURIComponent(`https://itunes.apple.com/lookup?id=${cleanId}&entity=song&limit=100`)}`
+      ]
 
-        for (const sUrl of searchUrls) {
-          try {
-            const sRes = await fetchWithTimeout(sUrl, 7000)
-            if (!sRes.ok) continue
-            let sJson = await sRes.json()
-            if (typeof sJson.contents === 'string') sJson = JSON.parse(sJson.contents)
+      for (const url of lookupUrls) {
+        try {
+          const response = await fetchWithTimeout(url, 7000)
+          if (!response.ok) continue
+          let json = await response.json()
+          if (typeof json.contents === 'string') {
+            json = JSON.parse(json.contents)
+          }
 
-            if (sJson?.results && sJson.results.length > 0) {
-              const matched = sJson.results.filter(r => 
-                String(r.collectionId) === String(cleanId) ||
-                (title && r.collectionName?.toLowerCase().includes(title.toLowerCase()))
-              )
-              const listToUse = matched.length > 0 ? matched : sJson.results.slice(0, 20)
+          if (json?.results && json.results.length > 0) {
+            const col = json.results.find(r => r.wrapperType === 'collection' || r.collectionType === 'Album') || json.results[0]
+            const year = col.releaseDate ? new Date(col.releaseDate).getFullYear() : 'N/A'
 
-              tracks = listToUse.map((t, idx) => ({
+            albumData = {
+              id: `alb_${col.collectionId || cleanId}`,
+              collectionId: col.collectionId || cleanId,
+              title: col.collectionName || title || 'Album',
+              artist: col.artistName || artist || '',
+              coverUrl: (col.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
+              releaseDate: col.releaseDate || '',
+              year,
+              genre: col.primaryGenreName || 'Music',
+              trackCount: col.trackCount || 0,
+              copyright: col.copyright || '',
+              viewUrl: col.collectionViewUrl || ''
+            }
+
+            tracks = json.results
+              .filter(r => r.wrapperType === 'track' || r.kind === 'song')
+              .map((t, idx) => ({
                 id: `it_${t.trackId}`,
                 trackId: t.trackId,
                 title: t.trackName || `Track ${idx + 1}`,
-                artist: t.artistName || artist || '',
-                album: t.collectionName || title || 'Album',
-                coverUrl: (t.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
+                artist: t.artistName || albumData.artist,
+                album: t.collectionName || albumData.title,
+                coverUrl: (t.artworkUrl100 || albumData.coverUrl || '').replace('100x100bb', '600x600bb'),
                 audioUrl: t.previewUrl || '',
                 duration: t.trackTimeMillis ? Math.round(t.trackTimeMillis / 1000) : 180,
                 trackNumber: t.trackNumber || idx + 1,
                 source: 'itunes',
-                genre: t.primaryGenreName || 'Music',
+                genre: t.primaryGenreName || albumData.genre,
                 isStreamable: true
               }))
+              .sort((a, b) => a.trackNumber - b.trackNumber)
 
-              if (!albumData && listToUse[0]) {
-                const first = listToUse[0]
-                albumData = {
-                  id: `alb_${first.collectionId || cleanId}`,
-                  collectionId: first.collectionId || cleanId,
-                  title: first.collectionName || title,
-                  artist: first.artistName || artist,
-                  coverUrl: (first.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
-                  year: first.releaseDate ? new Date(first.releaseDate).getFullYear() : 'N/A',
-                  genre: first.primaryGenreName || 'Music',
-                  trackCount: tracks.length,
-                  viewUrl: first.collectionViewUrl || ''
-                }
+            if (tracks.length > 0) break
+          }
+        } catch (_) {}
+      }
+    }
+
+    // 3. Fallback: Search iTunes or Deezer for the album tracks if direct lookup returned empty
+    if (tracks.length === 0 && (title || artist)) {
+      try {
+        const queryTerm = [artist, title].filter(Boolean).join(' ')
+        // Try Deezer search first
+        const sDzRes = await fetchWithTimeout(`https://api.deezer.com/search?q=${encodeURIComponent(queryTerm)}&limit=40`, 6000)
+        if (sDzRes.ok) {
+          const sDz = await sDzRes.json()
+          if (sDz.data && sDz.data.length > 0) {
+            tracks = sDz.data.map((t, idx) => ({
+              id: `dz_${t.id}`,
+              trackId: t.id,
+              title: t.title,
+              artist: t.artist?.name || artist || '',
+              album: t.album?.title || title || 'Album',
+              coverUrl: t.album?.cover_xl || t.album?.cover_big || '',
+              audioUrl: t.preview || '',
+              duration: t.duration || 180,
+              trackNumber: idx + 1,
+              source: 'deezer',
+              genre: 'Music',
+              isStreamable: true
+            }))
+
+            if (!albumData && sDz.data[0]?.album) {
+              const alb = sDz.data[0].album
+              albumData = {
+                id: `alb_${alb.id || cleanId}`,
+                collectionId: alb.id || cleanId,
+                title: alb.title || title || 'Album',
+                artist: artist || '',
+                coverUrl: alb.cover_xl || alb.cover_big || '',
+                year: 'N/A',
+                trackCount: tracks.length
               }
-
-              if (tracks.length > 0) break
             }
-          } catch (_) {}
+          }
         }
       } catch (_) {}
     }
@@ -315,7 +344,7 @@ router.get('/album/:collectionId', async (req, res) => {
   }
 })
 
-// ── 2. Get Comprehensive Artist Profile & Catalog ──
+// ── 3. Get Comprehensive Artist Profile & Complete Catalog ──
 router.get('/:query', async (req, res) => {
   try {
     const rawQuery = decodeURIComponent(req.params.query).trim()
@@ -325,95 +354,156 @@ router.get('/:query', async (req, res) => {
 
     const cacheKey = `artist_profile_${rawQuery.toLowerCase()}`
     const cached = getFromCache(cacheKey)
-    if (cached) return res.json(cached)
+    if (cached && (cached.topSongs?.length > 0 || cached.albums?.length > 0)) {
+      return res.json(cached)
+    }
 
-    // Resolve artist ID and info
     let artistName = rawQuery
+    let deezerArtist = null
     let itunesArtistId = null
-    let deezerData = null
 
-    // 1. Initial parallel search to locate artist IDs in Deezer & iTunes
+    // 1. Initial parallel search to locate artist in Deezer and iTunes
     const [deezerSearchRes, itunesSearchRes] = await Promise.allSettled([
-      fetchWithTimeout(`https://api.deezer.com/search/artist?q=${encodeURIComponent(rawQuery)}&limit=1`),
-      fetchWithTimeout(`https://itunes.apple.com/search?term=${encodeURIComponent(rawQuery)}&media=music&entity=musicArtist&limit=3`)
+      fetchWithTimeout(`https://api.deezer.com/search/artist?q=${encodeURIComponent(rawQuery)}&limit=5`, 6000),
+      fetchWithTimeout(`https://itunes.apple.com/search?term=${encodeURIComponent(rawQuery)}&media=music&entity=musicArtist&limit=3`, 6000)
     ])
 
-    if (deezerSearchRes.status === 'fulfilled' && deezerSearchRes.value.ok) {
+    console.log('[Artist Profile Query]', {
+      rawQuery,
+      deezerStatus: deezerSearchRes.status,
+      deezerOk: deezerSearchRes.value?.ok,
+      deezerStatusCode: deezerSearchRes.value?.status,
+      itunesStatus: itunesSearchRes.status,
+      itunesOk: itunesSearchRes.value?.ok
+    })
+
+    if (deezerSearchRes.status === 'fulfilled' && deezerSearchRes.value?.ok) {
       try {
         const d = await deezerSearchRes.value.json()
-        if (d.data && d.data[0]) {
-          deezerData = d.data[0]
-          artistName = deezerData.name
+        if (d.data && d.data.length > 0) {
+          const match = d.data.find(
+            a => a.name.toLowerCase() === rawQuery.toLowerCase()
+          ) || d.data[0]
+          deezerArtist = match
+          artistName = match.name
         }
       } catch (_) {}
     }
 
-    if (itunesSearchRes.status === 'fulfilled' && itunesSearchRes.value.ok) {
+    if (itunesSearchRes.status === 'fulfilled' && itunesSearchRes.value?.ok) {
       try {
         const d = await itunesSearchRes.value.json()
         if (d.results && d.results.length > 0) {
-          // Find best name match or use first
           const match = d.results.find(
             r => r.artistName.toLowerCase() === artistName.toLowerCase()
           ) || d.results[0]
           itunesArtistId = match.artistId
-          if (!deezerData) artistName = match.artistName
+          if (!deezerArtist) artistName = match.artistName
         }
       } catch (_) {}
     }
 
-    // 2. Fetch Albums, Songs, and Collaborations
+    // 2. Parallel fetching of tracks, albums, and collabs from Deezer and iTunes
     const tasks = []
 
-    // Albums
-    if (itunesArtistId) {
+    // Deezer Top Songs (up to 100 tracks!)
+    if (deezerArtist?.id) {
       tasks.push(
-        fetchWithTimeout(`https://itunes.apple.com/lookup?id=${itunesArtistId}&entity=album&limit=40`)
+        fetchWithTimeout(`https://api.deezer.com/artist/${deezerArtist.id}/top?limit=100`, 7000)
           .then(r => r.ok ? r.json() : null)
-          .catch(() => null)
+          .then(d => ({ source: 'deezer_songs', items: d?.data || [] }))
+          .catch(() => ({ source: 'deezer_songs', items: [] }))
       )
-    } else {
+      // Deezer Albums (up to 100 albums!)
       tasks.push(
-        fetchWithTimeout(`https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&media=music&entity=album&limit=30`)
+        fetchWithTimeout(`https://api.deezer.com/artist/${deezerArtist.id}/albums?limit=100`, 7000)
           .then(r => r.ok ? r.json() : null)
-          .catch(() => null)
+          .then(d => ({ source: 'deezer_albums', items: d?.data || [] }))
+          .catch(() => ({ source: 'deezer_albums', items: [] }))
       )
-    }
-
-    // Songs
-    if (itunesArtistId) {
+      // Deezer Collabs / Feat search
       tasks.push(
-        fetchWithTimeout(`https://itunes.apple.com/lookup?id=${itunesArtistId}&entity=song&limit=60`)
+        fetchWithTimeout(`https://api.deezer.com/search?q=${encodeURIComponent(artistName + ' feat')}&limit=40`, 7000)
           .then(r => r.ok ? r.json() : null)
-          .catch(() => null)
-      )
-    } else {
-      tasks.push(
-        fetchWithTimeout(`https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&media=music&entity=song&limit=50`)
-          .then(r => r.ok ? r.json() : null)
-          .catch(() => null)
+          .then(d => ({ source: 'deezer_collabs', items: d?.data || [] }))
+          .catch(() => ({ source: 'deezer_collabs', items: [] }))
       )
     }
 
-    // Collaborations (Search for feat / ft)
-    tasks.push(
-      fetchWithTimeout(`https://itunes.apple.com/search?term=${encodeURIComponent(artistName + ' feat')}&media=music&entity=song&limit=30`)
-        .then(r => r.ok ? r.json() : null)
-        .catch(() => null)
-    )
+    // iTunes Songs & Albums
+    if (itunesArtistId) {
+      tasks.push(
+        fetchWithTimeout(`https://itunes.apple.com/lookup?id=${itunesArtistId}&entity=song&limit=100`, 7000)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => ({ source: 'itunes_songs', items: d?.results || [] }))
+          .catch(() => ({ source: 'itunes_songs', items: [] }))
+      )
+      tasks.push(
+        fetchWithTimeout(`https://itunes.apple.com/lookup?id=${itunesArtistId}&entity=album&limit=60`, 7000)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => ({ source: 'itunes_albums', items: d?.results || [] }))
+          .catch(() => ({ source: 'itunes_albums', items: [] }))
+      )
+    } else {
+      tasks.push(
+        fetchWithTimeout(`https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&media=music&entity=song&limit=60`, 7000)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => ({ source: 'itunes_songs', items: d?.results || [] }))
+          .catch(() => ({ source: 'itunes_songs', items: [] }))
+      )
+      tasks.push(
+        fetchWithTimeout(`https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&media=music&entity=album&limit=50`, 7000)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => ({ source: 'itunes_albums', items: d?.results || [] }))
+          .catch(() => ({ source: 'itunes_albums', items: [] }))
+      )
+    }
 
-    const [rawAlbumsRes, rawSongsRes, rawCollabsRes] = await Promise.all(tasks)
+    const taskResults = await Promise.all(tasks)
 
-    // Normalize iTunes track to SoundWave format
-    function normalizeSong(track) {
+    let deezerSongsList = []
+    let deezerAlbumsList = []
+    let deezerCollabsList = []
+    let itunesSongsList = []
+    let itunesAlbumsList = []
+
+    for (const res of taskResults) {
+      if (res.source === 'deezer_songs') deezerSongsList = res.items
+      else if (res.source === 'deezer_albums') deezerAlbumsList = res.items
+      else if (res.source === 'deezer_collabs') deezerCollabsList = res.items
+      else if (res.source === 'itunes_songs') itunesSongsList = res.items
+      else if (res.source === 'itunes_albums') itunesAlbumsList = res.items
+    }
+
+    // ── Normalization Functions ──
+    function normalizeDeezerSong(track) {
+      return {
+        id: `dz_${track.id}`,
+        trackId: track.id,
+        title: track.title,
+        artist: track.artist?.name || artistName,
+        album: track.album?.title || '',
+        coverUrl: track.album?.cover_xl || track.album?.cover_big || track.album?.cover_medium || '',
+        audioUrl: track.preview || '',
+        duration: track.duration ? track.duration : 180,
+        source: 'deezer',
+        genre: 'Music',
+        releaseDate: track.album?.release_date || '',
+        isStreamable: true,
+        collectionId: track.album?.id
+      }
+    }
+
+    function normalizeItunesSong(track) {
       return {
         id: `it_${track.trackId}`,
+        trackId: track.trackId,
         title: track.trackName || 'Unknown Title',
         artist: track.artistName || artistName,
         album: track.collectionName || '',
         coverUrl: (track.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
         audioUrl: track.previewUrl || '',
-        duration: track.trackTimeMillis || 30000,
+        duration: track.trackTimeMillis ? Math.round(track.trackTimeMillis / 1000) : 180,
         source: 'itunes',
         genre: track.primaryGenreName || 'Music',
         releaseDate: track.releaseDate || '',
@@ -423,33 +513,50 @@ router.get('/:query', async (req, res) => {
       }
     }
 
-    // Normalize Album
-    function normalizeAlbum(album) {
-      const year = album.releaseDate ? new Date(album.releaseDate).getFullYear() : ''
+    function normalizeDeezerAlbum(alb) {
+      const year = alb.release_date ? new Date(alb.release_date).getFullYear() : ''
       return {
-        id: `alb_${album.collectionId}`,
-        collectionId: album.collectionId,
-        title: album.collectionName,
-        artist: album.artistName || artistName,
-        coverUrl: (album.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
-        releaseDate: album.releaseDate || '',
+        id: `alb_${alb.id}`,
+        collectionId: alb.id,
+        title: alb.title,
+        artist: artistName,
+        coverUrl: alb.cover_xl || alb.cover_big || alb.cover_medium || '',
+        releaseDate: alb.release_date || '',
         year: year || 'N/A',
-        trackCount: album.trackCount || 0,
-        genre: album.primaryGenreName || 'Music',
-        copyright: album.copyright || '',
-        viewUrl: album.collectionViewUrl || ''
+        trackCount: alb.nb_tracks || 0,
+        genre: 'Music',
+        recordType: alb.record_type || 'album',
+        viewUrl: alb.link || ''
       }
     }
 
-    // Parse Albums
-    const albumList = (rawAlbumsRes?.results || [])
-      .filter(r => r.wrapperType === 'collection' || r.collectionType === 'Album')
-      .map(normalizeAlbum)
+    function normalizeItunesAlbum(alb) {
+      const year = alb.releaseDate ? new Date(alb.releaseDate).getFullYear() : ''
+      return {
+        id: `alb_${alb.collectionId}`,
+        collectionId: alb.collectionId,
+        title: alb.collectionName,
+        artist: alb.artistName || artistName,
+        coverUrl: (alb.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
+        releaseDate: alb.releaseDate || '',
+        year: year || 'N/A',
+        trackCount: alb.trackCount || 0,
+        genre: alb.primaryGenreName || 'Music',
+        copyright: alb.copyright || '',
+        viewUrl: alb.collectionViewUrl || ''
+      }
+    }
 
-    // Deduplicate albums by title (ignoring clean suffixes)
+    // ── Parse & Combine Albums ──
+    const parsedDeezerAlbums = deezerAlbumsList.map(normalizeDeezerAlbum)
+    const parsedItunesAlbums = itunesAlbumsList
+      .filter(r => r.wrapperType === 'collection' || r.collectionType === 'Album')
+      .map(normalizeItunesAlbum)
+
     const seenAlbums = new Set()
     const uniqueAlbums = []
-    for (const alb of albumList) {
+    for (const alb of [...parsedDeezerAlbums, ...parsedItunesAlbums]) {
+      if (!alb.title) continue
       const cleanTitle = alb.title.toLowerCase().replace(/\s*\(deluxe[^)]*\)/i, '').trim()
       if (!seenAlbums.has(cleanTitle)) {
         seenAlbums.add(cleanTitle)
@@ -457,15 +564,16 @@ router.get('/:query', async (req, res) => {
       }
     }
 
-    // Parse Songs
-    const songList = (rawSongsRes?.results || [])
-      .filter(r => (r.wrapperType === 'track' || r.kind === 'song') && r.previewUrl)
-      .map(normalizeSong)
+    // ── Parse & Combine Songs ──
+    const parsedDeezerSongs = deezerSongsList.map(normalizeDeezerSong)
+    const parsedItunesSongs = itunesSongsList
+      .filter(r => (r.wrapperType === 'track' || r.kind === 'song'))
+      .map(normalizeItunesSong)
 
-    // Deduplicate songs by title
     const seenSongs = new Set()
     const uniqueSongs = []
-    for (const s of songList) {
+    for (const s of [...parsedDeezerSongs, ...parsedItunesSongs]) {
+      if (!s.title) continue
       const cleanTitle = s.title.toLowerCase().trim()
       if (!seenSongs.has(cleanTitle)) {
         seenSongs.add(cleanTitle)
@@ -473,19 +581,56 @@ router.get('/:query', async (req, res) => {
       }
     }
 
-    // Parse Collaborations
-    const collabList = (rawCollabsRes?.results || [])
-      .filter(r => (r.wrapperType === 'track' || r.kind === 'song') && r.previewUrl)
-      .map(normalizeSong)
+    // ── Resilient Fallbacks if either Albums or Songs are empty ──
+    // Fallback 1: If uniqueAlbums is empty, extract albums from uniqueSongs
+    if (uniqueAlbums.length === 0 && uniqueSongs.length > 0) {
+      for (const s of uniqueSongs) {
+        if (s.album && !seenAlbums.has(s.album.toLowerCase().trim())) {
+          seenAlbums.add(s.album.toLowerCase().trim())
+          uniqueAlbums.push({
+            id: `alb_${s.collectionId || Math.random().toString(36).slice(2, 9)}`,
+            collectionId: s.collectionId || '',
+            title: s.album,
+            artist: s.artist || artistName,
+            coverUrl: s.coverUrl,
+            releaseDate: s.releaseDate || '',
+            year: s.releaseDate ? new Date(s.releaseDate).getFullYear() : 'Album',
+            trackCount: 1,
+            genre: s.genre || 'Music'
+          })
+        }
+      }
+    }
 
-    // Filter to tracks that actually feature someone or feature this artist
+    // Fallback 2: If uniqueSongs is empty, search Deezer directly for this artist's tracks
+    if (uniqueSongs.length === 0) {
+      try {
+        const fbRes = await fetchWithTimeout(`https://api.deezer.com/search?q=${encodeURIComponent(artistName)}&limit=50`, 5000)
+        if (fbRes.ok) {
+          const fbData = await fbRes.json()
+          if (Array.isArray(fbData?.data)) {
+            for (const item of fbData.data) {
+              const norm = normalizeDeezerSong(item)
+              const cleanTitle = norm.title.toLowerCase().trim()
+              if (!seenSongs.has(cleanTitle)) {
+                seenSongs.add(cleanTitle)
+                uniqueSongs.push(norm)
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // ── Parse Collaborations ──
+    const parsedDeezerCollabs = deezerCollabsList.map(normalizeDeezerSong)
     const seenCollabs = new Set()
     const uniqueCollabs = []
     const lowerArtist = artistName.toLowerCase()
 
-    for (const c of [...collabList, ...songList]) {
-      const tLower = c.title.toLowerCase()
-      const aLower = c.artist.toLowerCase()
+    for (const c of [...parsedDeezerCollabs, ...uniqueSongs]) {
+      const tLower = (c.title || '').toLowerCase()
+      const aLower = (c.artist || '').toLowerCase()
       const isCollab =
         tLower.includes('feat.') ||
         tLower.includes('feat ') ||
@@ -494,18 +639,18 @@ router.get('/:query', async (req, res) => {
         (aLower.includes('&') && aLower.includes(lowerArtist)) ||
         (aLower.includes('feat') && aLower.includes(lowerArtist))
 
-      if (isCollab && !seenCollabs.has(c.title.toLowerCase())) {
-        seenCollabs.add(c.title.toLowerCase())
+      const cleanTitle = c.title.toLowerCase().trim()
+      if (isCollab && !seenCollabs.has(cleanTitle)) {
+        seenCollabs.add(cleanTitle)
         uniqueCollabs.push(c)
       }
     }
 
-    // Classify Upcoming & New Releases
+    // ── Upcoming & New Releases ──
     const now = new Date()
     const upcomingReleases = []
     const newReleases = []
 
-    // Check all albums and songs for upcoming release date
     for (const alb of uniqueAlbums) {
       if (alb.releaseDate) {
         const albDate = new Date(alb.releaseDate)
@@ -537,7 +682,6 @@ router.get('/:query', async (req, res) => {
       }
     }
 
-    // New releases: items released within recent timeframe or top 6 most recent
     const sortedReleases = [...uniqueAlbums, ...uniqueSongs]
       .filter(item => item.releaseDate && new Date(item.releaseDate) <= now)
       .sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate))
@@ -549,45 +693,48 @@ router.get('/:query', async (req, res) => {
         seenNew.add(key)
         newReleases.push(item)
       }
-      if (newReleases.length >= 8) break
+      if (newReleases.length >= 10) break
     }
 
-    // Profile metadata
+    // ── Artist Picture & Profile ──
     const artistPicture =
-      deezerData?.picture_xl ||
-      deezerData?.picture_big ||
-      deezerData?.picture_medium ||
+      deezerArtist?.picture_xl ||
+      deezerArtist?.picture_big ||
+      deezerArtist?.picture_medium ||
       uniqueAlbums[0]?.coverUrl ||
       uniqueSongs[0]?.coverUrl ||
       ''
 
     const primaryGenre =
-      rawAlbumsRes?.results?.[0]?.primaryGenreName ||
-      rawSongsRes?.results?.[0]?.primaryGenreName ||
+      itunesAlbumsList?.[0]?.primaryGenreName ||
+      itunesSongsList?.[0]?.primaryGenreName ||
       'Artist'
 
-    const fanCount = deezerData?.nb_fan || Math.floor(Math.random() * 5000000 + 1200000)
+    const fanCount = deezerArtist?.nb_fan || Math.floor(Math.random() * 5000000 + 1200000)
 
     const profile = {
       artist: {
-        id: deezerData ? `dz_${deezerData.id}` : `it_${itunesArtistId || '0'}`,
+        id: deezerArtist ? `dz_${deezerArtist.id}` : `it_${itunesArtistId || '0'}`,
         name: artistName,
         picture: artistPicture,
         banner: artistPicture,
         genre: primaryGenre,
         fanCount: fanCount,
-        albumCount: uniqueAlbums.length || deezerData?.nb_album || 0,
+        albumCount: uniqueAlbums.length || deezerArtist?.nb_album || 0,
         monthlyListeners: fanCount.toLocaleString(),
         isVerified: true
       },
-      topSongs: uniqueSongs.slice(0, 30),
-      albums: uniqueAlbums,
-      newReleases: newReleases.slice(0, 6),
-      upcomingReleases: upcomingReleases, // Empty array if none, rendered only if exists!
-      collaborations: uniqueCollabs.slice(0, 15)
+      topSongs: uniqueSongs, // Complete list of songs!
+      albums: uniqueAlbums, // Complete list of albums!
+      newReleases: newReleases.slice(0, 8),
+      upcomingReleases: upcomingReleases,
+      collaborations: uniqueCollabs
     }
 
-    setToCache(cacheKey, profile)
+    if (uniqueSongs.length > 0 || uniqueAlbums.length > 0) {
+      setToCache(cacheKey, profile)
+    }
+
     return res.json(profile)
   } catch (err) {
     console.error('Get artist profile error:', err)

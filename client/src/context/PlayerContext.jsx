@@ -48,11 +48,18 @@ function loadState(userId) {
   } catch (_) { return null }
 }
 
-// Helper: detect if a URL is an Apple 30-second preview clip
-function isApplePreview(url, source) {
-  if (source === 'itunes') return true
+// Helper: detect if a URL or source is a 30-second preview clip (iTunes & Deezer)
+function isPreviewClip(url, source) {
+  if (source === 'itunes' || source === 'deezer') return true
   if (typeof url === 'string') {
-    if (url.includes('apple.com') || url.includes('mzstatic.com') || url.includes('itunes.apple.com')) {
+    if (
+      url.includes('apple.com') ||
+      url.includes('mzstatic.com') ||
+      url.includes('itunes.apple.com') ||
+      url.includes('dzcdn.net') ||
+      url.includes('deezer.com') ||
+      url.includes('preview')
+    ) {
       return true
     }
   }
@@ -492,8 +499,8 @@ export function PlayerProvider({ children }) {
       if (ok) return
     }
 
-    // 2. If it's a custom uploaded/direct full track that is NOT an Apple 30s preview:
-    if (song.audioUrl && !isApplePreview(song.audioUrl, song.source) && song.source !== 'itunes') {
+    // 2. If it's a custom uploaded/direct full track that is NOT a 30s preview clip:
+    if (song.audioUrl && !isPreviewClip(song.audioUrl, song.source) && song.source !== 'itunes' && song.source !== 'deezer') {
       const ok = await playWithHowler(song, song.audioUrl, startAt, currentEngine)
       if (ok) return
     }

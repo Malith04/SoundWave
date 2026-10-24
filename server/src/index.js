@@ -1,3 +1,8 @@
+import dns from 'node:dns'
+try {
+  dns.setDefaultResultOrder('ipv4first')
+} catch (_) {}
+
 import app from './app.js'
 import dotenv from 'dotenv'
 import { initDb } from './db/index.js'
