@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useAudioSettings, EQ_PRESETS } from '../context/AudioSettingsContext'
+import { useAudioSettings, EQ_PRESETS, ACCENT_COLORS } from '../context/AudioSettingsContext'
 import { useAuth } from '../context/AuthContext'
 import { usePlayer } from '../context/PlayerContext'
 import { updateUser, uploadProfilePicture, clearSearchHistory, clearRecentlyPlayed } from '../services/userService'
@@ -75,6 +75,53 @@ function Select({ label, desc, value, options, onChange }) {
         className="bg-surface-3 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand cursor-pointer shrink-0">
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
+    </div>
+  )
+}
+
+function ColorPicker({ label, desc, value, options, onChange }) {
+  return (
+    <div className="py-3.5 border-b border-white/5 last:border-0">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2.5">
+        <div>
+          <p className="text-sm font-medium">{label}</p>
+          {desc && <p className="text-xs text-gray-500 mt-0.5">{desc}</p>}
+        </div>
+        <select
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          className="bg-surface-3 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand cursor-pointer shrink-0"
+        >
+          {options.map(o => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex flex-wrap gap-2 pt-1">
+        {options.map(c => {
+          const isSelected = value?.toLowerCase() === c.value?.toLowerCase()
+          return (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => onChange(c.value)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-150 ${
+                isSelected
+                  ? 'border-white bg-white/15 text-white shadow-md scale-105'
+                  : 'border-white/10 bg-surface-3 text-gray-400 hover:text-white hover:border-white/20'
+              }`}
+            >
+              <span
+                className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm"
+                style={{ backgroundColor: c.value }}
+              />
+              <span>{c.name || c.label.replace(/^[^\s]+\s*/, '')}</span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -490,16 +537,17 @@ function DisplayTab({ settings, update }) {
             { value: 'light',  label: '☀️ Light' },
           ]}
           onChange={v => update('theme', v)} />
-        <Select label="Accent Colour" desc="Main highlight colour throughout the app"
+        <ColorPicker
+          label="Accent Colour Theme"
+          desc="Main highlight and liquid wave motion colour throughout the app"
           value={settings.accent}
-          options={[
-            { value: '#1DB954', label: '🟢 Spotify Green' },
-            { value: '#1E90FF', label: '🔵 Electric Blue' },
-            { value: '#FF6B6B', label: '🔴 Coral Red' },
-            { value: '#A855F7', label: '🟣 Purple' },
-            { value: '#F59E0B', label: '🟡 Amber' },
-          ]}
-          onChange={v => update('accent', v)} />
+          options={ACCENT_COLORS}
+          onChange={v => {
+            update('accent', v)
+            const matched = ACCENT_COLORS.find(c => c.value.toLowerCase() === v.toLowerCase())
+            toast.success(`Theme colour set to ${matched ? matched.name : 'new theme'}!`, { icon: '🎨' })
+          }}
+        />
         <Toggle label="Animated Album Art" desc="Show spinning vinyl and glow effects in the player"
           value={settings.animatedArt} onChange={v => update('animatedArt', v)} />
         <Toggle label="Background Particles" desc="Show floating particles in the full-screen player"

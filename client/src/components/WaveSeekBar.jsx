@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useAudioSettings } from '../context/AudioSettingsContext'
+import { normalizeAccent, hexToRgb } from '../constants/theme'
 
 function formatTime(secs) {
   if (!secs || isNaN(secs) || secs < 0) return '00:00'
@@ -16,14 +18,26 @@ export default function WaveSeekBar({
   isPlaying = false,
   waveEnabled = true,
   showTimes = true,
-  layout = 'stacked', // 'stacked' | 'inline'
+  layout = 'stacked', // 'stacked' | 'inline' | 'track'
   className = '',
+  accentColor,
 }) {
   const containerRef = useRef(null)
   const canvasRef = useRef(null)
   const [isHovered, setIsHovered] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [scrubFraction, setScrubFraction] = useState(null)
+
+  // Retrieve current active accent color dynamically
+  let settingsAccent = null
+  try {
+    const audioCtx = useAudioSettings()
+    settingsAccent = audioCtx?.settings?.accent
+  } catch (_) {}
+
+  const activeAccent = normalizeAccent(accentColor || settingsAccent || '#22c55e')
+  const rgb = hexToRgb(activeAccent) || { r: 34, g: 197, b: 94 }
+  const { r, g, b } = rgb
 
   const phaseRef = useRef(0)
   const sizeRef = useRef({ width: 300, height: 28 })
@@ -37,6 +51,8 @@ export default function WaveSeekBar({
     isHovered,
     isDragging,
     waveEnabled,
+    activeAccent,
+    rgb,
   })
 
   useEffect(() => {
@@ -46,10 +62,12 @@ export default function WaveSeekBar({
       isHovered,
       isDragging,
       waveEnabled,
+      activeAccent,
+      rgb,
     }
-  }, [effectiveProgress, isPlaying, isHovered, isDragging, waveEnabled])
+  }, [effectiveProgress, isPlaying, isHovered, isDragging, waveEnabled, activeAccent, rgb])
 
-  // Canvas drawing routine for the fluid wave track (theme color matched to SoundWave brand)
+  // Canvas drawing routine for the fluid wave track (theme color matched to active SoundWave theme)
   const draw = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -59,7 +77,7 @@ export default function WaveSeekBar({
     const { width: W, height: H } = sizeRef.current
     if (W <= 0 || H <= 0) return
 
-    const { progress: p, waveEnabled: waveOn } = stateRef.current
+    const { progress: p, waveEnabled: waveOn, activeAccent: color, rgb: currentRgb } = stateRef.current
 
     // Clear canvas
     ctx.clearRect(0, 0, W, H)
@@ -81,38 +99,55 @@ export default function WaveSeekBar({
 
     // ── 2. Played Section with Undulating Theme-Colored Liquid Sound Wave ──
     if (X_thumb > 1) {
+      const cr = currentRgb?.r ?? 34
+      const cg = currentRgb?.g ?? 197
+      const cb = currentRgb?.b ?? 94
+
       if (waveOn && X_thumb > 8) {
         const phase = phaseRef.current
         const ampMult = Math.min(1, X_thumb / 40) // smoothly grows as song progresses
 
-        // 3 overlapping translucent liquid layers using SoundWave's vibrant signature theme colors
+        // Compute harmonious luminous tints based on active theme color
+        const tintR = Math.min(255, Math.round(cr + (255 - cr) * 0.45))
+        const tintG = Math.min(255, Math.round(cg + (255 - cg) * 0.45))
+        const tintB = Math.min(255, Math.round(cb + (255 - cb) * 0.45))
+
+        const midR = Math.min(255, Math.round(cr + (255 - cr) * 0.20))
+        const midG = Math.min(255, Math.round(cg + (255 - cg) * 0.20))
+        const midB = Math.min(255, Math.round(cb + (255 - cb) * 0.20))
+
+        const darkR = Math.round(cr * 0.70)
+        const darkG = Math.round(cg * 0.70)
+        const darkB = Math.round(cb * 0.70)
+
+        // 3 overlapping translucent liquid layers dynamically tinted to match the chosen theme
         const layers = [
-          // Layer 1: Back (Luminous soft mint)
+          // Layer 1: Back (Luminous soft theme tint)
           {
             speed: 1.6,
             freq: 2.2,
             amp: H_max * 0.72 * ampMult,
             offset: 0,
-            gradTop: 'rgba(110, 231, 183, 0.45)', // emerald-300
-            gradBot: 'rgba(29, 185, 84, 0.04)',
+            gradTop: `rgba(${tintR}, ${tintG}, ${tintB}, 0.50)`,
+            gradBot: `rgba(${cr}, ${cg}, ${cb}, 0.04)`,
           },
-          // Layer 2: Middle (Radiant emerald)
+          // Layer 2: Middle (Radiant body tone)
           {
             speed: 2.3,
             freq: 2.9,
             amp: H_max * 0.88 * ampMult,
             offset: 1.8,
-            gradTop: 'rgba(52, 211, 153, 0.68)', // emerald-400
-            gradBot: 'rgba(16, 185, 129, 0.10)',
+            gradTop: `rgba(${midR}, ${midG}, ${midB}, 0.72)`,
+            gradBot: `rgba(${darkR}, ${darkG}, ${darkB}, 0.12)`,
           },
-          // Layer 3: Front (Signature SoundWave brand green)
+          // Layer 3: Front (Vibrant signature theme tone)
           {
             speed: 3.1,
             freq: 2.6,
             amp: H_max * 1.0 * ampMult,
             offset: 3.5,
-            gradTop: 'rgba(29, 185, 84, 0.92)', // brand green #1DB954
-            gradBot: 'rgba(16, 185, 129, 0.30)',
+            gradTop: `rgba(${cr}, ${cg}, ${cb}, 0.95)`,
+            gradBot: `rgba(${darkR}, ${darkG}, ${darkB}, 0.30)`,
           },
         ]
 
@@ -149,15 +184,15 @@ export default function WaveSeekBar({
         })
       }
 
-      // Crisp SoundWave brand baseline under the wave connecting 0 to thumb
+      // Crisp theme baseline under the wave connecting 0 to thumb
       ctx.save()
       ctx.beginPath()
       ctx.moveTo(0, Y_base)
       ctx.lineTo(X_thumb, Y_base)
-      ctx.strokeStyle = '#1DB954'
+      ctx.strokeStyle = color || '#22c55e'
       ctx.lineWidth = 2.5
       ctx.lineCap = 'round'
-      ctx.shadowColor = 'rgba(29, 185, 84, 0.6)'
+      ctx.shadowColor = `rgba(${cr}, ${cg}, ${cb}, 0.65)`
       ctx.shadowBlur = 6
       ctx.stroke()
       ctx.restore()
@@ -292,15 +327,27 @@ export default function WaveSeekBar({
         >
           {/* Ambient Theme Glow Aura */}
           <div
-            className={`absolute -inset-1.5 rounded-full bg-brand/35 blur-md transition-opacity duration-200 pointer-events-none ${
+            className={`absolute -inset-2 rounded-full blur-md transition-opacity duration-200 pointer-events-none ${
               isThumbActive ? 'opacity-100' : isPlaying ? 'opacity-70 animate-pulse' : 'opacity-40'
             }`}
+            style={{ backgroundColor: `rgba(${r}, ${g}, ${b}, 0.40)` }}
           />
 
           {/* Unique Multi-Layer Ring: Pure crisp vector borders */}
-          <div className="w-3.5 h-3.5 rounded-full bg-black/80 border-2 border-white flex items-center justify-center shadow-[0_2px_8px_rgba(0,0,0,0.8),0_0_10px_rgba(29,185,84,0.6)]">
+          <div
+            className="w-3.5 h-3.5 rounded-full bg-black/80 border-2 border-white flex items-center justify-center"
+            style={{
+              boxShadow: `0 2px 8px rgba(0,0,0,0.8), 0 0 10px rgba(${r}, ${g}, ${b}, 0.65)`
+            }}
+          >
             {/* Inner Theme Gem / Audio Node */}
-            <div className="w-1.5 h-1.5 rounded-full bg-brand shadow-[0_0_4px_var(--brand)] relative">
+            <div
+              className="w-1.5 h-1.5 rounded-full relative"
+              style={{
+                backgroundColor: activeAccent,
+                boxShadow: `0 0 6px ${activeAccent}`
+              }}
+            >
               {/* Specular light highlight */}
               <div className="absolute top-0 right-0 w-0.5 h-0.5 rounded-full bg-white/90" />
             </div>

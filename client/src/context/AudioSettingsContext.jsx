@@ -1,6 +1,9 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { Howler } from 'howler'
 import { useAuth } from './AuthContext'
+import { ACCENT_COLORS, DEFAULT_ACCENT, normalizeAccent, hexToRgb, darkenHex } from '../constants/theme'
+
+export { ACCENT_COLORS, hexToRgb, darkenHex }
 
 export const EQ_BANDS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
 
@@ -36,7 +39,7 @@ export const DEFAULT = {
   rememberQueue: true,
   showRecent: true,
   theme: 'dark',
-  accent: '#1DB954',
+  accent: DEFAULT_ACCENT,
   animatedArt: true,
   particles: true,
   seekBarWave: true,
@@ -80,22 +83,13 @@ function load(key) {
     return {
       ...DEFAULT,
       ...parsed,
+      accent: normalizeAccent(parsed.accent),
       eqEnabled: parsed.eqEnabled !== undefined ? parsed.eqEnabled : true,
       audioEngine: parsed.audioEngine || 'studio'
     }
   } catch {
     return { ...DEFAULT }
   }
-}
-
-function darkenHex(hex, amount) {
-  try {
-    const n = parseInt(hex.replace('#',''), 16)
-    const r = Math.max(0, (n >> 16) - amount)
-    const g = Math.max(0, ((n >> 8) & 0xff) - amount)
-    const b = Math.max(0, (n & 0xff) - amount)
-    return `#${((r<<16)|(g<<8)|b).toString(16).padStart(6,'0')}`
-  } catch { return hex }
 }
 
 const AudioSettingsContext = createContext(null)
@@ -147,8 +141,13 @@ export function AudioSettingsProvider({ children }) {
 
   // ── Accent colour ─────────────────────────────────────────
   useEffect(() => {
-    document.documentElement.style.setProperty('--brand', settings.accent)
-    document.documentElement.style.setProperty('--brand-dark', darkenHex(settings.accent, 20))
+    const accent = normalizeAccent(settings.accent)
+    document.documentElement.style.setProperty('--brand', accent)
+    document.documentElement.style.setProperty('--brand-dark', darkenHex(accent, 20))
+    const rgb = hexToRgb(accent)
+    if (rgb) {
+      document.documentElement.style.setProperty('--brand-rgb', `${rgb.r}, ${rgb.g}, ${rgb.b}`)
+    }
   }, [settings.accent])
 
   // ── Build & Apply the Universal Web Audio DSP Chain ────────

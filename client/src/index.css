@@ -6,9 +6,9 @@
 
 /* ── Theme CSS variables ── */
 :root {
-  --brand:      #1DB954;
-  --brand-dark: #158a3e;
-  --brand-rgb:  29, 185, 84;
+  --brand:      #22c55e;
+  --brand-dark: #16a34a;
+  --brand-rgb:  34, 197, 94;
   --bg:         #121212;
   --bg2:        #1E1E1E;
   --bg3:        #2A2A2A;
@@ -71,7 +71,7 @@ input:-webkit-autofill:active {
   -webkit-text-fill-color: #ffffff !important;
   -webkit-box-shadow: 0 0 0px 1000px #14151f inset !important;
   box-shadow: 0 0 0px 1000px #14151f inset !important;
-  caret-color: #1DB954 !important;
+  caret-color: var(--brand) !important;
   transition: background-color 5000s ease-in-out 0s !important;
 }
 
@@ -80,12 +80,12 @@ input:-webkit-autofill:active {
   background-color: #13141d !important;
   color: #ffffff !important;
   -webkit-text-fill-color: #ffffff !important;
-  caret-color: #1DB954 !important;
+  caret-color: var(--brand) !important;
 }
 
 .otp-digit-input:focus {
   background-color: #181a24 !important;
-  border-color: #1DB954 !important;
+  border-color: var(--brand) !important;
 }
 
 .otp-digit-input.filled {

@@ -58,13 +58,7 @@ const NAV_ITEMS = [
   { id: 'settings',       label: 'Settings',             icon: Settings },
 ]
 
-const ACCENT_COLORS = [
-  { value: '#1DB954', name: 'Spotify Green' },
-  { value: '#1E90FF', name: 'Electric Blue' },
-  { value: '#FF6B6B', name: 'Coral Red' },
-  { value: '#A855F7', name: 'Purple' },
-  { value: '#F59E0B', name: 'Amber' },
-]
+import { ACCENT_COLORS, DEFAULT_ACCENT } from '../constants/theme'
 
 export default function AdminLayout() {
   const { tab: pathTab } = useParams()
@@ -80,7 +74,7 @@ export default function AdminLayout() {
   const themeMenuRef = useRef(null)
 
   const currentTheme = audioSettings?.theme || 'dark'
-  const currentAccent = audioSettings?.accent || '#1DB954'
+  const currentAccent = audioSettings?.accent || DEFAULT_ACCENT
   const isSuperAdmin = user?.email === 'malithrajamanthri@gmail.com'
 
   const handleSelectTab = tabId => {
@@ -349,23 +343,26 @@ export default function AdminLayout() {
                     <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted,#9ca3af)] mb-1.5">
                       SoundWave Accent
                     </p>
-                    <div className="flex items-center gap-2 justify-between px-1">
-                      {ACCENT_COLORS.map(c => (
-                        <button
-                          key={c.value}
-                          onClick={() => {
-                            updateSetting('accent', c.value)
-                            toast.success(`Accent color set to ${c.name}`)
-                          }}
-                          className={`w-6 h-6 rounded-full transition-transform hover:scale-110 flex items-center justify-center ${
-                            currentAccent === c.value ? 'ring-2 ring-white ring-offset-2 ring-offset-black scale-110' : ''
-                          }`}
-                          style={{ backgroundColor: c.value }}
-                          title={c.name}
-                        >
-                          {currentAccent === c.value && <Check size={11} className="text-white drop-shadow" />}
-                        </button>
-                      ))}
+                    <div className="grid grid-cols-4 gap-2.5 px-1 py-1">
+                      {ACCENT_COLORS.map(c => {
+                        const isSelected = currentAccent?.toLowerCase() === c.value?.toLowerCase()
+                        return (
+                          <button
+                            key={c.value}
+                            onClick={() => {
+                              updateSetting('accent', c.value)
+                              toast.success(`Theme set to ${c.name}`, { icon: '🎨' })
+                            }}
+                            className={`w-7 h-7 rounded-full transition-transform hover:scale-110 flex items-center justify-center ${
+                              isSelected ? 'ring-2 ring-white ring-offset-2 ring-offset-black scale-110 shadow-lg' : 'opacity-85 hover:opacity-100'
+                            }`}
+                            style={{ backgroundColor: c.value }}
+                            title={c.name}
+                          >
+                            {isSelected && <Check size={13} className="text-white drop-shadow" />}
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
                 </div>
