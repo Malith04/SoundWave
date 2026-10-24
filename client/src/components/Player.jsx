@@ -304,7 +304,7 @@ function QueuePanel({ queue = [], queueIndex, onClose, onPlay, reorderQueue, rem
   const activeRef = useRef(null)
   const listRef = useRef(null)
 
-  // Hold-to-reorder state (milliseconds hold)
+  // Hold-to-reorder state
   const [dragIndex, setDragIndex] = useState(null)
   const [overIndex, setOverIndex] = useState(null)
   const holdTimerRef = useRef(null)
@@ -312,6 +312,7 @@ function QueuePanel({ queue = [], queueIndex, onClose, onPlay, reorderQueue, rem
   const pointerOriginRef = useRef(null)
   const dragIndexRef = useRef(null)
   const overIndexRef = useRef(null)
+  const hasMovedRef = useRef(false)
 
   // Container-scoped scroll to active track on initial load or queueIndex change
   useEffect(() => {
@@ -331,35 +332,37 @@ function QueuePanel({ queue = [], queueIndex, onClose, onPlay, reorderQueue, rem
   }, [])
 
   const handlePointerDown = (e, index, song) => {
-    // Only primary mouse button or touch
     if (e.button !== undefined && e.button !== 0) return
     if (e.target.closest('[data-queue-action="remove"]')) return
 
     pointerOriginRef.current = { x: e.clientX, y: e.clientY, index, song }
+    hasMovedRef.current = false
     isDraggingRef.current = false
     dragIndexRef.current = index
     overIndexRef.current = index
 
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
 
-    // Millisecond hold threshold (200ms) to trigger reorder mode
+    // Hold threshold (250ms) to trigger reorder mode
     holdTimerRef.current = setTimeout(() => {
       isDraggingRef.current = true
+      hasMovedRef.current = true
       setDragIndex(index)
       setOverIndex(index)
       if ('vibrate' in navigator) navigator.vibrate(25)
       try { e.currentTarget.setPointerCapture?.(e.pointerId) } catch (_) {}
-    }, 200)
+    }, 250)
   }
 
   const handlePointerMove = (e) => {
     const origin = pointerOriginRef.current
     if (!origin) return
 
-    // If pre-hold and user moves > 7px, cancel hold so native scroll operates freely
+    const dist = Math.hypot(e.clientX - origin.x, e.clientY - origin.y)
+
+    // If pre-hold and user moves > 8px, cancel hold so native scroll operates freely
     if (!isDraggingRef.current) {
-      const dist = Math.hypot(e.clientX - origin.x, e.clientY - origin.y)
-      if (dist > 7) {
+      if (dist > 8) {
         if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
         pointerOriginRef.current = null
       }
@@ -373,9 +376,9 @@ function QueuePanel({ queue = [], queueIndex, onClose, onPlay, reorderQueue, rem
     if (listRef.current) {
       const rect = listRef.current.getBoundingClientRect()
       if (e.clientY < rect.top + 45) {
-        listRef.current.scrollTop -= 7
+        listRef.current.scrollTop -= 8
       } else if (e.clientY > rect.bottom - 45) {
-        listRef.current.scrollTop += 7
+        listRef.current.scrollTop += 8
       }
     }
 
@@ -408,14 +411,15 @@ function QueuePanel({ queue = [], queueIndex, onClose, onPlay, reorderQueue, rem
       dragIndexRef.current = null
       overIndexRef.current = null
       pointerOriginRef.current = null
+      setTimeout(() => { hasMovedRef.current = false }, 100)
       return
     }
 
-    // Normal tap / click (< 200ms)
+    // Single click / tap (< 250ms and < 10px movement)
     const origin = pointerOriginRef.current
     if (origin && !e.target.closest('[data-queue-action="remove"]')) {
       const dist = Math.hypot(e.clientX - origin.x, e.clientY - origin.y)
-      if (dist < 8) {
+      if (dist < 10) {
         onPlay?.(song, queue, index)
       }
     }
@@ -451,29 +455,29 @@ function QueuePanel({ queue = [], queueIndex, onClose, onPlay, reorderQueue, rem
             ref={isCurrent ? activeRef : null}
             onPointerDown={(e) => handlePointerDown(e, i, song)}
             onPointerUp={(e) => handlePointerUp(e, i, song)}
-            className={`group relative flex items-center gap-2.5 sm:gap-3 px-3 py-2.5 my-0.5 rounded-xl transition-all select-none ${
+            onClick={(e) => {
+              if (e.target.closest('[data-queue-action="remove"]')) return
+              if (hasMovedRef.current || isDraggingRef.current) return
+              onPlay?.(song, queue, i)
+            }}
+            className={`group relative flex items-center gap-3 px-3 py-2.5 my-1 rounded-2xl transition-all select-none cursor-pointer ${
               isHeld
-                ? 'queue-item-dragging ring-2 ring-brand/60 bg-brand/15 shadow-2xl cursor-grabbing'
+                ? 'queue-item-dragging ring-2 ring-brand/60 bg-brand/15 shadow-2xl cursor-grabbing scale-[1.02]'
                 : isCurrent
-                  ? 'bg-white/10 border border-brand/35 cursor-grab'
-                  : 'hover:bg-white/5 active:bg-white/10 cursor-grab'
+                  ? 'bg-white/10 border border-brand/35 shadow-lg'
+                  : 'hover:bg-white/10 active:bg-white/15'
             } ${isDropTarget ? 'queue-drop-indicator' : ''}`}
           >
-            {/* Grip handle indicator */}
-            <div className="text-gray-500 group-hover:text-gray-300 transition-colors shrink-0 touch-none">
-              <GripVertical size={16} />
-            </div>
-
-            {/* Song Cover */}
-            <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-white/5 border border-white/10">
+            {/* Song Cover (square grip handle removed) */}
+            <div className="relative w-11 h-11 rounded-xl overflow-hidden shrink-0 bg-white/5 border border-white/10 shadow-md">
               <img
-                src={song.coverUrl || 'https://via.placeholder.com/40'}
+                src={song.coverUrl || 'https://via.placeholder.com/44'}
                 alt=""
                 className="w-full h-full object-cover pointer-events-none"
                 loading="lazy"
               />
               {isCurrent && (
-                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/45 backdrop-blur-[1px] flex items-center justify-center">
                   <AudioBars isPlaying={true} size="sm" />
                 </div>
               )}
@@ -481,18 +485,18 @@ function QueuePanel({ queue = [], queueIndex, onClose, onPlay, reorderQueue, rem
 
             {/* Title & Artist */}
             <div className="flex-1 min-w-0 pointer-events-none">
-              <p className={`text-sm font-medium truncate ${isCurrent ? 'text-brand font-semibold' : 'text-white'}`}>
+              <p className={`text-sm font-semibold truncate ${isCurrent ? 'text-brand font-bold' : 'text-white'}`}>
                 {song.title}
               </p>
-              <p className="text-xs text-gray-400 truncate">
+              <p className="text-xs text-gray-400 truncate mt-0.5">
                 {song.artist}
               </p>
             </div>
 
             {/* Active Playing Badge / Remove Button */}
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               {isCurrent ? (
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-brand/20 text-brand border border-brand/30">
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-brand/20 text-brand border border-brand/30">
                   Now Playing
                 </span>
               ) : (
@@ -505,9 +509,9 @@ function QueuePanel({ queue = [], queueIndex, onClose, onPlay, reorderQueue, rem
                     toast.success('Removed from queue', { duration: 1500, id: 'queue-remove' })
                   }}
                   title="Remove from queue"
-                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-red-400 transition-all touch-target"
+                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-2 rounded-xl hover:bg-white/15 text-gray-400 hover:text-red-400 transition-all touch-target cursor-pointer"
                 >
-                  <Trash2 size={15} />
+                  <Trash2 size={16} />
                 </button>
               )}
             </div>
@@ -520,14 +524,6 @@ function QueuePanel({ queue = [], queueIndex, onClose, onPlay, reorderQueue, rem
   if (expanded) {
     return (
       <div className="flex flex-col flex-1 min-h-0 h-full overflow-hidden">
-        <div className="flex items-center justify-between pb-2 mb-1 shrink-0 border-b border-white/5">
-          <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">
-            Up next · {queue.length} songs
-          </p>
-          <span className="text-[11px] text-gray-500 hidden sm:inline-block">
-            Hold song to reorder
-          </span>
-        </div>
         {inner}
       </div>
     )
@@ -802,43 +798,36 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
         </div>
       </div>
 
-      {/* ── SECTION 2: QUEUE DIRECTLY BELOW PLAYER ── */}
-      <div ref={queueSectionRef} className="player-snap-section relative z-10 w-full max-w-2xl mx-auto px-4 sm:px-6 py-6 pb-20 shrink-0">
-        <div className="glass-card border border-white/10 rounded-3xl p-4 sm:p-6 shadow-2xl flex flex-col min-h-[480px] max-h-[82vh]">
-          {/* Queue Header */}
-          <div className="flex items-center justify-between pb-3 mb-2 border-b border-white/10 shrink-0">
-            <div className="flex items-center gap-2.5">
-              <ListMusic size={20} className="text-brand" />
-              <h3 className="font-bold text-base sm:text-lg text-white">Up Next</h3>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-brand/15 text-brand font-medium border border-brand/20">
-                {queue.length} songs
-              </span>
-              <span className="text-[11px] text-gray-400 hidden sm:inline-block ml-2">
-                Hold song to reorder
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={scrollToTop}
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white transition-colors cursor-pointer touch-target"
-              title="Back to Player"
-            >
-              <ChevronUp size={16} />
-              <span>Player</span>
-            </button>
+      {/* ── SECTION 2: QUEUE DIRECTLY BELOW PLAYER (Border removed, clean songs list) ── */}
+      <div ref={queueSectionRef} className="player-snap-section relative z-10 w-full max-w-xl sm:max-w-2xl mx-auto px-4 sm:px-6 py-6 pb-24 shrink-0 flex flex-col min-h-[500px]">
+        {/* Subtle minimal header */}
+        <div className="flex items-center justify-between pb-3 mb-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <ListMusic size={18} className="text-brand" />
+            <h3 className="font-bold text-base text-white">Up Next</h3>
+            <span className="text-xs text-gray-400">({queue.length})</span>
           </div>
+          <button
+            type="button"
+            onClick={scrollToTop}
+            className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white transition-colors cursor-pointer touch-target"
+            title="Back to Player"
+          >
+            <ChevronUp size={15} />
+            <span>Player</span>
+          </button>
+        </div>
 
-          {/* Embedded Queue list */}
-          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-            <QueuePanel
-              queue={queue}
-              queueIndex={queueIndex}
-              onPlay={play}
-              reorderQueue={reorderQueue}
-              removeFromQueue={removeFromQueue}
-              expanded={true}
-            />
-          </div>
+        {/* Embedded Queue list without container border */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          <QueuePanel
+            queue={queue}
+            queueIndex={queueIndex}
+            onPlay={play}
+            reorderQueue={reorderQueue}
+            removeFromQueue={removeFromQueue}
+            expanded={true}
+          />
         </div>
       </div>
     </div>
