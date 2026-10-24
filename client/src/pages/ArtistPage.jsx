@@ -316,11 +316,14 @@ export default function ArtistPage() {
           </button>
         </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-3.5 sm:px-8 pt-12 sm:pt-14 md:pt-12 pb-5 sm:pb-7">
-          {/* Hero Content: Avatar + Artist Info */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 sm:gap-6">
-            {/* Circular high-res Artist Avatar */}
-            <div className="relative shrink-0 w-20 h-20 xs:w-24 xs:h-24 sm:w-36 sm:h-36 md:w-44 md:h-44 rounded-full overflow-hidden bg-surface-3 border-2 sm:border-4 border-white/15 shadow-[0_15px_35px_rgba(0,0,0,0.8)] group">
+        <div className="relative z-10 max-w-7xl mx-auto px-3.5 sm:px-8 pt-16 sm:pt-16 pb-6 sm:pb-8">
+          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight mb-4">
+            About {artist.name}
+          </h2>
+
+          <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-surface-2/95 via-surface-2/85 to-surface-1/90 backdrop-blur-xl border border-white/10 p-5 sm:p-7 md:p-8 flex flex-col md:flex-row items-center md:items-start gap-6 shadow-2xl">
+            {/* Square Artist Image with Rounded Corners */}
+            <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-44 md:h-44 rounded-2xl overflow-hidden bg-surface-3 shrink-0 border border-white/15 shadow-xl group">
               {artist.picture ? (
                 <img
                   src={artist.picture}
@@ -334,37 +337,32 @@ export default function ArtistPage() {
               )}
             </div>
 
-            {/* Artist Typography & Details */}
-            <div className="flex-1 min-w-0">
-              {/* Verified pill */}
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/15 text-[11px] sm:text-xs font-semibold text-white mb-1.5 sm:mb-2 shadow-sm">
-                <CheckCircle2 size={13} className="text-brand fill-brand/20" />
-                <span>Verified Artist</span>
+            {/* Artist Info & Details */}
+            <div className="flex-1 text-center md:text-left min-w-0">
+              <div className="flex items-center justify-center md:justify-start gap-2.5 mb-2">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight">
+                  {artist.name}
+                </h1>
+                <CheckCircle2 size={22} className="text-brand shrink-0" />
               </div>
 
-              {/* Artist Name */}
-              <h1 className="text-xl xs:text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white tracking-tight truncate drop-shadow-lg leading-tight">
-                {artist.name}
-              </h1>
+              <p className="text-xs sm:text-sm text-gray-300 leading-relaxed max-w-3xl mb-4 font-normal">
+                {artist.name} is a renowned {artist.genre || 'recording'} artist with over{' '}
+                <span className="text-white font-bold">{artist.monthlyListeners}</span> monthly listeners on
+                SoundWave. Explore all official releases, studio albums, hit collaborations, and upcoming music
+                above.
+              </p>
 
-              {/* Listeners & Catalog Info */}
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm text-gray-300 mt-1.5 sm:mt-2 font-medium">
-                <span className="flex items-center gap-1.5 text-white font-semibold">
-                  <Flame size={14} className="text-amber-400 shrink-0" />
-                  {artist.monthlyListeners} monthly listeners
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2.5 sm:gap-3">
+                <span className="px-3.5 py-1 bg-white/[0.06] border border-white/10 rounded-full text-xs font-semibold text-gray-300">
+                  {albums.length} Official Albums
                 </span>
-                <span className="w-1 h-1 rounded-full bg-gray-500" />
-                <span>{albums.length} Albums</span>
-                <span className="w-1 h-1 rounded-full bg-gray-500" />
-                <span>{topSongs.length}+ Songs</span>
-                {artist.genre && (
-                  <>
-                    <span className="w-1 h-1 rounded-full bg-gray-500" />
-                    <span className="px-2.5 py-0.5 rounded-full bg-white/[0.08] text-white text-[11px] font-semibold border border-white/10">
-                      {artist.genre}
-                    </span>
-                  </>
-                )}
+                <span className="px-3.5 py-1 bg-white/[0.06] border border-white/10 rounded-full text-xs font-semibold text-gray-300">
+                  {collaborations.length} Collabs
+                </span>
+                <span className="px-3.5 py-1 bg-brand/10 border border-brand/40 rounded-full text-xs font-semibold text-brand">
+                  Verified Streaming Catalog
+                </span>
               </div>
             </div>
           </div>
@@ -737,44 +735,6 @@ export default function ArtistPage() {
           </section>
         )}
 
-        {/* ── Section: About The Artist ── */}
-        <section className="pt-8 border-t border-white/[0.08] animate-fade-in">
-          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight mb-4">
-            About {artist.name}
-          </h2>
-          <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-surface-2 via-surface-2/80 to-surface-1 border border-white/10 p-6 sm:p-8 flex flex-col md:flex-row items-center md:items-start gap-6 shadow-xl">
-            <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-2xl overflow-hidden bg-surface-3 shrink-0 border border-white/10 shadow-lg">
-              <img
-                src={artist.picture}
-                alt={artist.name}
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div className="flex-1 text-center md:text-left">
-              <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-                <h3 className="text-2xl font-black text-white">{artist.name}</h3>
-                <CheckCircle2 size={18} className="text-brand shrink-0" />
-              </div>
-              <p className="text-sm text-gray-300 leading-relaxed max-w-2xl mb-4">
-                {artist.name} is a renowned {artist.genre || 'recording'} artist with over{' '}
-                <span className="text-white font-bold">{artist.monthlyListeners}</span> monthly listeners on
-                SoundWave. Explore all official releases, studio albums, hit collaborations, and upcoming music
-                above.
-              </p>
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
-                <span className="px-3 py-1 bg-white/[0.06] border border-white/10 rounded-full text-xs font-semibold text-gray-300">
-                  {albums.length} Official Albums
-                </span>
-                <span className="px-3 py-1 bg-white/[0.06] border border-white/10 rounded-full text-xs font-semibold text-gray-300">
-                  {collaborations.length} Collabs
-                </span>
-                <span className="px-3 py-1 bg-brand/10 border border-brand/30 rounded-full text-xs font-semibold text-brand">
-                  Verified Streaming Catalog
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
 
       {/* ── Album Detail Modal with Tracklist ── */}
