@@ -613,14 +613,23 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
         <div className="flex-1 overflow-hidden px-4 sm:px-8 flex flex-col justify-center">
           <div className="flex flex-col items-center gap-3 sm:gap-4 max-w-md sm:max-w-lg lg:max-w-xl mx-auto my-auto w-full py-1">
 
-            {/* Art / Video (Reduced size to ~180px-200px) */}
-            <div className="relative w-full max-w-[170px] xs:max-w-[185px] sm:max-w-[200px] max-h-[22vh] sm:max-h-[24vh] aspect-square shrink-0">
+            {/* Art / Video (Strict 1:1 square: full image visible without horizontal or vertical cropping) */}
+            <div
+              className={`relative ${
+                viewMode === 'video'
+                  ? 'w-64 xs:w-72 sm:w-80 aspect-video'
+                  : 'w-36 h-36 xs:w-40 xs:h-40 sm:w-44 sm:h-44 aspect-square'
+              } shrink-0 mx-auto`}
+            >
               {viewMode === 'audio' ? (
                 <div className="relative w-full h-full">
                   <div className="absolute -inset-2.5 rounded-2xl opacity-30 blur-xl pointer-events-none" style={{ background: 'var(--brand)' }} />
                   <div className={`relative w-full h-full rounded-2xl overflow-hidden shadow-2xl ${settings?.animatedArt && isPlaying ? 'album-glow' : ''}`}>
-                    <img src={currentSong.coverUrl || 'https://via.placeholder.com/300'} alt={currentSong.title}
-                      className={`w-full h-full object-cover transition-transform duration-500 ${settings?.animatedArt && isPlaying ? 'scale-105' : ''}`} />
+                    <img
+                      src={currentSong.coverUrl || 'https://via.placeholder.com/300'}
+                      alt={currentSong.title}
+                      className="w-full h-full object-cover object-center"
+                    />
                   </div>
                 </div>
               ) : (
