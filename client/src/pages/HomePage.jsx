@@ -48,12 +48,18 @@ const QUICK_MOODS = [
 ]
 
 const POPULAR_ARTISTS = [
-  { id: 'dz_12246', name: 'Taylor Swift', picture: 'https://cdn-images.dzcdn.net/images/artist/cc2495870fe1a792ad0cdb05501ad5ec/500x500-000000-80-0-0.jpg', fanCount: 12738289, genre: 'Pop' },
-  { id: 'dz_58169', name: 'The Weeknd', picture: 'https://cdn-images.dzcdn.net/images/artist/581693b4724a7fcfa754455101e13a44/500x500-000000-80-0-0.jpg', fanCount: 14715455, genre: 'R&B/Soul' },
-  { id: 'dz_24e03', name: 'Drake', picture: 'https://cdn-images.dzcdn.net/images/artist/24e030a21051fa69d4c72170366eb50e/500x500-000000-80-0-0.jpg', fanCount: 10450000, genre: 'Hip-Hop' },
-  { id: 'dz_5256e', name: 'Ed Sheeran', picture: 'https://cdn-images.dzcdn.net/images/artist/5256e29712ee80f76022e1b10bd112ee/500x500-000000-80-0-0.jpg', fanCount: 11200000, genre: 'Pop' },
-  { id: 'dz_11c29', name: 'Billie Eilish', picture: 'https://cdn-images.dzcdn.net/images/artist/11c29668ec739e802058b4ecaa0802c0/500x500-000000-80-0-0.jpg', fanCount: 9500000, genre: 'Alternative' },
-  { id: 'dz_066b5', name: 'Coldplay', picture: 'https://cdn-images.dzcdn.net/images/artist/066b579cfeb174f1f516ec221379f824/500x500-000000-80-0-0.jpg', fanCount: 8800000, genre: 'Rock' }
+  { id: 'dz_12246', name: 'Taylor Swift', picture: 'https://cdn-images.dzcdn.net/images/artist/cc2495870fe1a792ad0cdb05501ad5ec/1000x1000-000000-80-0-0.jpg', fanCount: 12757310, genre: 'Pop' },
+  { id: 'dz_4050205', name: 'The Weeknd', picture: 'https://cdn-images.dzcdn.net/images/artist/581693b4724a7fcfa754455101e13a44/1000x1000-000000-80-0-0.jpg', fanCount: 14756002, genre: 'R&B/Soul' },
+  { id: 'dz_246791', name: 'Drake', picture: 'https://cdn-images.dzcdn.net/images/artist/eb0ed5b21d1ea5af021fc074ded0e91f/1000x1000-000000-80-0-0.jpg', fanCount: 24115078, genre: 'Hip-Hop' },
+  { id: 'dz_9635624', name: 'Billie Eilish', picture: 'https://cdn-images.dzcdn.net/images/artist/8eab1a9a644889aabaca1e193e05f984/1000x1000-000000-80-0-0.jpg', fanCount: 9284140, genre: 'Alternative' },
+  { id: 'dz_384236', name: 'Ed Sheeran', picture: 'https://cdn-images.dzcdn.net/images/artist/d6bb84390641d8ae9118228d9544e53d/1000x1000-000000-80-0-0.jpg', fanCount: 20944523, genre: 'Pop' },
+  { id: 'dz_892', name: 'Coldplay', picture: 'https://cdn-images.dzcdn.net/images/artist/3087954bca22f306324912e5ac8375c3/1000x1000-000000-80-0-0.jpg', fanCount: 18430685, genre: 'Rock' },
+  { id: 'dz_8706544', name: 'Dua Lipa', picture: 'https://cdn-images.dzcdn.net/images/artist/877872aaf75694f11d53c318700ab2b5/1000x1000-000000-80-0-0.jpg', fanCount: 8799870, genre: 'Pop/Dance' },
+  { id: 'dz_429675', name: 'Bruno Mars', picture: 'https://cdn-images.dzcdn.net/images/artist/90f0b5b11df4f87ee878f38569b5995b/1000x1000-000000-80-0-0.jpg', fanCount: 12835318, genre: 'Funk/Pop' },
+  { id: 'dz_1562681', name: 'Ariana Grande', picture: 'https://cdn-images.dzcdn.net/images/artist/721d8fab84b315502de422b8d0901509/1000x1000-000000-80-0-0.jpg', fanCount: 13452607, genre: 'Pop' },
+  { id: 'dz_13', name: 'Eminem', picture: 'https://cdn-images.dzcdn.net/images/artist/0f30bbd33a680030054af004d698d6ac/1000x1000-000000-80-0-0.jpg', fanCount: 19153786, genre: 'Hip-Hop' },
+  { id: 'dz_7543848', name: 'Post Malone', picture: 'https://cdn-images.dzcdn.net/images/artist/a5a8cca44e7eab2db7d44e039bed2574/1000x1000-000000-80-0-0.jpg', fanCount: 4212648, genre: 'Hip-Hop/Pop' },
+  { id: 'dz_525046', name: 'Kendrick Lamar', picture: 'https://cdn-images.dzcdn.net/images/artist/be0a7c550567f4af0ed202d7235b74d6/1000x1000-000000-80-0-0.jpg', fanCount: 6191001, genre: 'Hip-Hop' }
 ]
 
 const CATEGORY_TABS = ['All', 'Spotlight', 'Artists', 'Moods', 'Mixes', 'Charts', 'Genres']

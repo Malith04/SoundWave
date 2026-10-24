@@ -100,12 +100,17 @@ router.get('/search', async (req, res) => {
 
     for (const da of deezerArtists) {
       const normName = da.name.trim().toLowerCase()
-      if (!artistsMap.has(normName)) {
+      const pic = da.picture_xl || da.picture_big || da.picture_medium || da.picture || ''
+      const isPlaceholder = pic.includes('d41d8cd98f00b204e9800998ecf8427e')
+      const cleanPic = isPlaceholder ? '' : pic
+
+      const existing = artistsMap.get(normName)
+      if (!existing || (da.nb_fan || 0) > (existing.fanCount || 0)) {
         artistsMap.set(normName, {
           id: `dz_${da.id}`,
           deezerId: da.id,
           name: da.name,
-          picture: da.picture_xl || da.picture_big || da.picture_medium || da.picture || '',
+          picture: cleanPic,
           fanCount: da.nb_fan || 0,
           genre: 'Artist',
           albumsCount: da.nb_album || 0,
@@ -381,9 +386,11 @@ router.get('/:query', async (req, res) => {
       try {
         const d = await deezerSearchRes.value.json()
         if (d.data && d.data.length > 0) {
-          const match = d.data.find(
+          const exactMatches = d.data.filter(
             a => a.name.toLowerCase() === rawQuery.toLowerCase()
-          ) || d.data[0]
+          ).sort((a, b) => (b.nb_fan || 0) - (a.nb_fan || 0))
+
+          const match = exactMatches[0] || d.data.slice().sort((a, b) => (b.nb_fan || 0) - (a.nb_fan || 0))[0]
           deezerArtist = match
           artistName = match.name
         }

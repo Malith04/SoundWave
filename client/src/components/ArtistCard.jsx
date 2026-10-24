@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Play, CheckCircle2, User } from 'lucide-react'
 import { usePlayer } from '../context/PlayerContext'
@@ -5,6 +6,7 @@ import { usePlayer } from '../context/PlayerContext'
 export default function ArtistCard({ artist, onPlay, layout = 'vertical' }) {
   const navigate = useNavigate()
   const { play } = usePlayer()
+  const [imgError, setImgError] = useState(false)
 
   const handleCardClick = () => {
     navigate(`/artist/${encodeURIComponent(artist.name)}`)
@@ -40,12 +42,13 @@ export default function ArtistCard({ artist, onPlay, layout = 'vertical' }) {
         {/* Circular Avatar */}
         <div className="relative shrink-0">
           <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden bg-surface-3 border-2 border-white/10 group-hover:border-brand/60 shadow-xl transition-all duration-300 group-hover:scale-105">
-            {artist.picture ? (
+            {artist.picture && !imgError ? (
               <img
                 src={artist.picture}
                 alt={artist.name}
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                 loading="lazy"
+                onError={() => setImgError(true)}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-surface-3 text-gray-400">
@@ -100,12 +103,13 @@ export default function ArtistCard({ artist, onPlay, layout = 'vertical' }) {
       {/* Circular Avatar */}
       <div className="relative mb-3.5">
         <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden bg-surface-3 border-2 border-white/10 group-hover:border-brand/60 shadow-lg transition-all duration-300 group-hover:scale-105">
-          {artist.picture ? (
+          {artist.picture && !imgError ? (
             <img
               src={artist.picture}
               alt={artist.name}
               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
               loading="lazy"
+              onError={() => setImgError(true)}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-surface-3 text-gray-400">
