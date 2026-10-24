@@ -573,26 +573,10 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
               )}
             </div>
 
-            {/* Like + badge */}
+            {/* Action buttons: Like & Quick Add */}
             <div className="flex items-center justify-between w-full px-2">
               <button onClick={onLike} className={`touch-target transition-all active:scale-90 ${liked ? 'text-brand' : 'text-gray-500 hover:text-white'}`}>
                 <Heart size={22} fill={liked ? 'currentColor' : 'none'} />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const nextEng = engine === 'studio' ? 'auto' : engine === 'auto' ? 'youtube' : 'studio'
-                  switchEngine?.(nextEng)
-                }}
-                title="Audio engine: 10-Band EQ & 3D Spatial Audio Active across all 3 engines"
-                className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-all hover:scale-105 active:scale-95 cursor-pointer ${
-                  engine === 'youtube'
-                    ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30'
-                    : engine === 'auto'
-                    ? 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30'
-                    : 'bg-brand/20 text-brand hover:bg-brand/30'
-                }`}>
-                {engine === 'youtube' ? '🎬 YouTube (EQ Active)' : engine === 'auto' ? '✨ Smart Auto (EQ Active)' : '🎧 Studio (EQ Active)'}
               </button>
               <button
                 onClick={() => onOpenQuickAdd?.()}
@@ -940,23 +924,6 @@ export default function Player() {
                   {currentSong.artist}
                 </Link>
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  const nextEng = engine === 'studio' ? 'auto' : engine === 'auto' ? 'youtube' : 'studio'
-                  switchEngine?.(nextEng)
-                }}
-                title="Audio engine: 10-Band EQ & 3D Spatial Audio Active across all 3 engines"
-                className={`text-[11px] px-2 py-0.5 rounded-full font-semibold transition-all hover:scale-105 active:scale-95 cursor-pointer ${
-                  engine === 'youtube'
-                    ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30'
-                    : engine === 'auto'
-                    ? 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30'
-                    : 'bg-brand/20 text-brand hover:bg-brand/30'
-                }`}
-              >
-                {engine === 'youtube' ? '🎬 YouTube (EQ Active)' : engine === 'auto' ? '✨ Smart Auto (EQ Active)' : '🎧 Studio (EQ Active)'}
-              </button>
             </div>
             <button onClick={handleLike} className={`touch-target shrink-0 transition-all active:scale-125 ${liked ? 'text-brand' : 'text-gray-500 hover:text-white'}`}>
               <Heart size={16} fill={liked ? 'currentColor' : 'none'} />

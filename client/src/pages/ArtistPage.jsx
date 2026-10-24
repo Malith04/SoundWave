@@ -317,11 +317,7 @@ export default function ArtistPage() {
         </div>
 
         <div className="relative z-10 max-w-7xl mx-auto px-3.5 sm:px-8 pt-16 sm:pt-16 pb-6 sm:pb-8">
-          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight mb-4">
-            About {artist.name}
-          </h2>
-
-          <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-surface-2/95 via-surface-2/85 to-surface-1/90 backdrop-blur-xl border border-white/10 p-5 sm:p-7 md:p-8 flex flex-col md:flex-row items-center md:items-start gap-6 shadow-2xl">
+          <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-surface-2/90 via-surface-2/70 to-surface-1/80 backdrop-blur-xl p-5 sm:p-7 md:p-8 flex flex-col md:flex-row items-center md:items-start gap-6 shadow-2xl">
             {/* Square Artist Image with Rounded Corners */}
             <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-44 md:h-44 rounded-2xl overflow-hidden bg-surface-3 shrink-0 border border-white/15 shadow-xl group">
               {artist.picture ? (
@@ -350,7 +346,7 @@ export default function ArtistPage() {
                 {artist.name} is a renowned {artist.genre || 'recording'} artist with over{' '}
                 <span className="text-white font-bold">{artist.monthlyListeners}</span> monthly listeners on
                 SoundWave. Explore all official releases, studio albums, hit collaborations, and upcoming music
-                above.
+                below.
               </p>
 
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-2.5 sm:gap-3">
