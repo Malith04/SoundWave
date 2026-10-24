@@ -526,11 +526,11 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
         </div>
 
         {/* Scrollable body */}
-        <div ref={scrollBodyRef} className="flex-1 overflow-y-auto mobile-scroll px-4 sm:px-6">
-          <div className="flex flex-col items-center gap-5 max-w-sm mx-auto pb-4">
+        <div ref={scrollBodyRef} className="flex-1 overflow-y-auto mobile-scroll px-4 sm:px-6 flex flex-col justify-center">
+          <div className="flex flex-col items-center gap-4 sm:gap-5 max-w-sm sm:max-w-md mx-auto my-auto w-full py-4">
 
             {/* Art / Video */}
-            <div className="relative w-full max-w-[260px] sm:max-w-xs shrink-0">
+            <div className="relative w-full max-w-[260px] sm:max-w-[300px] md:max-w-[340px] shrink-0">
               {viewMode === 'audio' ? (
                 <>
                   <div className="absolute -inset-3 rounded-2xl opacity-30 blur-2xl" style={{ background: 'var(--brand)' }} />
@@ -557,7 +557,7 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
 
             {/* Song info */}
             <div className="text-center w-full">
-              <p className="text-xl font-bold leading-tight mb-1 truncate">{currentSong.title}</p>
+              <p className="text-xl sm:text-2xl font-bold leading-tight mb-1 truncate">{currentSong.title}</p>
               <p className="text-gray-400 text-sm truncate">
                 <Link
                   to={`/artist/${encodeURIComponent(currentSong.artist)}`}
@@ -567,7 +567,7 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
                   {currentSong.artist}
                 </Link>
               </p>
-              {currentSong.album && <p className="text-xs text-gray-600 mt-0.5 truncate">{currentSong.album}</p>}
+              {currentSong.album && <p className="text-xs text-gray-500 mt-0.5 truncate">{currentSong.album}</p>}
               {settings?.showCredits && (
                 <p className="text-[11px] text-gray-500 mt-1">Source: {currentSong.source} {currentSong.genre ? `• ${currentSong.genre}` : ''}</p>
               )}
@@ -634,28 +634,27 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
                 className="flex-1 mobile-volume-bar seek-bar cursor-pointer"
                 style={{ '--progress': `${isMuted ? 0 : volume}%` }} />
             </div>
-          </div>
-        </div>
 
-        {/* Bottom panel toggles */}
-        <div className="flex justify-center gap-3 py-4 px-4 shrink-0 bg-black/20 backdrop-blur-sm"
-          style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
-          <button onClick={() => setPanel(p => p === 'lyrics' ? null : 'lyrics')}
-            className={`touch-target flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold transition-all ${panel === 'lyrics' ? 'bg-brand text-black' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>
-            <Mic2 size={15} /> Lyrics
-          </button>
-          <button onClick={() => setPanel(p => p === 'queue' ? null : 'queue')}
-            className={`touch-target flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold transition-all ${panel === 'queue' ? 'bg-brand text-black' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>
-            <ListMusic size={15} /> Queue
-          </button>
+            {/* Bottom panel toggles: Lyrics & Queue */}
+            <div className="flex items-center justify-center gap-3 w-full pt-1">
+              <button onClick={() => setPanel(p => p === 'lyrics' ? null : 'lyrics')}
+                className={`touch-target flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all ${panel === 'lyrics' ? 'bg-brand text-black shadow-lg shadow-brand/30' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>
+                <Mic2 size={14} /> Lyrics
+              </button>
+              <button onClick={() => setPanel(p => p === 'queue' ? null : 'queue')}
+                className={`touch-target flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all ${panel === 'queue' ? 'bg-brand text-black shadow-lg shadow-brand/30' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>
+                <ListMusic size={14} /> Queue
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Slide-up panel overlay */}
         {panel && (
-          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md" onClick={() => setPanel(null)}>
-            <div className="absolute bottom-0 left-0 right-0 bg-surface-2 rounded-t-3xl border-t border-white/10 h-[75vh] max-h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-slide-up"
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-6" onClick={() => setPanel(null)}>
+            <div className="relative w-full sm:max-w-2xl bg-surface-2 rounded-t-3xl sm:rounded-3xl border border-white/10 h-[75vh] max-h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-slide-up"
               onClick={e => e.stopPropagation()}>
-              <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mt-2.5 -mb-1 shrink-0" />
+              <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mt-2.5 -mb-1 shrink-0 sm:hidden" />
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 shrink-0">
                 <div className="flex items-center gap-2.5">
                   <h3 className="font-bold text-base capitalize">{panel}</h3>
@@ -805,7 +804,7 @@ export default function Player() {
       {!expanded && showSleepTimer && <SleepTimerPanel onClose={() => setShowSleepTimer(false)} onSetTimer={startSleepTimer} currentTimer={sleepTimer} timeLeft={sleepTimeLeft} />}
 
       {/* Up-next toast */}
-      {showNextUp && nextSong && (
+      {!expanded && showNextUp && nextSong && (
         <div className="fixed bottom-20 left-3 z-[999] bg-surface-2/95 backdrop-blur-md border border-brand/30 rounded-xl p-3 shadow-2xl animate-slide-down max-w-[280px]">
           <div className="flex items-center gap-3">
             <div className="relative shrink-0">
