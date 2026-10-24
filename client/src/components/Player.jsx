@@ -498,7 +498,7 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
   }, [viewMode, currentSong, videoId])
 
   return (
-    <div ref={containerRef} className="mobile-expanded-player slide-up flex flex-col bg-black overflow-hidden overscroll-none">
+    <div ref={containerRef} className="mobile-expanded-player slide-up flex flex-col bg-black text-white overflow-hidden overscroll-none">
       {/* Blurred background */}
       <div className="absolute inset-0">
         <img src={currentSong.coverUrl || ''} alt="" className="w-full h-full object-cover scale-110"
@@ -509,16 +509,18 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
 
       <div className="relative z-10 flex flex-col h-full mobile-safe-area">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-2.5 sm:py-3 shrink-0 bg-transparent">
+        <div className="flex items-center justify-between px-4 sm:px-8 py-3 shrink-0 bg-transparent">
           <button onClick={onClose}
-            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors touch-target">
-            <ChevronDown size={20} />
+            className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors touch-target"
+            title="Minimize"
+          >
+            <ChevronDown size={22} />
           </button>
-          <p className="text-xs text-gray-400 uppercase tracking-widest font-medium">Now Playing</p>
+          <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold">Now Playing</p>
           <div className="flex items-center gap-0.5 bg-white/10 rounded-full p-1">
             {['audio','video'].map(m => (
               <button key={m} onClick={() => setViewMode(m)}
-                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all capitalize ${viewMode === m ? 'bg-white text-black' : 'text-gray-300 hover:text-white'}`}>
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all capitalize ${viewMode === m ? 'bg-white text-black shadow-sm' : 'text-gray-300 hover:text-white'}`}>
                 {m}
               </button>
             ))}
@@ -526,14 +528,14 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
         </div>
 
         {/* Non-scrollable centered body */}
-        <div ref={scrollBodyRef} className="flex-1 overflow-hidden px-4 sm:px-6 flex flex-col justify-center">
-          <div className="flex flex-col items-center gap-2 sm:gap-3 max-w-sm mx-auto my-auto w-full py-1">
+        <div ref={scrollBodyRef} className="flex-1 overflow-hidden px-4 sm:px-8 flex flex-col justify-center">
+          <div className="flex flex-col items-center gap-3 sm:gap-4 max-w-md sm:max-w-lg lg:max-w-xl mx-auto my-auto w-full py-1">
 
             {/* Art / Video */}
-            <div className="relative w-full max-w-[180px] xs:max-w-[200px] sm:max-w-[220px] md:max-w-[240px] max-h-[26vh] sm:max-h-[28vh] shrink-0">
+            <div className="relative w-full max-w-[210px] xs:max-w-[230px] sm:max-w-[260px] md:max-w-[280px] max-h-[29vh] sm:max-h-[31vh] shrink-0">
               {viewMode === 'audio' ? (
                 <>
-                  <div className="absolute -inset-2.5 rounded-2xl opacity-25 blur-xl" style={{ background: 'var(--brand)' }} />
+                  <div className="absolute -inset-3 rounded-2xl opacity-30 blur-2xl" style={{ background: 'var(--brand)' }} />
                   <div className={`relative w-full aspect-square rounded-2xl overflow-hidden shadow-2xl ${settings?.animatedArt && isPlaying ? 'album-glow' : ''}`}>
                     <img src={currentSong.coverUrl || 'https://via.placeholder.com/300'} alt={currentSong.title}
                       className={`w-full h-full object-cover transition-transform duration-500 ${settings?.animatedArt && isPlaying ? 'scale-105' : ''}`} />
@@ -556,9 +558,9 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
             </div>
 
             {/* Song info */}
-            <div className="text-center w-full">
-              <p className="text-lg sm:text-xl font-bold leading-tight truncate">{currentSong.title}</p>
-              <p className="text-gray-400 text-xs sm:text-sm truncate mt-0.5">
+            <div className="text-center w-full px-2">
+              <p className="text-xl sm:text-2xl font-black text-white leading-tight truncate drop-shadow-sm">{currentSong.title}</p>
+              <p className="text-gray-300 text-sm sm:text-base font-semibold truncate mt-1">
                 <Link
                   to={`/artist/${encodeURIComponent(currentSong.artist)}`}
                   onClick={() => onClose()}
@@ -567,28 +569,28 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
                   {currentSong.artist}
                 </Link>
               </p>
-              {currentSong.album && <p className="text-[11px] sm:text-xs text-gray-500 mt-0.5 truncate">{currentSong.album}</p>}
+              {currentSong.album && <p className="text-xs sm:text-sm text-gray-400 mt-0.5 truncate font-normal">{currentSong.album}</p>}
               {settings?.showCredits && (
-                <p className="text-[10px] text-gray-500 mt-0.5">Source: {currentSong.source} {currentSong.genre ? `• ${currentSong.genre}` : ''}</p>
+                <p className="text-[11px] text-gray-500 mt-1">Source: {currentSong.source} {currentSong.genre ? `• ${currentSong.genre}` : ''}</p>
               )}
             </div>
 
             {/* Action buttons: Like & Quick Add */}
-            <div className="flex items-center justify-between w-full px-2">
-              <button onClick={onLike} className={`touch-target transition-all active:scale-90 ${liked ? 'text-brand' : 'text-gray-500 hover:text-white'}`}>
-                <Heart size={20} fill={liked ? 'currentColor' : 'none'} />
+            <div className="flex items-center justify-between w-full px-2 sm:px-4">
+              <button onClick={onLike} className={`touch-target transition-all active:scale-90 ${liked ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title={liked ? 'Unlike' : 'Like'}>
+                <Heart size={22} fill={liked ? 'currentColor' : 'none'} />
               </button>
               <button
                 onClick={() => onOpenQuickAdd?.()}
-                className="touch-target p-1.5 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-all active:scale-90"
+                className="touch-target p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-all active:scale-90"
                 title="Add to playlist, queue, or liked"
               >
-                <PlusCircle size={20} />
+                <PlusCircle size={22} />
               </button>
             </div>
 
             {/* Seek bar with fluid undulating wave animation */}
-            <div className="w-full">
+            <div className="w-full px-1 sm:px-2">
               <WaveSeekBar
                 progress={progress}
                 currentTime={currentTime}
@@ -603,31 +605,32 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
             </div>
 
             {/* Controls */}
-            <div className="flex items-center justify-between w-full px-2">
-              <button onClick={toggleShuffle} className={`touch-target transition-colors ${isShuffled ? 'text-brand' : 'text-gray-400 hover:text-white'}`}>
-                <Shuffle size={18} />
+            <div className="flex items-center justify-between w-full px-2 sm:px-6">
+              <button onClick={toggleShuffle} className={`touch-target transition-colors ${isShuffled ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title="Shuffle">
+                <Shuffle size={20} />
               </button>
-              <button onClick={previous} className="touch-target text-gray-300 hover:text-white transition-colors">
-                <SkipBack size={24} fill="currentColor" />
+              <button onClick={previous} className="touch-target text-gray-300 hover:text-white transition-colors" title="Previous">
+                <SkipBack size={26} fill="currentColor" />
               </button>
               <button onClick={togglePlay} disabled={isLoading}
-                className="w-14 h-14 rounded-full bg-white flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all shadow-xl disabled:opacity-50">
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all shadow-2xl disabled:opacity-50"
+                title={isPlaying ? 'Pause' : 'Play'}>
                 {isLoading
-                  ? <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                  : isPlaying ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" className="ml-1" />}
+                  ? <div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  : isPlaying ? <Pause size={26} fill="currentColor" /> : <Play size={26} fill="currentColor" className="ml-1" />}
               </button>
-              <button onClick={next} className="touch-target text-gray-300 hover:text-white transition-colors">
-                <SkipForward size={24} fill="currentColor" />
+              <button onClick={next} className="touch-target text-gray-300 hover:text-white transition-colors" title="Next">
+                <SkipForward size={26} fill="currentColor" />
               </button>
-              <button onClick={cycleRepeat} className={`touch-target transition-colors ${repeatMode !== 'none' ? 'text-brand' : 'text-gray-400 hover:text-white'}`}>
-                <RepeatIcon size={18} />
+              <button onClick={cycleRepeat} className={`touch-target transition-colors ${repeatMode !== 'none' ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title="Repeat">
+                <RepeatIcon size={20} />
               </button>
             </div>
 
             {/* Volume */}
-            <div className="flex items-center gap-2.5 w-full">
-              <button onClick={toggleMute} className="touch-target text-gray-400 hover:text-white transition-colors shrink-0">
-                <VolumeIcon size={16} />
+            <div className="flex items-center gap-3 w-full px-2 sm:px-6">
+              <button onClick={toggleMute} className="touch-target text-gray-400 hover:text-white transition-colors shrink-0" title="Mute/Unmute">
+                <VolumeIcon size={18} />
               </button>
               <input type="range" min={0} max={100} step={1} value={isMuted ? 0 : volume}
                 onChange={e => setVolume(parseFloat(e.target.value))}
@@ -636,14 +639,14 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
             </div>
 
             {/* Bottom panel toggles: Lyrics & Queue */}
-            <div className="flex items-center justify-center gap-2.5 w-full pt-0.5">
+            <div className="flex items-center justify-center gap-3.5 w-full pt-1">
               <button onClick={() => setPanel(p => p === 'lyrics' ? null : 'lyrics')}
-                className={`touch-target flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${panel === 'lyrics' ? 'bg-brand text-black shadow-md shadow-brand/30' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>
-                <Mic2 size={13} /> Lyrics
+                className={`touch-target flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2 rounded-full text-xs sm:text-sm font-semibold transition-all ${panel === 'lyrics' ? 'bg-brand text-black shadow-lg shadow-brand/30' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>
+                <Mic2 size={15} /> Lyrics
               </button>
               <button onClick={() => setPanel(p => p === 'queue' ? null : 'queue')}
-                className={`touch-target flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${panel === 'queue' ? 'bg-brand text-black shadow-md shadow-brand/30' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>
-                <ListMusic size={13} /> Queue
+                className={`touch-target flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2 rounded-full text-xs sm:text-sm font-semibold transition-all ${panel === 'queue' ? 'bg-brand text-black shadow-lg shadow-brand/30' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>
+                <ListMusic size={15} /> Queue
               </button>
             </div>
           </div>
