@@ -157,6 +157,164 @@ router.get('/search', async (req, res) => {
   }
 })
 
+// ── 1.5 Get Album Details and Complete Track List ──
+router.get('/album/:collectionId', async (req, res) => {
+  try {
+    const rawId = req.params.collectionId
+    const { title, artist } = req.query
+    if (!rawId) {
+      return res.status(400).json({ error: 'Album collectionId is required' })
+    }
+
+    const cleanId = rawId.replace(/^alb_/, '').trim()
+    const cacheKey = `album_tracks_${cleanId}`
+    const cached = getFromCache(cacheKey)
+    if (cached) return res.json(cached)
+
+    let albumData = null
+    let tracks = []
+
+    // 1. Primary lookup via iTunes Lookup API (with proxies fallback)
+    const lookupUrls = [
+      `https://itunes.apple.com/lookup?id=${cleanId}&entity=song&limit=100`,
+      `https://api.allorigins.win/get?url=${encodeURIComponent(`https://itunes.apple.com/lookup?id=${cleanId}&entity=song&limit=100`)}`,
+      `https://corsproxy.io/?${encodeURIComponent(`https://itunes.apple.com/lookup?id=${cleanId}&entity=song&limit=100`)}`
+    ]
+
+    for (const url of lookupUrls) {
+      try {
+        const response = await fetchWithTimeout(url, 8000)
+        if (!response.ok) continue
+        let json = await response.json()
+        if (typeof json.contents === 'string') {
+          json = JSON.parse(json.contents)
+        }
+
+        if (json?.results && json.results.length > 0) {
+          const col = json.results.find(r => r.wrapperType === 'collection' || r.collectionType === 'Album') || json.results[0]
+          const year = col.releaseDate ? new Date(col.releaseDate).getFullYear() : 'N/A'
+
+          albumData = {
+            id: `alb_${col.collectionId || cleanId}`,
+            collectionId: col.collectionId || cleanId,
+            title: col.collectionName || title || 'Album',
+            artist: col.artistName || artist || '',
+            coverUrl: (col.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
+            releaseDate: col.releaseDate || '',
+            year,
+            genre: col.primaryGenreName || 'Music',
+            trackCount: col.trackCount || 0,
+            copyright: col.copyright || '',
+            viewUrl: col.collectionViewUrl || ''
+          }
+
+          tracks = json.results
+            .filter(r => r.wrapperType === 'track' || r.kind === 'song')
+            .map((t, idx) => ({
+              id: `it_${t.trackId}`,
+              trackId: t.trackId,
+              title: t.trackName || `Track ${idx + 1}`,
+              artist: t.artistName || albumData.artist,
+              album: t.collectionName || albumData.title,
+              coverUrl: (t.artworkUrl100 || albumData.coverUrl || '').replace('100x100bb', '600x600bb'),
+              audioUrl: t.previewUrl || '',
+              duration: t.trackTimeMillis ? Math.round(t.trackTimeMillis / 1000) : 180,
+              trackNumber: t.trackNumber || idx + 1,
+              source: 'itunes',
+              genre: t.primaryGenreName || albumData.genre,
+              isStreamable: true
+            }))
+            .sort((a, b) => a.trackNumber - b.trackNumber)
+
+          if (tracks.length > 0) break
+        }
+      } catch (_) {}
+    }
+
+    // 2. Fallback: Search iTunes or Deezer for the album tracks if direct lookup returned empty
+    if (tracks.length === 0 && (title || artist)) {
+      try {
+        const queryTerm = [artist, title].filter(Boolean).join(' ')
+        const searchUrls = [
+          `https://itunes.apple.com/search?term=${encodeURIComponent(queryTerm)}&media=music&entity=song&limit=60`,
+          `https://api.allorigins.win/get?url=${encodeURIComponent(`https://itunes.apple.com/search?term=${encodeURIComponent(queryTerm)}&media=music&entity=song&limit=60`)}`
+        ]
+
+        for (const sUrl of searchUrls) {
+          try {
+            const sRes = await fetchWithTimeout(sUrl, 7000)
+            if (!sRes.ok) continue
+            let sJson = await sRes.json()
+            if (typeof sJson.contents === 'string') sJson = JSON.parse(sJson.contents)
+
+            if (sJson?.results && sJson.results.length > 0) {
+              const matched = sJson.results.filter(r => 
+                String(r.collectionId) === String(cleanId) ||
+                (title && r.collectionName?.toLowerCase().includes(title.toLowerCase()))
+              )
+              const listToUse = matched.length > 0 ? matched : sJson.results.slice(0, 20)
+
+              tracks = listToUse.map((t, idx) => ({
+                id: `it_${t.trackId}`,
+                trackId: t.trackId,
+                title: t.trackName || `Track ${idx + 1}`,
+                artist: t.artistName || artist || '',
+                album: t.collectionName || title || 'Album',
+                coverUrl: (t.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
+                audioUrl: t.previewUrl || '',
+                duration: t.trackTimeMillis ? Math.round(t.trackTimeMillis / 1000) : 180,
+                trackNumber: t.trackNumber || idx + 1,
+                source: 'itunes',
+                genre: t.primaryGenreName || 'Music',
+                isStreamable: true
+              }))
+
+              if (!albumData && listToUse[0]) {
+                const first = listToUse[0]
+                albumData = {
+                  id: `alb_${first.collectionId || cleanId}`,
+                  collectionId: first.collectionId || cleanId,
+                  title: first.collectionName || title,
+                  artist: first.artistName || artist,
+                  coverUrl: (first.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
+                  year: first.releaseDate ? new Date(first.releaseDate).getFullYear() : 'N/A',
+                  genre: first.primaryGenreName || 'Music',
+                  trackCount: tracks.length,
+                  viewUrl: first.collectionViewUrl || ''
+                }
+              }
+
+              if (tracks.length > 0) break
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
+    }
+
+    const payload = {
+      album: albumData || {
+        id: `alb_${cleanId}`,
+        collectionId: cleanId,
+        title: title || 'Album',
+        artist: artist || '',
+        coverUrl: '',
+        year: 'N/A',
+        trackCount: tracks.length
+      },
+      tracks
+    }
+
+    if (tracks.length > 0) {
+      setToCache(cacheKey, payload)
+    }
+
+    return res.json(payload)
+  } catch (err) {
+    console.error('Get album tracks error:', err)
+    return res.status(500).json({ error: 'Failed to retrieve album tracks' })
+  }
+})
+
 // ── 2. Get Comprehensive Artist Profile & Catalog ──
 router.get('/:query', async (req, res) => {
   try {

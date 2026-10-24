@@ -17,9 +17,10 @@ import {
   ArrowLeft,
   Flame,
   Radio,
-  Clock
+  Clock,
+  ExternalLink
 } from 'lucide-react'
-import { getArtistProfile, isArtistFollowed, toggleFollowArtist } from '../services/artistService'
+import { getArtistProfile, isArtistFollowed, toggleFollowArtist, getAlbumTracks } from '../services/artistService'
 import { usePlayer } from '../context/PlayerContext'
 import { useAuth } from '../context/AuthContext'
 import SongRow from '../components/SongRow'
@@ -41,6 +42,8 @@ export default function ArtistPage() {
   const [activeTab, setActiveTab] = useState('all') // 'all' | 'popular' | 'albums' | 'new' | 'upcoming' | 'collabs'
   const [showAllTopSongs, setShowAllTopSongs] = useState(false)
   const [selectedAlbum, setSelectedAlbum] = useState(null)
+  const [albumTracks, setAlbumTracks] = useState([])
+  const [albumLoading, setAlbumLoading] = useState(false)
 
   // Load artist data
   useEffect(() => {
@@ -50,6 +53,8 @@ export default function ArtistPage() {
     setArtistSearch('')
     setActiveTab('all')
     setSelectedAlbum(null)
+    setAlbumTracks([])
+    setAlbumLoading(false)
 
     getArtistProfile(name)
       .then(data => {
@@ -103,6 +108,85 @@ export default function ArtistPage() {
       queue.sort(() => Math.random() - 0.5)
     }
     play(queue[0], queue, 0)
+  }
+
+  // Open Album Modal and Fetch Full Album Tracklist
+  const handleOpenAlbum = async (album, autoPlay = false) => {
+    setSelectedAlbum(album)
+    setAlbumLoading(true)
+    setAlbumTracks([])
+
+    try {
+      const data = await getAlbumTracks(album.collectionId || album.id, album.title, album.artist)
+      const fetchedTracks = data?.tracks || []
+      setAlbumTracks(fetchedTracks)
+      if (data?.album) {
+        setSelectedAlbum(prev => ({ ...(prev || {}), ...data.album }))
+      }
+      if (autoPlay && fetchedTracks.length > 0) {
+        play(fetchedTracks[0], fetchedTracks, 0)
+        toast.success(`Playing ${album.title}`)
+      }
+    } catch (err) {
+      console.warn('Failed to load album tracks:', err)
+      setAlbumTracks([])
+    } finally {
+      setAlbumLoading(false)
+    }
+  }
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setSelectedAlbum(null)
+    }
+    if (selectedAlbum) {
+      window.addEventListener('keydown', handleKeyDown)
+      return () => window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selectedAlbum])
+
+  // Album total duration
+  const albumTotalDuration = useMemo(() => {
+    if (!albumTracks.length) return ''
+    const totalSec = albumTracks.reduce((acc, t) => acc + (t.duration || 0), 0)
+    const mins = Math.round(totalSec / 60)
+    if (mins >= 60) {
+      const hrs = Math.floor(mins / 60)
+      const rem = mins % 60
+      return `${hrs} hr ${rem > 0 ? `${rem} min` : ''}`
+    }
+    return `${mins} min`
+  }, [albumTracks])
+
+  // Check if current playing track belongs to selected album
+  const isSelectedAlbumPlaying = useMemo(() => {
+    if (!isPlaying || !currentSong || !albumTracks.length) return false
+    return albumTracks.some(
+      t => t.id === currentSong.id ||
+      (t.title?.toLowerCase() === currentSong.title?.toLowerCase() &&
+       t.artist?.toLowerCase() === currentSong.artist?.toLowerCase())
+    )
+  }, [isPlaying, currentSong, albumTracks])
+
+  // Play whole album or shuffle
+  const handlePlayAlbum = (shuffle = false) => {
+    if (!albumTracks.length) {
+      toast.error('No tracks loaded for this album yet')
+      return
+    }
+    if (isSelectedAlbumPlaying && !shuffle) {
+      togglePlay()
+      return
+    }
+    if (shuffle) {
+      const shuffled = [...albumTracks].sort(() => Math.random() - 0.5)
+      play(shuffled[0], shuffled, 0)
+      toast.success(`Shuffling ${selectedAlbum.title}`)
+    } else {
+      play(albumTracks[0], albumTracks, 0)
+      toast.success(`Playing ${selectedAlbum.title}`)
+    }
   }
 
   // Filter songs, albums, and collabs via the dedicated in-page search bar
@@ -565,7 +649,7 @@ export default function ArtistPage() {
                 {filteredAlbums.map(album => (
                   <div
                     key={album.id}
-                    onClick={() => setSelectedAlbum(album)}
+                    onClick={() => handleOpenAlbum(album)}
                     className="group relative flex flex-col p-3 rounded-2xl bg-surface-2/50 hover:bg-surface-3/80 border border-white/5 hover:border-white/15 cursor-pointer transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
                   >
                     {/* Album Art with Hover Play */}
@@ -577,9 +661,16 @@ export default function ArtistPage() {
                         loading="lazy"
                       />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <div className="w-10 h-10 rounded-full bg-brand text-black flex items-center justify-center shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleOpenAlbum(album, true)
+                          }}
+                          className="w-10 h-10 rounded-full bg-brand hover:scale-110 text-black flex items-center justify-center shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform"
+                          title={`Play ${album.title}`}
+                        >
                           <Play size={16} fill="black" className="translate-x-0.5" />
-                        </div>
+                        </button>
                       </div>
                     </div>
 
@@ -686,76 +777,177 @@ export default function ArtistPage() {
         </section>
       </div>
 
-      {/* ── Album Detail Modal ── */}
+      {/* ── Album Detail Modal with Tracklist ── */}
       {selectedAlbum && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-fade-in"
           onClick={() => setSelectedAlbum(null)}
         >
           <div
-            className="relative w-full max-w-lg bg-[#141419] border border-white/10 rounded-3xl p-6 shadow-2xl animate-pop-in"
+            className="relative w-full max-w-2xl lg:max-w-3xl max-h-[90vh] bg-[#121217]/95 border border-white/10 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-pop-in"
             onClick={e => e.stopPropagation()}
           >
+            {/* Top Close Button */}
             <button
               onClick={() => setSelectedAlbum(null)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
-              title="Close"
+              className="absolute top-4 right-4 z-20 text-gray-400 hover:text-white p-2 rounded-full bg-white/5 hover:bg-white/15 backdrop-blur-md transition-colors"
+              title="Close (Esc)"
             >
               <X size={18} />
             </button>
 
-            <div className="flex items-center gap-5 mb-6">
-              <img
-                src={selectedAlbum.coverUrl}
-                alt={selectedAlbum.title}
-                className="w-24 h-24 rounded-2xl object-cover shadow-xl border border-white/10"
-              />
-              <div className="flex-1 min-w-0">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-brand">
-                  Album Release
-                </span>
-                <h3 className="text-xl font-black text-white truncate mt-0.5">
-                  {selectedAlbum.title}
-                </h3>
-                <p className="text-xs text-gray-400 mt-1">
-                  {selectedAlbum.artist} · {selectedAlbum.year}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {selectedAlbum.trackCount} tracks · {selectedAlbum.genre}
-                </p>
+            {/* Album Header Banner */}
+            <div className="relative p-6 sm:p-7 border-b border-white/[0.08] bg-gradient-to-b from-white/[0.05] via-transparent to-transparent shrink-0">
+              <div className="flex flex-col sm:flex-row items-center sm:items-end gap-5">
+                {/* Album Cover */}
+                <div className="relative group shrink-0">
+                  <img
+                    src={selectedAlbum.coverUrl}
+                    alt={selectedAlbum.title}
+                    className="w-28 h-28 sm:w-36 sm:h-36 rounded-2xl object-cover shadow-2xl border border-white/10"
+                  />
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+                </div>
+
+                {/* Album Details */}
+                <div className="flex-1 min-w-0 text-center sm:text-left">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand/15 border border-brand/30 text-brand text-[10px] font-extrabold uppercase tracking-wider mb-2">
+                    <Disc size={12} />
+                    <span>Album Release</span>
+                  </div>
+
+                  <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-white leading-tight line-clamp-2">
+                    {selectedAlbum.title}
+                  </h3>
+
+                  <p className="text-xs sm:text-sm text-gray-300 mt-1 font-medium">
+                    <Link
+                      to={`/artist/${encodeURIComponent(selectedAlbum.artist)}`}
+                      onClick={() => setSelectedAlbum(null)}
+                      className="hover:underline hover:text-brand transition-colors font-bold text-white"
+                    >
+                      {selectedAlbum.artist}
+                    </Link>
+                    {' · '}
+                    <span>{selectedAlbum.year || 'Album'}</span>
+                    {selectedAlbum.genre && (
+                      <>
+                        {' · '}
+                        <span className="text-gray-400">{selectedAlbum.genre}</span>
+                      </>
+                    )}
+                  </p>
+
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-2 text-[11px] text-gray-400 font-medium">
+                    <span>
+                      {albumTracks.length > 0
+                        ? `${albumTracks.length} tracks`
+                        : selectedAlbum.trackCount
+                        ? `${selectedAlbum.trackCount} tracks`
+                        : ''}
+                    </span>
+                    {albumTotalDuration && (
+                      <>
+                        <span>•</span>
+                        <span>{albumTotalDuration}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons Row */}
+              <div className="flex flex-wrap items-center gap-3 mt-5 pt-4 border-t border-white/[0.06]">
+                <button
+                  onClick={() => handlePlayAlbum(false)}
+                  disabled={albumLoading || albumTracks.length === 0}
+                  className="px-6 h-11 bg-brand hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed text-black font-extrabold rounded-full flex items-center justify-center gap-2 shadow-lg shadow-brand/30 hover:scale-[1.02] active:scale-[0.98] transition-all text-sm"
+                >
+                  {isSelectedAlbumPlaying ? (
+                    <>
+                      <Pause size={16} fill="black" />
+                      <span>Pause</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play size={16} fill="black" />
+                      <span>Play Album</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => handlePlayAlbum(true)}
+                  disabled={albumLoading || albumTracks.length === 0}
+                  className="px-4 h-11 bg-white/[0.08] hover:bg-white/[0.14] disabled:opacity-50 disabled:cursor-not-allowed border border-white/10 text-white rounded-full flex items-center justify-center gap-2 text-xs font-bold transition-all"
+                  title="Shuffle Album"
+                >
+                  <Shuffle size={15} />
+                  <span>Shuffle</span>
+                </button>
+
+                {selectedAlbum.viewUrl && (
+                  <a
+                    href={selectedAlbum.viewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-auto px-4 h-11 bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-gray-300 hover:text-white rounded-full flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors"
+                  >
+                    <span>View on Apple Music</span>
+                    <ExternalLink size={13} />
+                  </a>
+                )}
               </div>
             </div>
 
-            {/* Quick Action in Modal */}
-            <div className="flex items-center gap-3 pt-4 border-t border-white/[0.08]">
-              <button
-                onClick={() => {
-                  // Find songs belonging to this album or play artist top songs
-                  const albumTracks = topSongs.filter(
-                    s => s.album?.toLowerCase() === selectedAlbum.title?.toLowerCase()
-                  )
-                  if (albumTracks.length > 0) {
-                    play(albumTracks[0], albumTracks, 0)
-                  } else {
-                    handlePlayAll(false)
-                  }
-                  setSelectedAlbum(null)
-                }}
-                className="flex-1 h-11 bg-brand hover:bg-brand-dark text-black font-extrabold rounded-full flex items-center justify-center gap-2 shadow-lg shadow-brand/30 transition-all text-sm"
-              >
-                <Play size={16} fill="black" />
-                <span>Play Album</span>
-              </button>
+            {/* Scrollable Album Song List */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-1">
+              <div className="flex items-center justify-between text-[11px] font-bold text-gray-400 uppercase tracking-wider px-3 pb-2 border-b border-white/[0.06] mb-2">
+                <div className="flex items-center gap-4">
+                  <span className="w-5 text-center">#</span>
+                  <span>Title</span>
+                </div>
+                <div className="flex items-center gap-4 pr-3">
+                  <Clock size={13} />
+                </div>
+              </div>
 
-              {selectedAlbum.viewUrl && (
-                <a
-                  href={selectedAlbum.viewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 h-11 bg-white/[0.08] hover:bg-white/[0.12] border border-white/10 text-white rounded-full flex items-center justify-center text-xs font-semibold transition-colors"
-                >
-                  View on Apple Music
-                </a>
+              {albumLoading ? (
+                /* Skeleton loader */
+                <div className="space-y-2 py-2">
+                  {[...Array(6)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] border border-white/[0.03] animate-pulse"
+                    >
+                      <div className="w-5 h-4 bg-white/10 rounded" />
+                      <div className="w-9 h-9 bg-white/10 rounded-lg shrink-0" />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-3.5 bg-white/10 rounded w-1/3" />
+                        <div className="h-2.5 bg-white/5 rounded w-1/5" />
+                      </div>
+                      <div className="w-10 h-3 bg-white/10 rounded" />
+                    </div>
+                  ))}
+                </div>
+              ) : albumTracks.length === 0 ? (
+                /* Empty fallback */
+                <div className="py-12 text-center text-gray-500">
+                  <Disc size={36} className="mx-auto mb-2 opacity-30 animate-spin-slow" />
+                  <p className="text-sm font-semibold text-gray-400">No track listing available for this album</p>
+                  <p className="text-xs text-gray-500 mt-1">Try streaming the top songs or check Apple Music</p>
+                </div>
+              ) : (
+                /* Track rows */
+                albumTracks.map((track, idx) => (
+                  <SongRow
+                    key={track.id || `alb_trk_${idx}`}
+                    song={track}
+                    index={idx}
+                    queue={albumTracks}
+                    showIndex
+                  />
+                ))
               )}
             </div>
           </div>
