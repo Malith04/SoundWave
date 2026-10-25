@@ -611,19 +611,19 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
 
         {/* Center Player Body */}
         <div className="flex-1 overflow-hidden px-4 sm:px-8 flex flex-col justify-center">
-          <div className="flex flex-col items-center gap-3 sm:gap-4 max-w-md sm:max-w-lg lg:max-w-xl mx-auto my-auto w-full py-1">
+          <div className="flex flex-col items-center gap-3 sm:gap-3.5 max-w-[420px] sm:max-w-[450px] mx-auto my-auto w-full py-1">
 
-            {/* Art / Video (Strict 1:1 square: full image visible without horizontal or vertical cropping) */}
+            {/* Art / Video (Balanced, previewable square artwork with graceful viewport height cap) */}
             <div
               className={`relative ${
                 viewMode === 'video'
-                  ? 'w-64 xs:w-72 sm:w-80 aspect-video'
-                  : 'w-36 h-36 xs:w-40 xs:h-40 sm:w-44 sm:h-44 aspect-square'
+                  ? 'w-full max-w-sm sm:max-w-md aspect-video max-h-[35vh]'
+                  : 'w-56 h-56 xs:w-64 xs:h-64 sm:w-72 sm:h-72 md:w-80 md:h-80 max-h-[36vh] aspect-square'
               } shrink-0 mx-auto`}
             >
               {viewMode === 'audio' ? (
                 <div className="relative w-full h-full">
-                  <div className="absolute -inset-2.5 rounded-2xl opacity-30 blur-xl pointer-events-none" style={{ background: 'var(--brand)' }} />
+                  <div className="absolute -inset-3 rounded-2xl opacity-25 blur-2xl pointer-events-none" style={{ background: 'var(--brand)' }} />
                   <div className={`relative w-full h-full rounded-2xl overflow-hidden shadow-2xl ${settings?.animatedArt && isPlaying ? 'album-glow' : ''}`}>
                     <img
                       src={currentSong.coverUrl || 'https://via.placeholder.com/300'}
@@ -649,7 +649,7 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
             </div>
 
             {/* Middle Section between Album Cover and Seek Bar: Song Info OR Sentence-by-Sentence Live Lyrics */}
-            <div className="w-full px-2 flex flex-col items-center justify-center min-h-[96px]">
+            <div className="w-full px-2 flex flex-col items-center justify-center min-h-[72px] sm:min-h-[80px]">
               {showLyrics ? (
                 <SentenceLyricsView
                   song={currentSong}
@@ -658,7 +658,7 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
                 />
               ) : (
                 <div className="text-center w-full px-2">
-                  <p className="text-xl sm:text-2xl font-black text-white leading-tight truncate drop-shadow-sm">{currentSong.title}</p>
+                  <p className="text-2xl sm:text-3xl font-extrabold text-white leading-tight truncate drop-shadow-sm">{currentSong.title}</p>
                   <p className="text-gray-300 text-sm sm:text-base font-semibold truncate mt-1">
                     <Link
                       to={`/artist/${encodeURIComponent(currentSong.artist)}`}
@@ -677,16 +677,22 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
             </div>
 
             {/* Action buttons: Like & Quick Add */}
-            <div className="flex items-center justify-between w-full px-2 sm:px-4">
-              <button onClick={onLike} className={`touch-target transition-all active:scale-90 cursor-pointer ${liked ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title={liked ? 'Unlike' : 'Like'}>
-                <Heart size={22} fill={liked ? 'currentColor' : 'none'} />
+            <div className="flex items-center justify-between w-full px-3 sm:px-4">
+              <button
+                onClick={onLike}
+                className={`p-2 rounded-full hover:bg-white/10 transition-all active:scale-90 cursor-pointer ${liked ? 'text-rose-500' : 'text-gray-400 hover:text-white'}`}
+                title={liked ? 'Unlike' : 'Like'}
+                aria-label={liked ? 'Unlike' : 'Like'}
+              >
+                <Heart size={21} fill={liked ? 'currentColor' : 'none'} />
               </button>
               <button
                 onClick={() => onOpenQuickAdd?.()}
-                className="touch-target p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-all active:scale-90 cursor-pointer"
+                className="p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-all active:scale-90 cursor-pointer"
                 title="Add to playlist, queue, or liked"
+                aria-label="Add options"
               >
-                <PlusCircle size={22} />
+                <PlusCircle size={21} />
               </button>
             </div>
 
@@ -706,52 +712,52 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
             </div>
 
             {/* Controls */}
-            <div className="flex items-center justify-between w-full px-2 sm:px-6">
-              <button onClick={toggleShuffle} className={`touch-target transition-colors cursor-pointer ${isShuffled ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title="Shuffle">
-                <Shuffle size={20} />
+            <div className="flex items-center justify-between w-full px-3 sm:px-5">
+              <button onClick={toggleShuffle} className={`touch-target p-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer ${isShuffled ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title="Shuffle">
+                <Shuffle size={18} />
               </button>
-              <button onClick={previous} className="touch-target text-gray-300 hover:text-white transition-colors cursor-pointer" title="Previous">
-                <SkipBack size={26} fill="currentColor" />
+              <button onClick={previous} className="touch-target p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer" title="Previous">
+                <SkipBack size={22} fill="currentColor" />
               </button>
               <button onClick={togglePlay} disabled={isLoading}
-                className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all shadow-2xl disabled:opacity-50 cursor-pointer"
+                className="w-12 h-12 sm:w-13 sm:h-13 rounded-full bg-white flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all shadow-xl disabled:opacity-50 cursor-pointer"
                 title={isPlaying ? 'Pause' : 'Play'}>
                 {isLoading
-                  ? <div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                  : isPlaying ? <Pause size={26} fill="currentColor" /> : <Play size={26} fill="currentColor" className="ml-1" />}
+                  ? <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  : isPlaying ? <Pause size={21} fill="currentColor" /> : <Play size={21} fill="currentColor" className="ml-0.5" />}
               </button>
-              <button onClick={next} className="touch-target text-gray-300 hover:text-white transition-colors cursor-pointer" title="Next">
-                <SkipForward size={26} fill="currentColor" />
+              <button onClick={next} className="touch-target p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer" title="Next">
+                <SkipForward size={22} fill="currentColor" />
               </button>
-              <button onClick={cycleRepeat} className={`touch-target transition-colors cursor-pointer ${repeatMode !== 'none' ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title="Repeat">
-                <RepeatIcon size={20} />
+              <button onClick={cycleRepeat} className={`touch-target p-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer ${repeatMode !== 'none' ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title="Repeat">
+                <RepeatIcon size={18} />
               </button>
             </div>
 
             {/* Volume */}
-            <div className="flex items-center gap-3 w-full px-2 sm:px-6">
-              <button onClick={toggleMute} className="touch-target text-gray-400 hover:text-white transition-colors shrink-0 cursor-pointer" title={isMuted ? "Unmute" : "Mute"}>
-                <VolumeIcon size={18} />
+            <div className="flex items-center justify-center gap-3 w-full max-w-[280px] sm:max-w-[320px] mx-auto px-2">
+              <button onClick={toggleMute} className="touch-target p-1.5 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors shrink-0 cursor-pointer" title={isMuted ? "Unmute" : "Mute"}>
+                <VolumeIcon size={16} />
               </button>
               <input type="range" min={0} max={100} step={1} value={isMuted ? 0 : volume}
                 onChange={e => setVolume(parseFloat(e.target.value))}
-                className="flex-1 mobile-volume-bar seek-bar cursor-pointer"
+                className="w-full mobile-volume-bar seek-bar cursor-pointer"
                 style={{ '--progress': `${isMuted ? 0 : volume}%` }} />
             </div>
 
             {/* Centered Lyrics Toggle Button */}
-            <div className="flex items-center justify-center w-full pt-1">
+            <div className="flex items-center justify-center w-full pt-0.5">
               <button
                 type="button"
                 onClick={() => setShowLyrics(s => !s)}
-                className={`touch-target flex items-center gap-2 px-5 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all shadow-lg active:scale-95 cursor-pointer ${
+                className={`touch-target flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg active:scale-95 cursor-pointer ${
                   showLyrics
                     ? 'bg-brand text-black shadow-brand/30 ring-2 ring-brand/40 font-bold'
                     : 'bg-white/10 text-gray-200 hover:bg-white/20 hover:text-white border border-white/10'
                 }`}
                 title={showLyrics ? "Show Song Details" : "Show Sentence-by-Sentence Live Lyrics"}
               >
-                <Mic2 size={15} className={showLyrics ? "animate-pulse" : ""} />
+                <Mic2 size={14} className={showLyrics ? "animate-pulse" : ""} />
                 <span>{showLyrics ? 'Hide Lyrics' : 'Lyrics'}</span>
               </button>
             </div>
