@@ -992,15 +992,15 @@ export default function Player() {
             />
           </div>
           {/* Mobile controls row */}
-          <div className="flex items-center gap-1.5 xs:gap-2 px-2.5 xs:px-3 py-2">
+          <div className="flex items-center gap-2 xs:gap-2.5 px-3 py-2">
             <button onClick={() => setExpanded(true)} className="relative shrink-0 touch-target" aria-label="Expand player">
               <img src={currentSong.coverUrl} alt={currentSong.title}
-                className={`w-10 h-10 rounded-lg object-cover ${isPlaying ? 'ring-2 ring-brand/60' : ''}`} />
+                className={`w-12 h-12 rounded-xl object-cover shadow-sm ${isPlaying ? 'ring-2 ring-brand/60' : ''}`} />
               {isPlaying && <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-brand rounded-full border-2 border-black animate-pulse" />}
             </button>
             <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setExpanded(true)}>
-              <p className="text-sm font-semibold truncate leading-tight">{currentSong.title}</p>
-              <p className="text-xs text-gray-400 truncate">
+              <p className="text-[14px] font-bold text-white truncate leading-snug">{currentSong.title}</p>
+              <p className="text-xs text-gray-300 font-medium truncate mt-0.5">
                 <Link
                   to={`/artist/${encodeURIComponent(currentSong.artist)}`}
                   onClick={e => e.stopPropagation()}
@@ -1010,7 +1010,7 @@ export default function Player() {
                 </Link>
               </p>
             </div>
-            <button onClick={handleLike} className={`touch-target shrink-0 p-1.5 ${liked ? 'text-brand' : 'text-gray-500 hover:text-white'}`} aria-label={liked ? 'Unlike' : 'Like'}>
+            <button onClick={handleLike} className={`touch-target shrink-0 p-1.5 ${liked ? 'text-rose-500' : 'text-gray-400 hover:text-white'}`} aria-label={liked ? 'Unlike' : 'Like'}>
               <Heart size={18} fill={liked ? 'currentColor' : 'none'} />
             </button>
             <button onClick={previous} className="touch-target text-gray-300 hidden min-[360px]:inline-flex p-1.5 shrink-0" aria-label="Previous">
@@ -1033,20 +1033,26 @@ export default function Player() {
         </div>
 
         {/* Desktop layout: full 3-column bar */}
-        <div className="hidden sm:flex items-center gap-4 px-4 sm:px-6 py-2 h-[72px]">
+        <div className="hidden sm:flex items-center gap-4 px-4 sm:px-6 py-2 h-[84px]">
           {/* Left: song info */}
-          <div className="flex items-center gap-3 min-w-0 w-60 lg:w-72 shrink-0">
-            <button onClick={() => setExpanded(true)} className="relative group shrink-0 touch-target" title="Open full player">
+          <div className="flex items-center gap-3.5 min-w-0 w-64 sm:w-72 lg:w-80 shrink-0">
+            <button onClick={() => setExpanded(true)} className="relative group shrink-0" title="Open full player">
               <img src={currentSong.coverUrl} alt={currentSong.title}
-                className={`w-12 h-12 rounded-lg object-cover transition-all group-hover:scale-105 ${isPlaying ? 'ring-2 ring-brand/60' : ''}`} />
-              <div className="absolute inset-0 rounded-lg bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <Maximize2 size={14} className="text-white" />
+                className={`w-[58px] h-[58px] rounded-xl object-cover shadow-md transition-all group-hover:scale-105 ${isPlaying ? 'ring-2 ring-brand/70 shadow-brand/20' : ''}`} />
+              <div className="absolute inset-0 rounded-xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <Maximize2 size={18} className="text-white drop-shadow" />
               </div>
-              {isPlaying && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-brand rounded-full border-2 border-black animate-pulse" />}
+              {isPlaying && <span className="absolute -top-1 -right-1 w-3 h-3 bg-brand rounded-full border-2 border-black animate-pulse shadow-sm" />}
             </button>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold truncate leading-tight">{currentSong.title}</p>
-              <p className="text-xs text-gray-400 truncate">
+            <div className="min-w-0 flex-1 flex flex-col justify-center">
+              <p
+                onClick={() => setExpanded(true)}
+                className="text-[15px] sm:text-base font-bold text-white truncate leading-snug tracking-tight drop-shadow-sm cursor-pointer hover:underline"
+                title={currentSong.title}
+              >
+                {currentSong.title}
+              </p>
+              <p className="text-xs sm:text-[13px] text-gray-300 font-medium truncate mt-0.5 leading-normal" title={currentSong.artist}>
                 <Link
                   to={`/artist/${encodeURIComponent(currentSong.artist)}`}
                   className="hover:underline hover:text-white transition-colors"
@@ -1055,8 +1061,13 @@ export default function Player() {
                 </Link>
               </p>
             </div>
-            <button onClick={handleLike} className={`touch-target shrink-0 transition-all active:scale-125 ${liked ? 'text-brand' : 'text-gray-500 hover:text-white'}`}>
-              <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
+            <button
+              onClick={handleLike}
+              className={`p-2 rounded-full hover:bg-white/10 shrink-0 transition-all active:scale-125 ${liked ? 'text-rose-500' : 'text-gray-400 hover:text-white'}`}
+              title={liked ? 'Unlike' : 'Like'}
+              aria-label={liked ? 'Unlike' : 'Like'}
+            >
+              <Heart size={19} fill={liked ? 'currentColor' : 'none'} />
             </button>
           </div>
 
@@ -1097,7 +1108,7 @@ export default function Player() {
           </div>
 
           {/* Right: volume + extras */}
-          <div className="flex items-center gap-2 lg:gap-2.5 shrink-0 w-60 lg:w-72 justify-end relative">
+          <div className="flex items-center gap-2 lg:gap-2.5 shrink-0 w-64 sm:w-72 lg:w-80 justify-end relative">
             {/* Quick Actions Plus Button replacing equalizer bars */}
             <div className="relative">
               <button
