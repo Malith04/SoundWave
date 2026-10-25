@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { Mail, Lock, Eye, EyeOff, Sparkles, ArrowRight, ShieldCheck, ArrowLeft, RefreshCw } from 'lucide-react'
 import OtpInput from '../components/OtpInput'
 import SoundWaveLogo from '../components/SoundWaveLogo'
+import GoogleSignInButton from '../components/GoogleSignInButton'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
@@ -114,11 +115,11 @@ export default function LoginPage() {
     }
   }
 
-  // Google One-Click Auth (with Mandatory Email Verification)
-  const handleGoogle = async () => {
+  // In-Page Google One-Click Auth (with Mandatory Email Verification, No extra tabs)
+  const handleGoogleSuccess = async (googleProfile) => {
     setLoading(true)
     try {
-      const res = await loginWithGoogle()
+      const res = await loginWithGoogle(undefined, googleProfile)
       
       // If 8-digit OTP is required for Google Sign-In
       if (res?.requiresOtp) {
@@ -188,20 +189,17 @@ export default function LoginPage() {
               </p>
             </div>
 
-            {/* Google One-Click Auth */}
-            <button
-              onClick={handleGoogle}
-              type="button"
-              className="w-full h-12 flex items-center justify-center gap-3 bg-white/[0.05] hover:bg-white/[0.09] border border-white/10 hover:border-white/20 rounded-2xl text-sm font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 shadow-sm group"
-            >
-              <svg width="18" height="18" viewBox="0 0 18 18" className="shrink-0 transition-transform group-hover:scale-105">
-                <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
-                <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
-                <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
-                <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
-              </svg>
-              <span>Continue with Google</span>
-            </button>
+            {/* Google One-Click Auth (In-Page, No new tab) */}
+            <GoogleSignInButton
+              context="signin"
+              text="continue_with"
+              onSuccess={handleGoogleSuccess}
+              onError={(err) => {
+                console.error('[Google Sign-In Error]', err)
+                toast.error(err.message || 'Google sign-in error.')
+              }}
+              disabled={loading}
+            />
 
             {/* Divider */}
             <div className="flex items-center gap-3 my-6">
