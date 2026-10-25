@@ -13,6 +13,14 @@ import { useAuth } from '../context/AuthContext'
 import { toggleFavorite, isFavorite } from '../services/userService'
 import AddToPlaylistModal from './AddToPlaylistModal'
 import SongModal from './SongModal'
+import CinemaVideoPlayer from './CinemaVideoPlayer'
+import {
+  getVideoIntroOffset,
+  getStoredNudge,
+  setStoredNudge,
+  calculateVideoTime,
+  calculateAudioTime
+} from '../services/videoSyncService'
 import toast from 'react-hot-toast'
 
 function formatTime(secs) {
@@ -541,6 +549,13 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
   const [viewMode, setViewMode] = useState('audio')
   const [videoId, setVideoId] = useState(null)
   const [loadingVideo, setLoadingVideo] = useState(false)
+  const [introOffset, setIntroOffset] = useState(0)
+  const [syncNudge, setSyncNudge] = useState(0)
+  const [videoStartTime, setVideoStartTime] = useState(0)
+
+  const videoCurrentTimeRef = useRef(0)
+  const isVideoPlayingRef = useRef(true)
+  const wasPlayingAudioBeforeVideoRef = useRef(false)
   const containerRef = useRef(null)
   const queueSectionRef = useRef(null)
   const VolumeIcon = isMuted || volume === 0 ? VolumeX : volume < 50 ? Volume1 : Volume2
@@ -564,16 +579,170 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
     }
   }, [])
 
+  // Preload video info & intro offset for current song in the background
   useEffect(() => {
-    if (viewMode === 'video' && !videoId && currentSong) {
-      setLoadingVideo(true)
-      import('../services/musicApi').then(({ searchYouTube }) => {
-        searchYouTube(`${currentSong.title} ${currentSong.artist} official music video`)
-          .then(id => { setVideoId(id); setLoadingVideo(false) })
-          .catch(() => setLoadingVideo(false))
-      })
+    let isMounted = true
+    if (!currentSong) return
+
+    const resolveVideoAndIntro = async () => {
+      let vId = currentSong.videoId
+      if (!vId) {
+        try {
+          const { searchYouTube } = await import('../services/musicApi')
+          vId = await searchYouTube(`${currentSong.title} ${currentSong.artist} official music video`)
+        } catch (_) {}
+      }
+
+      if (!isMounted || !vId) return
+      setVideoId(vId)
+
+      try {
+        const [offset, nudge] = await Promise.all([
+          getVideoIntroOffset(vId),
+          getStoredNudge(vId)
+        ])
+        if (isMounted) {
+          setIntroOffset(offset)
+          setSyncNudge(nudge)
+        }
+      } catch (_) {}
     }
-  }, [viewMode, currentSong, videoId])
+
+    resolveVideoAndIntro()
+
+    return () => { isMounted = false }
+  }, [currentSong?.id, currentSong?.title, currentSong?.artist, currentSong?.videoId])
+
+  // If track changes while in video mode, reset and load the next track's video
+  useEffect(() => {
+    if (viewMode === 'video' && currentSong) {
+      setVideoStartTime(0)
+      videoCurrentTimeRef.current = 0
+      setLoadingVideo(true)
+
+      const loadNextTrackVideo = async () => {
+        try {
+          let vId = currentSong.videoId
+          if (!vId) {
+            const { searchYouTube } = await import('../services/musicApi')
+            vId = await searchYouTube(`${currentSong.title} ${currentSong.artist} official music video`)
+          }
+          if (vId) {
+            setVideoId(vId)
+            const [offset, nudge] = await Promise.all([
+              getVideoIntroOffset(vId),
+              getStoredNudge(vId)
+            ])
+            setIntroOffset(offset)
+            setSyncNudge(nudge)
+            const startT = offset + nudge
+            setVideoStartTime(startT)
+            videoCurrentTimeRef.current = startT
+          }
+        } catch (e) {
+          console.warn('Failed to switch video track:', e)
+        } finally {
+          setLoadingVideo(false)
+        }
+      }
+
+      loadNextTrackVideo()
+    }
+  }, [currentSong?.id])
+
+  // Seamless Mode Switcher (Audio <-> Video) with intro offset & timeline handoff
+  const handleSwitchMode = async (targetMode) => {
+    if (targetMode === viewMode) return
+
+    if (targetMode === 'video') {
+      const currentAudioSec = currentTime || 0
+      wasPlayingAudioBeforeVideoRef.current = isPlaying
+      if (isPlaying) {
+        togglePlay() // pause audio stream to prevent echo
+      }
+
+      const targetVTime = calculateVideoTime(currentAudioSec, introOffset, syncNudge)
+      setVideoStartTime(targetVTime)
+      videoCurrentTimeRef.current = targetVTime
+      setViewMode('video')
+
+      // Ensure video is fetched if not already preloaded
+      if (!videoId && currentSong) {
+        setLoadingVideo(true)
+        try {
+          let vId = currentSong.videoId
+          if (!vId) {
+            const { searchYouTube } = await import('../services/musicApi')
+            vId = await searchYouTube(`${currentSong.title} ${currentSong.artist} official music video`)
+          }
+          if (vId) {
+            setVideoId(vId)
+            const [offset, nudge] = await Promise.all([
+              getVideoIntroOffset(vId),
+              getStoredNudge(vId)
+            ])
+            setIntroOffset(offset)
+            setSyncNudge(nudge)
+            const recalculated = calculateVideoTime(currentAudioSec, offset, nudge)
+            setVideoStartTime(recalculated)
+            videoCurrentTimeRef.current = recalculated
+          }
+        } catch (e) {
+          console.warn('Failed to load video:', e)
+        } finally {
+          setLoadingVideo(false)
+        }
+      }
+    } else {
+      // Switching back to audio
+      const vTime = videoCurrentTimeRef.current || 0
+      const aTime = calculateAudioTime(vTime, introOffset, syncNudge)
+
+      if (duration > 0) {
+        const fraction = Math.min(1, Math.max(0, aTime / duration))
+        seek(fraction)
+      }
+
+      setViewMode('audio')
+
+      // Resume audio if video was active or audio was playing before switch
+      if (isVideoPlayingRef.current || wasPlayingAudioBeforeVideoRef.current) {
+        if (!isPlaying) {
+          setTimeout(() => {
+            togglePlay()
+          }, 60)
+        }
+      }
+    }
+  }
+
+  // Handle Close / Minimize with timeline restoration
+  const handleClose = () => {
+    if (viewMode === 'video') {
+      const vTime = videoCurrentTimeRef.current || 0
+      const aTime = calculateAudioTime(vTime, introOffset, syncNudge)
+      if (duration > 0) {
+        seek(Math.min(1, Math.max(0, aTime / duration)))
+      }
+      if (isVideoPlayingRef.current || wasPlayingAudioBeforeVideoRef.current) {
+        if (!isPlaying) {
+          setTimeout(() => {
+            togglePlay()
+          }, 60)
+        }
+      }
+    }
+    onClose()
+  }
+
+  // Handle intro offset user nudge (-1s / +1s)
+  const handleNudgeIntro = (delta) => {
+    const newNudge = (syncNudge || 0) + delta
+    setSyncNudge(newNudge)
+    if (videoId) {
+      setStoredNudge(videoId, newNudge)
+    }
+  }
 
   return (
     <div ref={containerRef} className="mobile-expanded-player slide-up flex flex-col bg-black text-white no-scrollbar select-none">
@@ -589,7 +758,7 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
       <div className="player-snap-section relative z-10 min-h-screen min-h-[100dvh] flex flex-col justify-between mobile-safe-area shrink-0">
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-8 py-3 shrink-0 bg-transparent">
-          <button onClick={onClose}
+          <button onClick={handleClose}
             className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors touch-target cursor-pointer"
             title="Minimize"
           >
@@ -598,10 +767,7 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
           <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold">Now Playing</p>
           <div className="flex items-center gap-0.5 bg-white/10 rounded-full p-1">
             {['audio','video'].map(m => (
-              <button key={m} onClick={() => {
-                setViewMode(m)
-                
-              }}
+              <button key={m} onClick={() => handleSwitchMode(m)}
                 className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all capitalize cursor-pointer ${viewMode === m ? 'bg-white text-black shadow-sm' : 'text-gray-300 hover:text-white'}`}>
                 {m}
               </button>
@@ -610,18 +776,106 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
         </div>
 
         {/* Center Player Body */}
-        <div className="flex-1 overflow-hidden px-4 sm:px-8 flex flex-col justify-center">
-          <div className="flex flex-col items-center gap-3 sm:gap-3.5 max-w-[420px] sm:max-w-[450px] mx-auto my-auto w-full py-1">
+        <div className="flex-1 overflow-hidden px-3 sm:px-6 md:px-8 flex flex-col justify-center">
+          {viewMode === 'video' ? (
+            /* ── CINEMA VIDEO PLAYER VIEW ── */
+            <div className="flex flex-col items-center justify-center gap-3 max-w-4xl lg:max-w-5xl mx-auto my-auto w-full py-1">
+              <div className="relative w-full aspect-video max-h-[58vh] sm:max-h-[64vh] rounded-2xl overflow-hidden shadow-2xl bg-black border border-white/10 shrink-0 mx-auto">
+                {loadingVideo ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-surface-2/60 backdrop-blur-sm">
+                    <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin" />
+                    <p className="text-xs text-gray-300 font-medium animate-pulse">Syncing video timeline & skipping intro...</p>
+                  </div>
+                ) : videoId ? (
+                  <CinemaVideoPlayer
+                    videoId={videoId}
+                    initialStartTime={videoStartTime}
+                    introOffset={introOffset + syncNudge}
+                    onIntroOffsetNudge={handleNudgeIntro}
+                    onTimeUpdate={(vTime) => { videoCurrentTimeRef.current = vTime }}
+                    onPlayingChange={(playing) => { isVideoPlayingRef.current = playing }}
+                    songTitle={currentSong.title}
+                    artist={currentSong.artist}
+                    volume={volume}
+                    isMuted={isMuted}
+                    onVolumeChange={setVolume}
+                    onToggleMute={toggleMute}
+                    className="w-full h-full"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-surface-2/40 p-6 text-center">
+                    <Music size={40} className="mb-2 opacity-40 text-brand" />
+                    <p className="text-sm font-bold text-white">No Official Music Video Available</p>
+                    <p className="text-xs text-gray-400 mt-1 max-w-xs">We couldn't locate a verified YouTube video for this track. Switch back to Audio to keep listening.</p>
+                    <button
+                      onClick={() => handleSwitchMode('audio')}
+                      className="mt-4 px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-colors cursor-pointer"
+                    >
+                      Switch to Audio
+                    </button>
+                  </div>
+                )}
+              </div>
 
-            {/* Art / Video (Balanced, previewable square artwork with graceful viewport height cap) */}
-            <div
-              className={`relative ${
-                viewMode === 'video'
-                  ? 'w-full max-w-sm sm:max-w-md aspect-video max-h-[35vh]'
-                  : 'w-56 h-56 xs:w-64 xs:h-64 sm:w-72 sm:h-72 md:w-80 md:h-80 max-h-[36vh] aspect-square'
-              } shrink-0 mx-auto`}
-            >
-              {viewMode === 'audio' ? (
+              {/* Video Companion Action Bar */}
+              <div className="flex items-center justify-between w-full max-w-4xl px-2 pt-1">
+                {/* Left: Like & Quick Add */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={onLike}
+                    className={`p-2 rounded-full hover:bg-white/10 transition-all active:scale-90 cursor-pointer ${liked ? 'text-rose-500' : 'text-gray-400 hover:text-white'}`}
+                    title={liked ? 'Unlike' : 'Like'}
+                    aria-label={liked ? 'Unlike' : 'Like'}
+                  >
+                    <Heart size={20} fill={liked ? 'currentColor' : 'none'} />
+                  </button>
+                  <button
+                    onClick={() => onOpenQuickAdd?.()}
+                    className="p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-all active:scale-90 cursor-pointer"
+                    title="Add to playlist or queue"
+                    aria-label="Add options"
+                  >
+                    <PlusCircle size={20} />
+                  </button>
+                </div>
+
+                {/* Center: Track Skip buttons (Previous / Next) */}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={previous}
+                    className="touch-target p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer"
+                    title="Previous Track"
+                  >
+                    <SkipBack size={20} fill="currentColor" />
+                  </button>
+                  <button
+                    onClick={next}
+                    className="touch-target p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer"
+                    title="Next Track"
+                  >
+                    <SkipForward size={20} fill="currentColor" />
+                  </button>
+                </div>
+
+                {/* Right: Fullscreen reminder & Audio toggle */}
+                <div className="flex items-center gap-2">
+                  <span className="hidden sm:inline-flex text-[11px] text-gray-400 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full">
+                    Press <kbd className="font-mono text-white mx-1 font-bold">F</kbd> for Fullscreen
+                  </span>
+                  <button
+                    onClick={() => handleSwitchMode('audio')}
+                    className="text-xs px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-gray-200 hover:text-white font-medium transition-colors cursor-pointer"
+                  >
+                    Audio Mode
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* ── AUDIO PLAYER VIEW ── */
+            <div className="flex flex-col items-center gap-3 sm:gap-3.5 max-w-[420px] sm:max-w-[450px] mx-auto my-auto w-full py-1">
+              {/* Art */}
+              <div className="relative w-56 h-56 xs:w-64 xs:h-64 sm:w-72 sm:h-72 md:w-80 md:h-80 max-h-[36vh] aspect-square shrink-0 mx-auto">
                 <div className="relative w-full h-full">
                   <div className="absolute -inset-3 rounded-2xl opacity-25 blur-2xl pointer-events-none" style={{ background: 'var(--brand)' }} />
                   <div className={`relative w-full h-full rounded-2xl overflow-hidden shadow-2xl ${settings?.animatedArt && isPlaying ? 'album-glow' : ''}`}>
@@ -632,137 +886,123 @@ function ExpandedPlayer({ currentSong, isPlaying, progress, currentTime, duratio
                     />
                   </div>
                 </div>
-              ) : (
-                <div className="w-full h-full rounded-2xl overflow-hidden shadow-2xl bg-black">
-                  {loadingVideo
-                    ? <div className="w-full h-full flex items-center justify-center"><div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin" /></div>
-                    : videoId
-                      ? <iframe src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`}
-                          title={currentSong.title} className="w-full h-full" frameBorder="0"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-                      : <div className="w-full h-full flex flex-col items-center justify-center text-gray-500">
-                          <Music size={36} className="mb-2 opacity-30" /><p className="text-xs">No video found</p>
-                        </div>
-                  }
-                </div>
-              )}
-            </div>
+              </div>
 
-            {/* Middle Section between Album Cover and Seek Bar: Song Info OR Sentence-by-Sentence Live Lyrics */}
-            <div className="w-full px-2 flex flex-col items-center justify-center min-h-[72px] sm:min-h-[80px]">
-              {showLyrics ? (
-                <SentenceLyricsView
-                  song={currentSong}
+              {/* Middle Section between Album Cover and Seek Bar: Song Info OR Sentence-by-Sentence Live Lyrics */}
+              <div className="w-full px-2 flex flex-col items-center justify-center min-h-[72px] sm:min-h-[80px]">
+                {showLyrics ? (
+                  <SentenceLyricsView
+                    song={currentSong}
+                    currentTime={currentTime}
+                    seek={seek}
+                  />
+                ) : (
+                  <div className="text-center w-full px-2">
+                    <p className="text-2xl sm:text-3xl font-extrabold text-white leading-tight truncate drop-shadow-sm">{currentSong.title}</p>
+                    <p className="text-gray-300 text-sm sm:text-base font-semibold truncate mt-1">
+                      <Link
+                        to={`/artist/${encodeURIComponent(currentSong.artist)}`}
+                        onClick={() => onClose()}
+                        className="hover:underline hover:text-white transition-colors"
+                      >
+                        {currentSong.artist}
+                      </Link>
+                    </p>
+                    {currentSong.album && <p className="text-xs sm:text-sm text-gray-400 mt-0.5 truncate font-normal">{currentSong.album}</p>}
+                    {settings?.showCredits && (
+                      <p className="text-[11px] text-gray-500 mt-1">Source: {currentSong.source} {currentSong.genre ? `• ${currentSong.genre}` : ''}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Action buttons: Like & Quick Add */}
+              <div className="flex items-center justify-between w-full px-3 sm:px-4">
+                <button
+                  onClick={onLike}
+                  className={`p-2 rounded-full hover:bg-white/10 transition-all active:scale-90 cursor-pointer ${liked ? 'text-rose-500' : 'text-gray-400 hover:text-white'}`}
+                  title={liked ? 'Unlike' : 'Like'}
+                  aria-label={liked ? 'Unlike' : 'Like'}
+                >
+                  <Heart size={21} fill={liked ? 'currentColor' : 'none'} />
+                </button>
+                <button
+                  onClick={() => onOpenQuickAdd?.()}
+                  className="p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-all active:scale-90 cursor-pointer"
+                  title="Add to playlist, queue, or liked"
+                  aria-label="Add options"
+                >
+                  <PlusCircle size={21} />
+                </button>
+              </div>
+
+              {/* Seek bar with fluid undulating wave animation */}
+              <div className="w-full px-1 sm:px-2">
+                <WaveSeekBar
+                  progress={progress}
                   currentTime={currentTime}
+                  duration={duration}
                   seek={seek}
+                  isPlaying={isPlaying}
+                  waveEnabled={settings?.seekBarWave !== false}
+                  layout="stacked"
+                  showTimes={true}
                 />
-              ) : (
-                <div className="text-center w-full px-2">
-                  <p className="text-2xl sm:text-3xl font-extrabold text-white leading-tight truncate drop-shadow-sm">{currentSong.title}</p>
-                  <p className="text-gray-300 text-sm sm:text-base font-semibold truncate mt-1">
-                    <Link
-                      to={`/artist/${encodeURIComponent(currentSong.artist)}`}
-                      onClick={() => onClose()}
-                      className="hover:underline hover:text-white transition-colors"
-                    >
-                      {currentSong.artist}
-                    </Link>
-                  </p>
-                  {currentSong.album && <p className="text-xs sm:text-sm text-gray-400 mt-0.5 truncate font-normal">{currentSong.album}</p>}
-                  {settings?.showCredits && (
-                    <p className="text-[11px] text-gray-500 mt-1">Source: {currentSong.source} {currentSong.genre ? `• ${currentSong.genre}` : ''}</p>
-                  )}
-                </div>
-              )}
-            </div>
+                {error && <p className="text-xs text-orange-400 text-center mt-0.5">{error}</p>}
+              </div>
 
-            {/* Action buttons: Like & Quick Add */}
-            <div className="flex items-center justify-between w-full px-3 sm:px-4">
-              <button
-                onClick={onLike}
-                className={`p-2 rounded-full hover:bg-white/10 transition-all active:scale-90 cursor-pointer ${liked ? 'text-rose-500' : 'text-gray-400 hover:text-white'}`}
-                title={liked ? 'Unlike' : 'Like'}
-                aria-label={liked ? 'Unlike' : 'Like'}
-              >
-                <Heart size={21} fill={liked ? 'currentColor' : 'none'} />
-              </button>
-              <button
-                onClick={() => onOpenQuickAdd?.()}
-                className="p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-all active:scale-90 cursor-pointer"
-                title="Add to playlist, queue, or liked"
-                aria-label="Add options"
-              >
-                <PlusCircle size={21} />
-              </button>
-            </div>
+              {/* Controls */}
+              <div className="flex items-center justify-between w-full px-3 sm:px-5">
+                <button onClick={toggleShuffle} className={`touch-target p-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer ${isShuffled ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title="Shuffle">
+                  <Shuffle size={18} />
+                </button>
+                <button onClick={previous} className="touch-target p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer" title="Previous">
+                  <SkipBack size={22} fill="currentColor" />
+                </button>
+                <button onClick={togglePlay} disabled={isLoading}
+                  className="w-12 h-12 sm:w-13 sm:h-13 rounded-full bg-white flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all shadow-xl disabled:opacity-50 cursor-pointer"
+                  title={isPlaying ? 'Pause' : 'Play'}>
+                  {isLoading
+                    ? <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                    : isPlaying ? <Pause size={21} fill="currentColor" /> : <Play size={21} fill="currentColor" className="ml-0.5" />}
+                </button>
+                <button onClick={next} className="touch-target p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer" title="Next">
+                  <SkipForward size={22} fill="currentColor" />
+                </button>
+                <button onClick={cycleRepeat} className={`touch-target p-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer ${repeatMode !== 'none' ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title="Repeat">
+                  <RepeatIcon size={18} />
+                </button>
+              </div>
 
-            {/* Seek bar with fluid undulating wave animation */}
-            <div className="w-full px-1 sm:px-2">
-              <WaveSeekBar
-                progress={progress}
-                currentTime={currentTime}
-                duration={duration}
-                seek={seek}
-                isPlaying={isPlaying}
-                waveEnabled={settings?.seekBarWave !== false}
-                layout="stacked"
-                showTimes={true}
-              />
-              {error && <p className="text-xs text-orange-400 text-center mt-0.5">{error}</p>}
-            </div>
+              {/* Volume */}
+              <div className="flex items-center justify-center gap-3 w-full max-w-[280px] sm:max-w-[320px] mx-auto px-2">
+                <button onClick={toggleMute} className="touch-target p-1.5 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors shrink-0 cursor-pointer" title={isMuted ? "Unmute" : "Mute"}>
+                  <VolumeIcon size={16} />
+                </button>
+                <input type="range" min={0} max={100} step={1} value={isMuted ? 0 : volume}
+                  onChange={e => setVolume(parseFloat(e.target.value))}
+                  className="w-full mobile-volume-bar seek-bar cursor-pointer"
+                  style={{ '--progress': `${isMuted ? 0 : volume}%` }} />
+              </div>
 
-            {/* Controls */}
-            <div className="flex items-center justify-between w-full px-3 sm:px-5">
-              <button onClick={toggleShuffle} className={`touch-target p-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer ${isShuffled ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title="Shuffle">
-                <Shuffle size={18} />
-              </button>
-              <button onClick={previous} className="touch-target p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer" title="Previous">
-                <SkipBack size={22} fill="currentColor" />
-              </button>
-              <button onClick={togglePlay} disabled={isLoading}
-                className="w-12 h-12 sm:w-13 sm:h-13 rounded-full bg-white flex items-center justify-center text-black hover:scale-105 active:scale-95 transition-all shadow-xl disabled:opacity-50 cursor-pointer"
-                title={isPlaying ? 'Pause' : 'Play'}>
-                {isLoading
-                  ? <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                  : isPlaying ? <Pause size={21} fill="currentColor" /> : <Play size={21} fill="currentColor" className="ml-0.5" />}
-              </button>
-              <button onClick={next} className="touch-target p-2 rounded-full hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer" title="Next">
-                <SkipForward size={22} fill="currentColor" />
-              </button>
-              <button onClick={cycleRepeat} className={`touch-target p-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer ${repeatMode !== 'none' ? 'text-brand' : 'text-gray-400 hover:text-white'}`} title="Repeat">
-                <RepeatIcon size={18} />
-              </button>
+              {/* Centered Lyrics Toggle Button */}
+              <div className="flex items-center justify-center w-full pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setShowLyrics(s => !s)}
+                  className={`touch-target flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg active:scale-95 cursor-pointer ${
+                    showLyrics
+                      ? 'bg-brand text-black shadow-brand/30 ring-2 ring-brand/40 font-bold'
+                      : 'bg-white/10 text-gray-200 hover:bg-white/20 hover:text-white border border-white/10'
+                  }`}
+                  title={showLyrics ? "Show Song Details" : "Show Sentence-by-Sentence Live Lyrics"}
+                >
+                  <Mic2 size={14} className={showLyrics ? "animate-pulse" : ""} />
+                  <span>{showLyrics ? 'Hide Lyrics' : 'Lyrics'}</span>
+                </button>
+              </div>
             </div>
-
-            {/* Volume */}
-            <div className="flex items-center justify-center gap-3 w-full max-w-[280px] sm:max-w-[320px] mx-auto px-2">
-              <button onClick={toggleMute} className="touch-target p-1.5 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors shrink-0 cursor-pointer" title={isMuted ? "Unmute" : "Mute"}>
-                <VolumeIcon size={16} />
-              </button>
-              <input type="range" min={0} max={100} step={1} value={isMuted ? 0 : volume}
-                onChange={e => setVolume(parseFloat(e.target.value))}
-                className="w-full mobile-volume-bar seek-bar cursor-pointer"
-                style={{ '--progress': `${isMuted ? 0 : volume}%` }} />
-            </div>
-
-            {/* Centered Lyrics Toggle Button */}
-            <div className="flex items-center justify-center w-full pt-0.5">
-              <button
-                type="button"
-                onClick={() => setShowLyrics(s => !s)}
-                className={`touch-target flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg active:scale-95 cursor-pointer ${
-                  showLyrics
-                    ? 'bg-brand text-black shadow-brand/30 ring-2 ring-brand/40 font-bold'
-                    : 'bg-white/10 text-gray-200 hover:bg-white/20 hover:text-white border border-white/10'
-                }`}
-                title={showLyrics ? "Show Song Details" : "Show Sentence-by-Sentence Live Lyrics"}
-              >
-                <Mic2 size={14} className={showLyrics ? "animate-pulse" : ""} />
-                <span>{showLyrics ? 'Hide Lyrics' : 'Lyrics'}</span>
-              </button>
-            </div>
-
-          </div>
+          )}
         </div>
 
         {/* Scroll down to Queue cue at the bottom of Section 1 */}
