@@ -126,10 +126,12 @@ export default function ProfilePage() {
     <div className="px-3.5 sm:px-6 py-4 sm:py-6 pb-16 max-w-7xl mx-auto animate-fade-in">
 
       {/* ── Hero banner ── */}
-      <div className="relative flex flex-col sm:flex-row items-center sm:items-end gap-4 sm:gap-6 mb-6 sm:mb-8 p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl overflow-hidden border border-white/10 shadow-2xl text-center sm:text-left">
-        {/* Gradient bg from avatar color */}
-        <div className="absolute inset-0 opacity-30" style={colorStyle} />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/80 to-transparent" />
+      <div className="relative flex flex-col sm:flex-row items-center sm:items-end gap-4 sm:gap-6 mb-6 sm:mb-8 p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl border border-white/10 shadow-2xl text-center sm:text-left">
+        {/* Gradient bg from avatar color (contained with overflow-hidden) */}
+        <div className="absolute inset-0 rounded-2xl sm:rounded-3xl overflow-hidden pointer-events-none">
+          <div className="absolute inset-0 opacity-30" style={colorStyle} />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/80 to-transparent" />
+        </div>
 
         {/* Avatar */}
         <div className="relative shrink-0 z-10">
@@ -170,10 +172,10 @@ export default function ProfilePage() {
           </h1>
 
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-y-1.5 gap-x-3 sm:gap-x-5 text-xs sm:text-sm text-gray-300 mb-3">
-            <span><strong className="text-white font-bold">{playlists.length}</strong> Playlists</span>
-            <span><strong className="text-white font-bold">{likedSongs.length}</strong> Liked Songs</span>
-            <span><strong className="text-white font-bold">{recentSongs.length}</strong> Songs Played</span>
-            <span><strong className="text-white font-bold">{totalMinutes}</strong> min listened</span>
+            <span><strong className="text-white font-bold">{userStats?.savedPlaylists ?? playlists.length}</strong> Playlists</span>
+            <span><strong className="text-white font-bold">{userStats?.likedSongs ?? likedSongs.length}</strong> Liked Songs</span>
+            <span><strong className="text-white font-bold">{userStats?.tracksPlayed ?? recentSongs.length}</strong> Songs Played</span>
+            <span><strong className="text-white font-bold">{timeListenedFormatted}</strong> listened</span>
           </div>
 
           {/* Vibe and Member info */}
@@ -196,30 +198,43 @@ export default function ProfilePage() {
         </div>
 
         {/* Colour picker button — top right */}
-        <div className="relative z-10 shrink-0 self-start sm:self-auto sm:ml-auto">
+        <div className="relative z-30 shrink-0 self-start sm:self-auto sm:ml-auto">
           <button
+            type="button"
             onClick={() => setShowColorPicker(v => !v)}
-            className="flex items-center gap-2 px-3.5 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs font-semibold text-white transition-colors border border-white/20 backdrop-blur-md"
+            className="flex items-center gap-2 px-3.5 py-2 bg-white/10 hover:bg-white/20 active:scale-95 rounded-full text-xs font-semibold text-white transition-all border border-white/20 backdrop-blur-md shadow-lg cursor-pointer"
           >
-            <div className="w-3.5 h-3.5 rounded-full shadow-inner" style={colorStyle} />
-            Theme Color
+            <div className="w-3.5 h-3.5 rounded-full shadow-inner ring-1 ring-white/30" style={colorStyle} />
+            <span>Theme Color</span>
           </button>
 
           {/* Colour picker dropdown */}
           {showColorPicker && (
             <>
-              <div className="fixed inset-0 z-20" onClick={() => setShowColorPicker(false)} />
-              <div className="absolute right-0 top-11 z-30 bg-[#1c1c20]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl w-60">
-                <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-3">Profile Accent Color</p>
-                <div className="grid grid-cols-4 gap-2.5">
+              <div className="fixed inset-0 z-40" onClick={() => setShowColorPicker(false)} />
+              <div className="absolute right-0 bottom-full mb-3 top-auto z-50 bg-[#16161a]/95 backdrop-blur-2xl border border-white/20 rounded-2xl p-4 shadow-[0_20px_50px_rgba(0,0,0,0.85)] w-64 animate-pop-in">
+                <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
+                  <p className="text-xs text-white font-bold uppercase tracking-wider">Profile Accent Color</p>
+                  <span className="text-[11px] text-gray-400 capitalize">{AVATAR_COLORS[avatarColor]?.label || 'Default'}</span>
+                </div>
+                <div className="grid grid-cols-4 gap-3">
                   {AVATAR_COLORS.map(c => (
                     <button
                       key={c.id}
+                      type="button"
                       onClick={() => handleColorPick(c.id)}
                       title={c.label}
-                      className={`w-10 h-10 rounded-full transition-all hover:scale-110 ${avatarColor === c.id ? 'ring-2 ring-white ring-offset-2 ring-offset-[#1c1c20] scale-110' : ''}`}
+                      className={`w-11 h-11 rounded-full transition-all hover:scale-110 cursor-pointer flex items-center justify-center ${
+                        avatarColor === c.id
+                          ? 'ring-2 ring-white ring-offset-2 ring-offset-[#16161a] scale-105 shadow-lg'
+                          : 'hover:ring-1 hover:ring-white/40'
+                      }`}
                       style={{ background: `linear-gradient(135deg, ${c.from}, ${c.to})` }}
-                    />
+                    >
+                      {avatarColor === c.id && (
+                        <div className="w-2 h-2 rounded-full bg-white shadow-sm" />
+                      )}
+                    </button>
                   ))}
                 </div>
               </div>
