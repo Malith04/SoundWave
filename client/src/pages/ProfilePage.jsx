@@ -2,7 +2,7 @@ import { useAuth } from '../context/AuthContext'
 import { usePlayer } from '../context/PlayerContext'
 import { useState, useEffect } from 'react'
 import { User, Music, Heart, Clock, Play, Sparkles, Compass, Calendar, Disc } from 'lucide-react'
-import { getFavoriteSongs, getRecentlyPlayed } from '../services/userService'
+import { getFavoriteSongs, getRecentlyPlayed, getUserStats } from '../services/userService'
 import { getUserPlaylists } from '../services/playlistService'
 import { Link } from 'react-router-dom'
 import SongRow from '../components/SongRow'
@@ -31,6 +31,7 @@ export default function ProfilePage() {
   const [recentSongs, setRecentSongs] = useState([])
   const [likedSongs, setLikedSongs]   = useState([])
   const [playlists, setPlaylists]     = useState([])
+  const [userStats, setUserStats]     = useState(null)
   const [loading, setLoading]         = useState(true)
   const [avatarColor, setAvatarColor] = useState(0)
   const [showColorPicker, setShowColorPicker] = useState(false)
@@ -55,14 +56,16 @@ export default function ProfilePage() {
     const load = async () => {
       setLoading(true)
       try {
-        const [liked, recent, pls] = await Promise.all([
+        const [liked, recent, pls, stats] = await Promise.all([
           getFavoriteSongs(),
           getRecentlyPlayed(),
           getUserPlaylists(user.uid),
+          getUserStats(),
         ])
         setLikedSongs(liked || [])
         setRecentSongs(recent || [])
         setPlaylists(pls || [])
+        setUserStats(stats || null)
       } catch (err) {
         console.error('Failed to load profile music info:', err)
       } finally {
@@ -80,9 +83,38 @@ export default function ProfilePage() {
     setShowColorPicker(false)
   }
 
-  const totalMinutes = Math.round(
-    recentSongs.reduce((acc, s) => acc + (s.duration || 210), 0) / 60
-  )
+  // Helper to format listening time into clean human-readable text (e.g. "14m" or "2h 15m")
+  const formatListeningTime = (mins) => {
+    if (!mins || mins <= 0) return '0m'
+    if (mins < 60) return `${mins}m`
+    const hours = Math.floor(mins / 60)
+    const remainingMins = mins % 60
+    return remainingMins > 0 ? `${hours}h ${remainingMins}m` : `${hours}h`
+  }
+
+  // Real listening time calculation:
+  // 1. Prefer database listening_time_seconds
+  // 2. Or real client-tracked localStorage seconds
+  // 3. Or accurate fallback from recent songs duration in SECONDS (convert ms if > 1000)
+  const localSeconds = user?.uid
+    ? parseInt(localStorage.getItem(`sw_listening_seconds_${user.uid}`) || '0', 10)
+    : 0
+
+  const trackedSeconds = Math.max(userStats?.listeningTimeSeconds || 0, localSeconds)
+
+  const totalMinutes = trackedSeconds > 0
+    ? Math.round(trackedSeconds / 60)
+    : Math.round(
+        recentSongs.reduce((acc, s) => {
+          // If duration > 1000, it is stored in milliseconds; convert to seconds
+          const durationSec = s.duration && s.duration > 1000
+            ? Math.round(s.duration / 1000)
+            : (s.duration || 180)
+          return acc + Math.min(durationSec, 240)
+        }, 0) / 60
+      )
+
+  const timeListenedFormatted = formatListeningTime(totalMinutes)
   const colorStyle = getAvatarStyle(avatarColor)
 
   const displayName = user?.displayName || user?.name || profile?.displayName || profile?.name || 'SoundWave Listener'
@@ -249,10 +281,34 @@ export default function ProfilePage() {
               {/* Quick statistics */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {[
-                  { icon: Heart,  color: 'text-pink-400',   bg: 'bg-pink-400/10',   val: likedSongs.length,    label: 'Liked Songs' },
-                  { icon: Music,  color: 'text-brand',      bg: 'bg-brand/10',      val: recentSongs.length,   label: 'Tracks Played' },
-                  { icon: Clock,  color: 'text-blue-400',   bg: 'bg-blue-400/10',   val: `${totalMinutes}m`,   label: 'Time Listened' },
-                  { icon: Disc,   color: 'text-purple-400', bg: 'bg-purple-400/10', val: playlists.length,     label: 'Saved Playlists' },
+                  {
+                    icon: Heart,
+                    color: 'text-pink-400',
+                    bg: 'bg-pink-400/10',
+                    val: userStats?.likedSongs ?? likedSongs.length,
+                    label: 'Liked Songs'
+                  },
+                  {
+                    icon: Music,
+                    color: 'text-brand',
+                    bg: 'bg-brand/10',
+                    val: userStats?.tracksPlayed ?? recentSongs.length,
+                    label: 'Tracks Played'
+                  },
+                  {
+                    icon: Clock,
+                    color: 'text-blue-400',
+                    bg: 'bg-blue-400/10',
+                    val: timeListenedFormatted,
+                    label: 'Time Listened'
+                  },
+                  {
+                    icon: Disc,
+                    color: 'text-purple-400',
+                    bg: 'bg-purple-400/10',
+                    val: userStats?.savedPlaylists ?? playlists.length,
+                    label: 'Saved Playlists'
+                  },
                 ].map((s, i) => (
                   <div key={i} className={`${s.bg} rounded-2xl p-5 border border-white/5 hover:border-white/20 transition-all`}>
                     <s.icon size={22} className={`${s.color} mb-3`} />

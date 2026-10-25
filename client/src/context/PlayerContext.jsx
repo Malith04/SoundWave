@@ -1,7 +1,7 @@
 import { createContext, useContext, useRef, useState, useCallback, useEffect } from 'react'
 import { Howl, Howler } from 'howler'
 import { useAuth } from './AuthContext'
-import { addToRecentlyPlayed } from '../services/userService'
+import { addToRecentlyPlayed, recordListeningTime } from '../services/userService'
 import { searchYouTube, getCachedYouTubeId } from '../services/musicApi'
 import { upsertSong, incrementPlayCount } from '../services/songService'
 import { useAudioSettings } from './AudioSettingsContext'
@@ -487,7 +487,7 @@ export function PlayerProvider({ children }) {
     // Save to database (non-blocking)
     upsertSong(song).then(() => incrementPlayCount(song.id)).catch(() => {})
     if (user && !settings?.privateSession) {
-      addToRecentlyPlayed(user.uid, song.id).catch(() => {})
+      addToRecentlyPlayed(user.uid, song.id, song).catch(() => {})
     }
 
     const currentEngine = settings?.audioEngine || 'studio'
@@ -853,6 +853,24 @@ export function PlayerProvider({ children }) {
       } catch (_) {}
     }
   }, [currentSong, isPlaying, duration, togglePlay, previous, next, seek])
+
+  // ── Real Listening Time Tracker ──────────────────────────────
+  useEffect(() => {
+    if (!isPlaying || !user?.uid) return
+
+    // Track active listening seconds every 10 seconds while music is playing
+    const interval = setInterval(() => {
+      try {
+        const key = `sw_listening_seconds_${user.uid}`
+        const currentSec = parseInt(localStorage.getItem(key) || '0', 10) + 10
+        localStorage.setItem(key, currentSec.toString())
+      } catch (_) {}
+
+      recordListeningTime(10).catch(() => {})
+    }, 10000)
+
+    return () => clearInterval(interval)
+  }, [isPlaying, user?.uid])
 
   return (
     <PlayerContext.Provider value={{

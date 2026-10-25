@@ -177,7 +177,79 @@ router.delete('/search-history', authenticate, async (req, res) => {
   }
 })
 
-// ── 4. Public Profile by User ID ────────────────────────────
+// ── 4. Real User Stats & Listening Time ──────────────────────
+router.get('/stats', authenticate, async (req, res) => {
+  try {
+    // Ensure column exists
+    await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS listening_time_seconds INTEGER DEFAULT 0;').catch(() => {})
+
+    const result = await query(
+      `SELECT
+         COALESCE((SELECT COUNT(*)::int FROM user_favorites WHERE user_id = $1), 0) AS liked_songs,
+         COALESCE((SELECT COUNT(*)::int FROM recently_played WHERE user_id = $1), 0) AS tracks_played,
+         COALESCE((SELECT COUNT(*)::int FROM playlists WHERE user_id = $1), 0) AS saved_playlists,
+         COALESCE(u.listening_time_seconds, 0) AS listening_time_seconds
+       FROM users u
+       WHERE u.id = $1`,
+      [req.user.id]
+    )
+
+    if (result.rows.length === 0) {
+      return res.json({
+        likedSongs: 0,
+        tracksPlayed: 0,
+        savedPlaylists: 0,
+        listeningTimeSeconds: 0,
+        listeningTimeMinutes: 0
+      })
+    }
+
+    const row = result.rows[0]
+    const sec = row.listening_time_seconds || 0
+    return res.json({
+      likedSongs: row.liked_songs,
+      tracksPlayed: row.tracks_played,
+      savedPlaylists: row.saved_playlists,
+      listeningTimeSeconds: sec,
+      listeningTimeMinutes: Math.round(sec / 60)
+    })
+  } catch (err) {
+    console.error('Get user stats error:', err)
+    return res.status(500).json({ error: 'Failed to fetch user stats.' })
+  }
+})
+
+router.post('/listening-time', authenticate, async (req, res) => {
+  try {
+    const seconds = parseInt(req.body.seconds, 10)
+    if (isNaN(seconds) || seconds <= 0 || seconds > 300) {
+      return res.status(400).json({ error: 'Invalid listening seconds.' })
+    }
+
+    // Ensure column exists
+    await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS listening_time_seconds INTEGER DEFAULT 0;').catch(() => {})
+
+    const result = await query(
+      `UPDATE users
+       SET listening_time_seconds = COALESCE(listening_time_seconds, 0) + $1,
+           updated_at = NOW()
+       WHERE id = $2
+       RETURNING listening_time_seconds`,
+      [seconds, req.user.id]
+    )
+
+    const updated = result.rows[0]?.listening_time_seconds || 0
+    return res.json({
+      listeningTimeSeconds: updated,
+      listeningTimeMinutes: Math.round(updated / 60)
+    })
+  } catch (err) {
+    console.error('Record listening time error:', err)
+    return res.status(500).json({ error: 'Failed to record listening time.' })
+  }
+})
+
+// ── 5. Public Profile by User ID ────────────────────────────
 router.get('/:id', async (req, res) => {
   try {
     const result = await query(

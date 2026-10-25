@@ -123,3 +123,22 @@ export async function clearSearchHistory() {
     console.error('clearSearchHistory error:', err)
   }
 }
+
+export async function getUserStats() {
+  try {
+    return await api.get('/users/stats')
+  } catch (err) {
+    console.warn('getUserStats error:', err.message)
+    return null
+  }
+}
+
+export async function recordListeningTime(seconds) {
+  try {
+    if (!seconds || seconds <= 0) return null
+    return await api.post('/users/listening-time', { seconds })
+  } catch (err) {
+    return null
+  }
+}
+
