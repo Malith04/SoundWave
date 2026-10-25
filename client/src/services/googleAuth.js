@@ -65,58 +65,37 @@ export function waitForGIS(timeoutMs = 5000) {
 
 /**
  * Initializes the In-Page Google Identity Services client.
- * Displays Google One Tap and sets up the in-page account selection callback.
- * Does NOT open a new browser tab.
+ * Enforces in-tab redirect mode without popups, new tabs, or One Tap floating cards.
  */
-export async function initInPageGoogleAuth({ onProfile, onError, context = 'signin' } = {}) {
+export async function initInPageGoogleAuth({ context = 'signin' } = {}) {
   try {
     const gsi = await waitForGIS()
 
+    const origin = window.location.origin
+    const loginUri = `${origin}/api/auth/google/callback`
+
     gsi.initialize({
       client_id: GOOGLE_CLIENT_ID,
-      callback: (response) => {
-        if (!response?.credential) {
-          onError?.(new Error('No Google credential returned.'))
-          return
-        }
-        const profile = parseGoogleJwt(response.credential)
-        if (!profile || !profile.email) {
-          onError?.(new Error('Unable to extract Google account information.'))
-          return
-        }
-        onProfile?.(profile)
-      },
+      ux_mode: 'redirect',
+      login_uri: loginUri,
       auto_select: false,
-      cancel_on_tap_outside: true,
       context,
       itp_support: true,
     })
 
-    // Display Google One Tap in-page prompt immediately
-    gsi.prompt((notification) => {
-      if (notification.isNotDisplayed()) {
-        const reason = notification.getNotDisplayedReason()
-        if (reason !== 'suppressed_by_user') {
-          console.debug('[GIS] One Tap not displayed:', reason)
-        }
-      } else if (notification.isSkippedMoment()) {
-        console.debug('[GIS] One Tap skipped:', notification.getSkippedReason())
-      } else if (notification.isDismissedMoment()) {
-        console.debug('[GIS] One Tap dismissed:', notification.getDismissReason())
-      }
-    })
+    // NOTE: Google One Tap prompt (gsi.prompt) is PERMANENTLY REMOVED as requested.
+    // No right-side floating card or dropdown will ever be displayed.
 
     return gsi
   } catch (err) {
     console.warn('[GIS] Failed to initialize in-page Google Auth:', err)
-    onError?.(err)
     return null
   }
 }
 
 /**
  * Renders Google's official In-Page Sign-In Button inside a given container.
- * When clicked, account selection opens directly in the current browser page (no new tab).
+ * When clicked, account selection navigates directly in the CURRENT browser tab.
  */
 export function renderInPageGoogleButton(container, {
   theme = 'filled_black',
@@ -145,15 +124,6 @@ export function renderInPageGoogleButton(container, {
     })
   } catch (err) {
     console.error('[GIS] Failed to render Google button:', err)
-  }
-}
-
-/**
- * Triggers the in-page Google One Tap / Account Chooser programmatically.
- */
-export function promptInPageGoogleChooser() {
-  if (window.google?.accounts?.id) {
-    window.google.accounts.id.prompt()
   }
 }
 

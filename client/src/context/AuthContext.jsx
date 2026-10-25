@@ -157,6 +157,21 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const loginWithToken = async (token) => {
+    setAuthToken(token)
+    try {
+      const userData = await api.get('/auth/me')
+      setCachedUser(userData)
+      touchLastActive()
+      setUser(userData)
+      setProfile(userData)
+      return userData
+    } catch (err) {
+      clearSession()
+      throw err
+    }
+  }
+
   const completeOnboarding = async (onboardingData) => {
     const data = await api.post('/auth/onboarding', onboardingData)
     setCachedUser(data.user)
@@ -199,7 +214,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, profile, loading,
-      login, signup, sendOtp, verifyOtp, loginWithGoogle, completeOnboarding,
+      login, signup, sendOtp, verifyOtp, loginWithGoogle, loginWithToken, completeOnboarding,
       logout, resetPassword, refreshProfile
     }}>
       {children}

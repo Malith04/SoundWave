@@ -18,8 +18,46 @@ export default function LoginPage() {
   const [resendCooldown, setResendCooldown] = useState(0)
   const [pendingGoogleProfile, setPendingGoogleProfile] = useState(null)
 
-  const { login, sendOtp, loginWithGoogle } = useAuth()
+  const { login, sendOtp, loginWithGoogle, loginWithToken } = useAuth()
   const navigate = useNavigate()
+
+  // Handle in-tab redirect callback return from Google
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const googleSuccess = params.get('google_success')
+    const token = params.get('token')
+    const googleError = params.get('google_error')
+    const restored = params.get('restored')
+    const target = params.get('target') || '/'
+
+    if (googleError) {
+      toast.error(decodeURIComponent(googleError))
+      window.history.replaceState({}, document.title, window.location.pathname)
+    } else if (googleSuccess && token) {
+      setLoading(true)
+      loginWithToken(token)
+        .then((userData) => {
+          if (restored) {
+            toast.success('🎉 Welcome back! Your account and all playlists have been restored from backup.', { duration: 6000 })
+          } else {
+            toast.success('🎉 Successfully signed in with Google!')
+          }
+          window.history.replaceState({}, document.title, window.location.pathname)
+          if (!userData?.onboardingCompleted) {
+            navigate('/onboarding', { replace: true })
+          } else {
+            navigate(target, { replace: true })
+          }
+        })
+        .catch((err) => {
+          console.error('[Google In-Tab Login Error]', err)
+          toast.error('Failed to authenticate Google session. Please try again.')
+        })
+        .finally(() => {
+          setLoading(false)
+        })
+    }
+  }, [loginWithToken, navigate])
 
   // Cooldown countdown timer for resending OTP
   useEffect(() => {
@@ -189,15 +227,10 @@ export default function LoginPage() {
               </p>
             </div>
 
-            {/* Google One-Click Auth (In-Page, No new tab) */}
+            {/* Google In-Tab Sign-In (Redirects in current tab, no popups) */}
             <GoogleSignInButton
               context="signin"
               text="continue_with"
-              onSuccess={handleGoogleSuccess}
-              onError={(err) => {
-                console.error('[Google Sign-In Error]', err)
-                toast.error(err.message || 'Google sign-in error.')
-              }}
               disabled={loading}
             />
 

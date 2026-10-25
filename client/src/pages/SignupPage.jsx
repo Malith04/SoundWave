@@ -19,8 +19,46 @@ export default function SignupPage() {
   const [resendCooldown, setResendCooldown] = useState(0)
   const [pendingGoogleProfile, setPendingGoogleProfile] = useState(null)
 
-  const { signup, sendOtp, loginWithGoogle } = useAuth()
+  const { signup, sendOtp, loginWithGoogle, loginWithToken } = useAuth()
   const navigate = useNavigate()
+
+  // Handle in-tab redirect callback return from Google
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const googleSuccess = params.get('google_success')
+    const token = params.get('token')
+    const googleError = params.get('google_error')
+    const restored = params.get('restored')
+    const target = params.get('target') || '/onboarding'
+
+    if (googleError) {
+      toast.error(decodeURIComponent(googleError))
+      window.history.replaceState({}, document.title, window.location.pathname)
+    } else if (googleSuccess && token) {
+      setLoading(true)
+      loginWithToken(token)
+        .then((userData) => {
+          if (restored) {
+            toast.success('🎉 Welcome back! Your account has been restored.', { duration: 6000 })
+          } else {
+            toast.success('🎉 Welcome to SoundWave! Account connected with Google.')
+          }
+          window.history.replaceState({}, document.title, window.location.pathname)
+          if (!userData?.onboardingCompleted) {
+            navigate('/onboarding', { replace: true })
+          } else {
+            navigate(target, { replace: true })
+          }
+        })
+        .catch((err) => {
+          console.error('[Google In-Tab Signup Error]', err)
+          toast.error('Failed to complete Google sign-up. Please try again.')
+        })
+        .finally(() => {
+          setLoading(false)
+        })
+    }
+  }, [loginWithToken, navigate])
 
   // Cooldown countdown timer for resending OTP
   useEffect(() => {
@@ -178,15 +216,10 @@ export default function SignupPage() {
               </p>
             </div>
 
-            {/* Google Quick Sign-up (In-Page, No new tab) */}
+            {/* Google Quick Sign-up (Redirects in current tab, no popups) */}
             <GoogleSignInButton
               context="signup"
               text="signup_with"
-              onSuccess={handleGoogleSuccess}
-              onError={(err) => {
-                console.error('[Google Sign-Up Error]', err)
-                toast.error(err.message || 'Google sign-up error.')
-              }}
               disabled={loading}
             />
 

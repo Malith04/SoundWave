@@ -1,20 +1,17 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   initInPageGoogleAuth,
   renderInPageGoogleButton,
-  promptInPageGoogleChooser,
   isGISConfigured
 } from '../services/googleAuth'
 
 /**
  * GoogleSignInButton
  * 
- * Renders Google's official In-Page Sign-In Button and activates Google One Tap.
- * All account selection happens directly within the current page (no extra browser tab).
+ * Renders Google's official In-Page Sign-In Button with full in-tab redirect.
+ * All account selection happens directly within the current browser tab (no popups, no new tabs, no One Tap).
  */
 export default function GoogleSignInButton({
-  onSuccess,
-  onError,
   context = 'signin',
   text = 'continue_with',
   shape = 'pill',
@@ -25,28 +22,12 @@ export default function GoogleSignInButton({
   const [mounted, setMounted] = useState(false)
   const [initializing, setInitializing] = useState(true)
 
-  const handleProfile = useCallback((profile) => {
-    onSuccess?.(profile)
-  }, [onSuccess])
-
-  const handleError = useCallback((err) => {
-    onError?.(err)
-  }, [onError])
-
   useEffect(() => {
     let isCancelled = false
 
     const setupAuth = async () => {
       try {
-        await initInPageGoogleAuth({
-          onProfile: (profile) => {
-            if (!isCancelled) handleProfile(profile)
-          },
-          onError: (err) => {
-            if (!isCancelled) handleError(err)
-          },
-          context,
-        })
+        await initInPageGoogleAuth({ context })
 
         if (isCancelled) return
 
@@ -88,12 +69,7 @@ export default function GoogleSignInButton({
       isCancelled = true
       window.removeEventListener('resize', handleResize)
     }
-  }, [context, text, shape, handleProfile, handleError])
-
-  const handleFallbackClick = () => {
-    if (disabled) return
-    promptInPageGoogleChooser()
-  }
+  }, [context, text, shape])
 
   if (!isGISConfigured()) {
     return null
@@ -101,7 +77,7 @@ export default function GoogleSignInButton({
 
   return (
     <div className={`relative w-full flex items-center justify-center ${className}`}>
-      {/* Official Google In-Page Rendered Button (No extra tabs) */}
+      {/* Official Google In-Page Rendered Button (Redirects in current tab, no popups) */}
       <div
         ref={containerRef}
         className={`w-full flex items-center justify-center min-h-[44px] transition-opacity duration-200 ${
@@ -109,14 +85,9 @@ export default function GoogleSignInButton({
         } ${disabled ? 'pointer-events-none opacity-50' : ''}`}
       />
 
-      {/* Placeholder / Skeleton while Google GIS loads */}
+      {/* Placeholder / Skeleton while Google GIS initializes */}
       {!mounted && (
-        <button
-          type="button"
-          onClick={handleFallbackClick}
-          disabled={disabled || initializing}
-          className="w-full h-11 sm:h-12 flex items-center justify-center gap-3 bg-white/[0.05] hover:bg-white/[0.08] border border-white/10 rounded-full text-sm font-semibold text-white transition-all duration-200 shadow-sm cursor-pointer"
-        >
+        <div className="w-full h-11 sm:h-12 flex items-center justify-center gap-3 bg-white/[0.05] border border-white/10 rounded-full text-sm font-semibold text-white/80 select-none">
           <svg width="18" height="18" viewBox="0 0 18 18" className="shrink-0">
             <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
             <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
@@ -124,7 +95,7 @@ export default function GoogleSignInButton({
             <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
           </svg>
           <span>Continue with Google</span>
-        </button>
+        </div>
       )}
     </div>
   )

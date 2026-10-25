@@ -636,6 +636,122 @@ router.post('/google', async (req, res) => {
   }
 })
 
+// ── 3b. Google OAuth In-Page Redirect Callback (Full Same-Tab Flow) ──────────
+router.all('/google/callback', async (req, res) => {
+  try {
+    const credential = req.body?.credential || req.query?.credential
+    if (!credential) {
+      console.warn('[Google Callback] No credential received in body or query.')
+      return res.redirect('/login?google_error=' + encodeURIComponent('No Google credentials received. Please try again.'))
+    }
+
+    // Decode Google JWT ID token payload safely
+    let payload = null
+    try {
+      const parts = credential.split('.')
+      if (parts.length === 3) {
+        const base64Url = parts[1]
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+        const json = Buffer.from(base64, 'base64').toString('utf8')
+        payload = JSON.parse(json)
+      }
+    } catch (parseErr) {
+      console.error('[Google Callback] Failed to parse JWT payload:', parseErr)
+    }
+
+    if (!payload || !payload.email) {
+      return res.redirect('/login?google_error=' + encodeURIComponent('Could not retrieve account information from Google.'))
+    }
+
+    const cleanEmail = payload.email.trim().toLowerCase()
+    const name = payload.name || payload.given_name || cleanEmail.split('@')[0]
+    const photoURL = payload.picture || ''
+
+    // ── Find or Create User ──
+    let result = await query('SELECT * FROM users WHERE LOWER(email) = $1', [cleanEmail])
+    let user
+    let isNewUser = false
+    let restored = false
+
+    if (result.rows.length === 0) {
+      isNewUser = true
+      const randomPassword = Math.random().toString(36).slice(-12) + Date.now().toString(36)
+      const salt = await bcrypt.genSalt(10)
+      const passwordHash = await bcrypt.hash(randomPassword, salt)
+
+      const insertRes = await query(
+        `INSERT INTO users (email, password_hash, display_name, profile_pic_url, onboarding_completed, email_verified)
+         VALUES ($1, $2, $3, $4, false, true)
+         RETURNING *`,
+        [cleanEmail, passwordHash, name || '', photoURL || '']
+      )
+      user = insertRes.rows[0]
+    } else {
+      user = result.rows[0]
+
+      // Check if account was scheduled for deletion
+      if (user.deleted_at) {
+        const scheduledFor = user.deletion_scheduled_for
+          ? new Date(user.deletion_scheduled_for)
+          : new Date(new Date(user.deleted_at).getTime() + 14 * 24 * 60 * 60 * 1000)
+
+        if (new Date() >= scheduledFor) {
+          // Hard delete expired account, re-create as new user
+          await query('DELETE FROM users WHERE id = $1', [user.id])
+          isNewUser = true
+          const randomPassword = Math.random().toString(36).slice(-12) + Date.now().toString(36)
+          const salt = await bcrypt.genSalt(10)
+          const passwordHash = await bcrypt.hash(randomPassword, salt)
+          const insertRes = await query(
+            `INSERT INTO users (email, password_hash, display_name, profile_pic_url, onboarding_completed, email_verified)
+             VALUES ($1, $2, $3, $4, false, true)
+             RETURNING *`,
+            [cleanEmail, passwordHash, name || '', photoURL || '']
+          )
+          user = insertRes.rows[0]
+        } else {
+          // Within 14 days: Restore account from backup & ensure email_verified = true
+          await query(
+            `UPDATE users
+             SET deleted_at = NULL,
+                 deletion_scheduled_for = NULL,
+                 email_verified = true,
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [user.id]
+          )
+          restored = true
+          user.deleted_at = null
+          user.deletion_scheduled_for = null
+          user.email_verified = true
+        }
+      } else {
+        // Permanently ensure email_verified is true
+        if (!user.email_verified) {
+          await query('UPDATE users SET email_verified = true WHERE id = $1', [user.id])
+          user.email_verified = true
+        }
+      }
+
+      // Update profile pic if provided and user has none
+      if (photoURL && !user.profile_pic_url) {
+        await query('UPDATE users SET profile_pic_url = $1 WHERE id = $2', [photoURL, user.id])
+        user.profile_pic_url = photoURL
+      }
+    }
+
+    const token = await generateToken(user)
+
+    const target = (isNewUser || !user.onboarding_completed) ? '/onboarding' : '/'
+    const redirectUrl = `/login?google_success=1&token=${encodeURIComponent(token)}${restored ? '&restored=1' : ''}&target=${encodeURIComponent(target)}`
+
+    return res.redirect(redirectUrl)
+  } catch (err) {
+    console.error('[Google Callback] Error during Google authentication:', err)
+    return res.redirect('/login?google_error=' + encodeURIComponent('Google authentication failed. Please try again.'))
+  }
+})
+
 // ── 4. Complete Onboarding ──────────────────────────────────
 router.post('/onboarding', authenticate, async (req, res) => {
   try {
