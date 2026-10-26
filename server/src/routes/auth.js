@@ -452,16 +452,94 @@ router.post('/login', async (req, res) => {
   }
 })
 
-// ── 3. Google Sign-In / Up (Direct Instant OAuth Login) ──
+// ── 3. Google Sign-In / Up (with 8-Digit OTP Email Verification) ──
 router.post('/google', async (req, res) => {
   try {
-    const { email, name, photoURL } = req.body
+    const { email, name, photoURL, otp } = req.body
 
     if (!email) {
       return res.status(400).json({ error: 'Google email is required.' })
     }
 
     const cleanEmail = email.trim().toLowerCase()
+
+    // ── 1. Require 8-Digit Email Verification Code ──
+    if (!otp) {
+      const active = await query(
+        `SELECT otp_code FROM email_verifications
+         WHERE LOWER(email) = $1 AND purpose = 'google' AND expires_at > NOW() AND verified = false
+         ORDER BY created_at DESC LIMIT 1`,
+        [cleanEmail]
+      )
+
+      let otpCode
+      if (active.rows.length > 0) {
+        otpCode = active.rows[0].otp_code
+      } else {
+        otpCode = generateOtpCode()
+        await query(
+          `INSERT INTO email_verifications (email, otp_code, purpose, expires_at)
+           VALUES ($1, $2, 'google', NOW() + INTERVAL '10 minutes')`,
+          [cleanEmail, otpCode]
+        )
+      }
+
+      const emailResult = await sendOtpEmail({ email: cleanEmail, otp: otpCode, purpose: 'google' })
+      const isDevFallback = emailResult?.provider === 'console-dev-fallback'
+
+      return res.json({
+        requiresOtp: true,
+        email: cleanEmail,
+        googleProfile: {
+          email: cleanEmail,
+          name: name || '',
+          photoURL: photoURL || ''
+        },
+        message: isDevFallback
+          ? `Notice: Email service is in dev/sandbox mode. Passcode: ${otpCode}`
+          : 'Security verification: An 8-digit passcode has been sent to your Google email.',
+        devOtp: isDevFallback ? otpCode : undefined
+      })
+    }
+
+    // ── 2. OTP Provided: Validate Code ──
+    const cleanOtp = otp.toString().trim()
+    if (cleanOtp.length !== 8) {
+      return res.status(400).json({ error: 'The verification passcode must be exactly 8 digits.' })
+    }
+
+    const otpCheck = await query(
+      `SELECT id, otp_code, expires_at, verified, attempts
+       FROM email_verifications
+       WHERE LOWER(email) = $1 AND purpose = 'google' AND verified = false
+       ORDER BY created_at DESC LIMIT 1`,
+      [cleanEmail]
+    )
+
+    if (otpCheck.rows.length === 0) {
+      return res.status(400).json({ error: 'No active verification code found for this Google account. Please request a new code.' })
+    }
+
+    const verification = otpCheck.rows[0]
+
+    if (new Date() > new Date(verification.expires_at)) {
+      return res.status(400).json({ error: 'Verification passcode has expired. Please request a new code.' })
+    }
+
+    if (verification.attempts >= 5) {
+      return res.status(400).json({ error: 'Too many incorrect attempts. Please request a new passcode.' })
+    }
+
+    if (verification.otp_code !== cleanOtp) {
+      await query('UPDATE email_verifications SET attempts = attempts + 1 WHERE id = $1', [verification.id])
+      const remaining = 4 - verification.attempts
+      return res.status(400).json({
+        error: `Invalid passcode. ${remaining > 0 ? `${remaining} attempts remaining.` : 'Please request a new passcode.'}`
+      })
+    }
+
+    // Mark OTP verified
+    await query('UPDATE email_verifications SET verified = true WHERE id = $1', [verification.id])
 
     // ── 3. Find or Create User & Permanently Mark email_verified = true ──
     let result = await query('SELECT * FROM users WHERE LOWER(email) = $1', [cleanEmail])

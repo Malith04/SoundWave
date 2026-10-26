@@ -144,7 +144,8 @@ export function AuthProvider({ children }) {
           requiresOtp: true,
           email: data.email,
           googleProfile: data.googleProfile || googleUser,
-          message: data.message
+          message: data.message,
+          devOtp: data.devOtp
         }
       }
 

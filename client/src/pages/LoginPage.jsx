@@ -170,6 +170,23 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const res = await loginWithGoogle(undefined, googleProfile)
+
+      // If 8-digit OTP is required for Google Sign-In
+      if (res?.requiresOtp) {
+        setPendingGoogleProfile(res.googleProfile)
+        setEmail(res.email)
+        if (res?.devOtp) {
+          setOtp(res.devOtp)
+          setDevOtpHint(res.devOtp)
+          toast.success(`Security passcode: ${res.devOtp}`, { duration: 10000 })
+        } else {
+          toast.success('🔐 8-digit passcode sent to your Google email!')
+        }
+        setStep('otp')
+        setResendCooldown(60)
+        return
+      }
+
       handleLoginSuccess(res)
     } catch (err) {
       console.error('[Google Sign-In Error]', err)

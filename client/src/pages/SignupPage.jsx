@@ -155,6 +155,23 @@ export default function SignupPage() {
     setLoading(true)
     try {
       const res = await loginWithGoogle(undefined, googleProfile)
+
+      // If 8-digit OTP is required for Google Sign-Up
+      if (res?.requiresOtp) {
+        setPendingGoogleProfile(res.googleProfile)
+        setEmail(res.email)
+        if (res?.devOtp) {
+          setOtp(res.devOtp)
+          setDevOtpHint(res.devOtp)
+          toast.success(`Verification passcode: ${res.devOtp}`, { duration: 10000 })
+        } else {
+          toast.success('🔐 8-digit verification code sent to your Google email!')
+        }
+        setStep('otp')
+        setResendCooldown(60)
+        return
+      }
+
       toast.success('🎉 Welcome to SoundWave! Account connected with Google.')
       if (res?.isNewUser || !res?.user?.onboardingCompleted) {
         navigate('/onboarding')
