@@ -157,17 +157,16 @@ async function sendViaGmailRestApi({ to, subject, htmlContent }) {
     const accessToken = tokenData.access_token
 
     // 2. Build RFC 2822 MIME message with standard RFC headers
+    // Note: Do not provide a custom Message-ID or X-Mailer here so Google's Gmail API automatically
+    // stamps its own authentic @mail.gmail.com Message-ID with 100% valid DKIM & SPF signatures.
     const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString('base64')}?=`
-    const messageId = `<soundwave-${crypto.randomBytes(16).toString('hex')}@soundwave.io>`
     const messageParts = [
       `From: SoundWave Security <${senderEmail}>`,
       `To: ${to.trim().toLowerCase()}`,
       `Date: ${new Date().toUTCString()}`,
-      `Message-ID: ${messageId}`,
       `Subject: ${utf8Subject}`,
       'MIME-Version: 1.0',
       'Content-Type: text/html; charset=utf-8',
-      'X-Mailer: SoundWave Security Mailer 2.0',
       `Reply-To: SoundWave Security <${senderEmail}>`,
       '',
       htmlContent
