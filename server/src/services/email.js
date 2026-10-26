@@ -18,113 +18,80 @@ export function generateOtpCode() {
 }
 
 /**
- * Render a beautiful, premium SoundWave HTML email template
+ * Render clean, high-deliverability email content (both text and HTML)
+ * Specifically formatted to bypass spam/phishing filters and land in the Primary Inbox.
  */
-function renderOtpEmailTemplate({ otp, purpose, email }) {
-  const isSignup = purpose === 'signup'
+function renderOtpEmailContent({ otp, purpose, email }) {
   const isGoogle = purpose === 'google'
-  const title = isGoogle
-    ? 'SoundWave Google Security Verification'
-    : isSignup
-    ? 'Verify Your SoundWave Account'
-    : 'SoundWave Security Verification'
-  const actionText = isGoogle
-    ? 'We received a sign-in or registration attempt via Google for your SoundWave account. Please enter the following 8-digit one-time passcode (OTP) to complete verification:'
-    : isSignup
-    ? 'Thank you for joining SoundWave! Use the 8-digit verification code below to complete your registration:'
-    : 'We received a sign-in attempt for your SoundWave account. Please enter the following 8-digit one-time passcode (OTP) to continue:'
+  const isSignup = purpose === 'signup'
 
-  return `
-<!DOCTYPE html>
+  const subject = `Your SoundWave verification code is ${otp}`
+
+  const textContent = [
+    `Hi,`,
+    ``,
+    `Your 8-digit SoundWave verification code is: ${otp}`,
+    ``,
+    `Please enter this code on the SoundWave verification screen to complete your ${isGoogle ? 'Google sign-in' : isSignup ? 'registration' : 'login'}.`,
+    ``,
+    `This code will expire in 10 minutes.`,
+    ``,
+    `If you did not request this verification code, you can safely ignore this email.`,
+    ``,
+    `Best regards,`,
+    `SoundWave Team`
+  ].join('\r\n')
+
+  const htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title}</title>
+  <title>SoundWave Verification Code</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #0b0b0f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #0b0b0f; padding: 40px 15px;">
+<body style="margin: 0; padding: 24px 12px; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1f2937;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 480px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
     <tr>
-      <td align="center">
-        <!-- Container -->
-        <table role="presentation" width="100%" style="max-width: 540px; background-color: #14141b; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; overflow: hidden; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);">
-          
-          <!-- Header Banner -->
-          <tr>
-            <td style="padding: 36px 40px 24px; text-align: center; background: linear-gradient(180deg, rgba(29, 185, 84, 0.15) 0%, rgba(20, 20, 27, 0) 100%);">
-              <!-- SoundWave Logo Symbol -->
-              <div style="display: inline-block; width: 56px; height: 56px; line-height: 56px; border-radius: 16px; background: linear-gradient(135deg, #1DB954 0%, #10b981 100%); text-align: center; box-shadow: 0 8px 24px rgba(29, 185, 84, 0.35);">
-                <span style="font-size: 26px; color: #000000; font-weight: bold;">♫</span>
-              </div>
-              <h1 style="margin: 16px 0 6px; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: #ffffff;">SoundWave</h1>
-              <p style="margin: 0; font-size: 13px; color: #1DB954; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Security & Identity</p>
-            </td>
-          </tr>
-
-          <!-- Content Body -->
-          <tr>
-            <td style="padding: 10px 40px 30px;">
-              <h2 style="margin: 0 0 14px; font-size: 20px; font-weight: 700; color: #f3f4f6;">${title}</h2>
-              <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.6; color: #9ca3af;">
-                ${actionText}
-              </p>
-
-              <!-- 8-Digit OTP Code Card -->
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #1a1a24; border: 1px solid rgba(29, 185, 84, 0.3); border-radius: 14px; margin-bottom: 24px;">
-                <tr>
-                  <td style="padding: 24px; text-align: center;">
-                    <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; color: #1DB954; margin-bottom: 8px;">
-                      Your 8-Digit Verification Code
-                    </div>
-                    <div style="font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #ffffff; text-shadow: 0 0 20px rgba(29, 185, 84, 0.4); padding-left: 8px;">
-                      ${otp}
-                    </div>
-                    <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">
-                      ⏱ Expires in 10 minutes
-                    </div>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Security Warning -->
-              <div style="background-color: rgba(255, 255, 255, 0.03); border-left: 3px solid #1DB954; border-radius: 4px; padding: 12px 16px; margin-bottom: 24px;">
-                <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #9ca3af;">
-                  <strong>Never share this passcode.</strong> SoundWave support staff will never ask you for your verification code.
-                </p>
-              </div>
-
-              <p style="margin: 0; font-size: 13px; color: #6b7280; line-height: 1.5;">
-                If you did not make this request for <strong>${email}</strong>, you can safely ignore this email or review your account credentials.
-              </p>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="padding: 20px 40px; background-color: #0e0e14; border-top: 1px solid rgba(255, 255, 255, 0.05); text-align: center;">
-              <p style="margin: 0 0 6px; font-size: 12px; color: #6b7280;">
-                © ${new Date().getFullYear()} SoundWave Music Platform. All rights reserved.
-              </p>
-              <p style="margin: 0; font-size: 11px; color: #4b5563;">
-                Secured by SoundWave Two-Factor Authentication Guard
-              </p>
-            </td>
-          </tr>
-
-        </table>
+      <td style="padding: 24px 28px 16px; border-bottom: 1px solid #f3f4f6;">
+        <span style="font-size: 20px; font-weight: 800; color: #1DB954; letter-spacing: -0.5px;">♫ SoundWave</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 24px 28px 28px;">
+        <h2 style="margin: 0 0 10px; font-size: 18px; font-weight: 700; color: #111827;">Verification Code</h2>
+        <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.5; color: #4b5563;">
+          Use the 8-digit code below to complete your ${isGoogle ? 'Google sign-in' : isSignup ? 'registration' : 'login'}:
+        </p>
+        <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; text-align: center; margin-bottom: 20px;">
+          <div style="font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #111827;">
+            ${otp}
+          </div>
+          <div style="margin-top: 6px; font-size: 12px; color: #6b7280;">
+            Valid for 10 minutes
+          </div>
+        </div>
+        <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #9ca3af;">
+          If you did not request this code for <strong>${email}</strong>, you can safely ignore this email.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 14px 28px; background-color: #f9fafb; border-top: 1px solid #f3f4f6; font-size: 11px; color: #9ca3af; text-align: center;">
+        © ${new Date().getFullYear()} SoundWave Music Platform
       </td>
     </tr>
   </table>
 </body>
-</html>
-  `.trim()
+</html>`.trim()
+
+  return { subject, textContent, htmlContent }
 }
 
 /**
  * Send email via official Google Gmail REST API (OAuth2 over HTTPS)
- * Sends up to 500 free emails per day to ANY recipient in the world.
+ * Sends multipart/alternative (plain text + clean HTML) with native Google DKIM signatures.
  */
-async function sendViaGmailRestApi({ to, subject, htmlContent }) {
+async function sendViaGmailRestApi({ to, subject, textContent, htmlContent }) {
   const clientId = process.env.GMAIL_CLIENT_ID
   const clientSecret = process.env.GMAIL_CLIENT_SECRET
   const refreshToken = process.env.GMAIL_REFRESH_TOKEN
@@ -156,20 +123,33 @@ async function sendViaGmailRestApi({ to, subject, htmlContent }) {
 
     const accessToken = tokenData.access_token
 
-    // 2. Build RFC 2822 MIME message with standard RFC headers
-    // Note: Do not provide a custom Message-ID or X-Mailer here so Google's Gmail API automatically
-    // stamps its own authentic @mail.gmail.com Message-ID with 100% valid DKIM & SPF signatures.
+    // 2. Build RFC 2046 multipart/alternative MIME message
+    // Google's Gmail API automatically attaches authentic @mail.gmail.com Message-ID with full DKIM & SPF signatures.
     const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString('base64')}?=`
+    const boundary = `----=_Part_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`
+
     const messageParts = [
-      `From: SoundWave Security <${senderEmail}>`,
+      `From: SoundWave <${senderEmail}>`,
       `To: ${to.trim().toLowerCase()}`,
       `Date: ${new Date().toUTCString()}`,
       `Subject: ${utf8Subject}`,
       'MIME-Version: 1.0',
-      'Content-Type: text/html; charset=utf-8',
-      `Reply-To: SoundWave Security <${senderEmail}>`,
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      `Reply-To: SoundWave <${senderEmail}>`,
       '',
-      htmlContent
+      `--${boundary}`,
+      'Content-Type: text/plain; charset=utf-8',
+      'Content-Transfer-Encoding: 7bit',
+      '',
+      textContent,
+      '',
+      `--${boundary}`,
+      'Content-Type: text/html; charset=utf-8',
+      'Content-Transfer-Encoding: 7bit',
+      '',
+      htmlContent,
+      '',
+      `--${boundary}--`
     ]
     const rawMessage = messageParts.join('\r\n')
     const encodedMessage = Buffer.from(rawMessage)
@@ -213,20 +193,12 @@ async function sendViaGmailRestApi({ to, subject, htmlContent }) {
  * @returns {Promise<{ success: boolean, provider: string, message?: string }>}
  */
 export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
-  const isSignup = purpose === 'signup'
-  const isGoogle = purpose === 'google'
-  const subject = isGoogle
-    ? `SoundWave - Google Sign-In Security Passcode: ${otp}`
-    : isSignup
-    ? `SoundWave - Your 8-Digit Verification Code: ${otp}`
-    : `SoundWave - Login Security Passcode: ${otp}`
-  const htmlContent = renderOtpEmailTemplate({ otp, purpose, email })
-
+  const { subject, textContent, htmlContent } = renderOtpEmailContent({ otp, purpose, email })
   const cleanRecipient = email.trim().toLowerCase()
 
   // 1. Google Gmail REST API (Priority #1: Official HTTPS OAuth2 - sends to ANY recipient in the world)
   if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_REFRESH_TOKEN) {
-    const gmailRestResult = await sendViaGmailRestApi({ to: cleanRecipient, subject, htmlContent })
+    const gmailRestResult = await sendViaGmailRestApi({ to: cleanRecipient, subject, textContent, htmlContent })
     if (gmailRestResult?.success) {
       return gmailRestResult
     }
@@ -236,7 +208,7 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
   const resendApiKey = process.env.RESEND_API_KEY
   if (resendApiKey && resendApiKey.startsWith('re_')) {
     try {
-      const fromEmail = process.env.RESEND_FROM_EMAIL || 'SoundWave Security <onboarding@resend.dev>'
+      const fromEmail = process.env.RESEND_FROM_EMAIL || 'SoundWave <onboarding@resend.dev>'
 
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -248,6 +220,7 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
           from: fromEmail,
           to: [cleanRecipient],
           subject,
+          text: textContent,
           html: htmlContent
         }),
         signal: AbortSignal.timeout(8000)
@@ -272,7 +245,7 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
   if (brevoApiKey) {
     try {
       const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.GMAIL_SENDER_EMAIL || 'malithrajamanthri@gmail.com'
-      const senderName = process.env.BREVO_SENDER_NAME || 'SoundWave Security'
+      const senderName = process.env.BREVO_SENDER_NAME || 'SoundWave'
       const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: {
@@ -284,6 +257,7 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
           sender: { name: senderName, email: senderEmail },
           to: [{ email: cleanRecipient }],
           subject,
+          textContent,
           htmlContent
         }),
         signal: AbortSignal.timeout(8000)
@@ -317,9 +291,10 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
       })
 
       const info = await transporter.sendMail({
-        from: `"SoundWave Security" <${gmailUser}>`,
+        from: `"SoundWave" <${gmailUser}>`,
         to: email.trim().toLowerCase(),
         subject,
+        text: textContent,
         html: htmlContent
       })
 
