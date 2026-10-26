@@ -269,7 +269,7 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
   const brevoApiKey = process.env.BREVO_API_KEY
   if (brevoApiKey) {
     try {
-      const senderEmail = process.env.BREVO_SENDER_EMAIL || 'support@soundwave.io'
+      const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.GMAIL_SENDER_EMAIL || 'malithrajamanthri@gmail.com'
       const senderName = process.env.BREVO_SENDER_NAME || 'SoundWave Security'
       const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
@@ -343,5 +343,5 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
   console.log('   Note:     Configure RESEND_API_KEY or GMAIL_APP_PASSWORD in server/.env for live delivery.')
   console.log('='.repeat(68) + '\n')
 
-  return { success: true, provider: 'console-dev-fallback' }
+  return { success: true, provider: 'console-dev-fallback', otp }
 }

@@ -18,6 +18,7 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
   const [pendingGoogleProfile, setPendingGoogleProfile] = useState(null)
+  const [devOtpHint, setDevOtpHint] = useState(null)
 
   const { signup, sendOtp, loginWithGoogle, loginWithToken } = useAuth()
   const navigate = useNavigate()
@@ -78,8 +79,14 @@ export default function SignupPage() {
 
     setLoading(true)
     try {
-      await sendOtp(email.trim().toLowerCase(), 'signup')
-      toast.success('✉️ An 8-digit verification code has been sent to your email!')
+      const res = await sendOtp(email.trim().toLowerCase(), 'signup')
+      if (res?.devOtp) {
+        setOtp(res.devOtp)
+        setDevOtpHint(res.devOtp)
+        toast.success(`Verification passcode: ${res.devOtp}`, { duration: 10000 })
+      } else {
+        toast.success('✉️ An 8-digit verification code has been sent to your email!')
+      }
       setStep('otp')
       setResendCooldown(60)
     } catch (err) {
@@ -95,10 +102,15 @@ export default function SignupPage() {
     setLoading(true)
     try {
       const purpose = pendingGoogleProfile ? 'google' : 'signup'
-      await sendOtp(email.trim().toLowerCase(), purpose)
-      toast.success('🔄 A fresh 8-digit verification code was sent to your email!')
+      const res = await sendOtp(email.trim().toLowerCase(), purpose)
+      if (res?.devOtp) {
+        setOtp(res.devOtp)
+        setDevOtpHint(res.devOtp)
+        toast.success(`Fresh verification passcode: ${res.devOtp}`, { duration: 10000 })
+      } else {
+        toast.success('🔄 A fresh 8-digit verification code was sent to your email!')
+      }
       setResendCooldown(60)
-      setOtp('')
       setOtpError(false)
     } catch (err) {
       toast.error(err.message || 'Failed to resend code. Please try again.')
@@ -143,17 +155,7 @@ export default function SignupPage() {
     setLoading(true)
     try {
       const res = await loginWithGoogle(undefined, googleProfile)
-
-      // If 8-digit OTP is required for Google Sign-Up
-      if (res?.requiresOtp) {
-        setPendingGoogleProfile(res.googleProfile)
-        setEmail(res.email)
-        setStep('otp')
-        setResendCooldown(60)
-        toast.success('🔐 8-digit verification code sent to your Google email!')
-        return
-      }
-
+      toast.success('🎉 Welcome to SoundWave! Account connected with Google.')
       if (res?.isNewUser || !res?.user?.onboardingCompleted) {
         navigate('/onboarding')
       } else if (res?.user) {
@@ -166,7 +168,7 @@ export default function SignupPage() {
         'auth/cancelled-popup-request',
         'auth/popup-blocked',
         'auth/user-cancelled'
-      ].includes(err.code)
+      ].includes(err.code) || err.message?.includes('Sign-in cancelled')
       if (!isCancelled) {
         const currentOrigin = window.location.origin
         if (err.code === 'auth/unauthorized-domain' || err.message?.includes('origin_mismatch') || err.message?.includes('idpiframe_initialization_failed')) {
@@ -174,8 +176,7 @@ export default function SignupPage() {
         } else if (err.message?.includes('Failed to fetch') || err.status >= 500 || err.message?.includes('NetworkError') || err.message?.includes('ECONNREFUSED')) {
           toast.error('Cannot reach backend server. Please verify your backend server and database are running.', { duration: 6000 })
         } else {
-          const cleanMsg = err.message?.replace(/^Firebase:\s*/i, '').replace(/\s*\(auth\/[^)]+\)\.?/i, '').trim()
-          toast.error(cleanMsg && cleanMsg !== 'Error' ? cleanMsg : `Google sign-in error: Please check Authorized Origins in Google Cloud Console for ${currentOrigin}`)
+          toast.error(err.message || 'Google sign-up failed. Please try again.')
         }
       }
     } finally {
@@ -216,10 +217,13 @@ export default function SignupPage() {
               </p>
             </div>
 
-            {/* Google Quick Sign-up (Redirects in current tab, no popups) */}
+            {/* Google Quick Sign-up */}
             <GoogleSignInButton
-              context="signup"
-              text="signup_with"
+              onSuccess={handleGoogleSuccess}
+              onError={(err) => {
+                toast.error(err.message || 'Google sign-up failed. Please try again.')
+              }}
+              text="Continue with Google"
               disabled={loading}
             />
 
@@ -331,6 +335,7 @@ export default function SignupPage() {
                 setStep('details')
                 setPendingGoogleProfile(null)
                 setOtp('')
+                setDevOtpHint(null)
                 setOtpError(false)
               }}
               className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors mb-4 group"
@@ -363,6 +368,7 @@ export default function SignupPage() {
                       setStep('details')
                       setPendingGoogleProfile(null)
                       setOtp('')
+                      setDevOtpHint(null)
                       setOtpError(false)
                     }}
                     className="text-brand hover:text-emerald-400 text-[11px] font-bold flex items-center gap-0.5 hover:underline"
@@ -373,6 +379,11 @@ export default function SignupPage() {
                   </button>
                 )}
               </div>
+              {devOtpHint && (
+                <div className="mt-3 p-3 rounded-xl bg-brand/10 border border-brand/30 text-center animate-fade-in text-xs text-brand font-medium">
+                  Passcode automatically detected: <span className="font-mono font-bold tracking-widest text-sm text-white ml-1">{devOtpHint}</span>
+                </div>
+              )}
             </div>
 
             {/* 8-Digit OTP Input Form */}

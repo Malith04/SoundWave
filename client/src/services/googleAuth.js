@@ -10,7 +10,7 @@ export function isGISConfigured() {
 }
 
 /**
- * Safely parses the Google JWT credential returned by Google Identity Services.
+ * Safely parses the Google JWT credential returned by Google Identity Services if needed.
  */
 export function parseGoogleJwt(token) {
   try {
@@ -44,17 +44,17 @@ export function parseGoogleJwt(token) {
  * Waits for the Google Identity Services SDK (<script src="https://accounts.google.com/gsi/client">)
  * to be loaded in the browser.
  */
-export function waitForGIS(timeoutMs = 5000) {
+export function waitForGIS(timeoutMs = 6000) {
   return new Promise((resolve, reject) => {
-    if (window.google?.accounts?.id) {
-      return resolve(window.google.accounts.id)
+    if (window.google?.accounts?.oauth2) {
+      return resolve(window.google.accounts.oauth2)
     }
 
     const start = Date.now()
     const interval = setInterval(() => {
-      if (window.google?.accounts?.id) {
+      if (window.google?.accounts?.oauth2) {
         clearInterval(interval)
-        resolve(window.google.accounts.id)
+        resolve(window.google.accounts.oauth2)
       } else if (Date.now() - start > timeoutMs) {
         clearInterval(interval)
         reject(new Error('Google Identity Services SDK failed to load. Please check your network.'))
@@ -64,76 +64,24 @@ export function waitForGIS(timeoutMs = 5000) {
 }
 
 /**
- * Initializes the In-Page Google Identity Services client.
- * Enforces in-tab redirect mode without popups, new tabs, or One Tap floating cards.
- */
-export async function initInPageGoogleAuth({ context = 'signin' } = {}) {
-  try {
-    const gsi = await waitForGIS()
-
-    const origin = window.location.origin
-    const loginUri = `${origin}/api/auth/google/callback`
-
-    gsi.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      ux_mode: 'redirect',
-      login_uri: loginUri,
-      auto_select: false,
-      context,
-      itp_support: true,
-    })
-
-    // NOTE: Google One Tap prompt (gsi.prompt) is PERMANENTLY REMOVED as requested.
-    // No right-side floating card or dropdown will ever be displayed.
-
-    return gsi
-  } catch (err) {
-    console.warn('[GIS] Failed to initialize in-page Google Auth:', err)
-    return null
-  }
-}
-
-/**
- * Renders Google's official In-Page Sign-In Button inside a given container.
- * When clicked, account selection navigates directly in the CURRENT browser tab.
- */
-export function renderInPageGoogleButton(container, {
-  theme = 'filled_black',
-  size = 'large',
-  text = 'continue_with',
-  shape = 'pill',
-  width,
-} = {}) {
-  if (!container || !window.google?.accounts?.id) return
-
-  try {
-    // Clear previous renders if any to avoid stacking
-    container.innerHTML = ''
-
-    const containerWidth = container.offsetWidth || 340
-    const clampedWidth = Math.min(Math.max(width || containerWidth, 200), 400)
-
-    window.google.accounts.id.renderButton(container, {
-      type: 'standard',
-      theme,
-      size,
-      text,
-      shape,
-      logo_alignment: 'left',
-      width: clampedWidth,
-    })
-  } catch (err) {
-    console.error('[GIS] Failed to render Google button:', err)
-  }
-}
-
-/**
- * Fallback token client for direct profile retrieval if needed.
+ * Requests the Google user profile using Google Identity Services OAuth2 token client.
+ * 
+ * Key Features:
+ * - prompt: 'select_account' forces Google to show the Account Chooser dialog with ALL accounts.
+ * - Works directly in the current browser session/overlay (no orphaned tabs or popups getting blocked).
+ * - Uses Authorized JavaScript Origins only; NEVER sends a redirect_uri to Google.
+ * - Completely immune to Error 400: redirect_uri_mismatch.
  */
 export function requestGoogleProfile() {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      await waitForGIS()
+    } catch (loadErr) {
+      return reject(new Error('Google Identity Services is still loading. Please check your connection and try again.'))
+    }
+
     if (!window.google?.accounts?.oauth2) {
-      return reject(new Error('Google Identity Services SDK is not loaded yet. Please try again.'))
+      return reject(new Error('Google Identity Services OAuth2 client is unavailable.'))
     }
 
     try {
@@ -168,6 +116,7 @@ export function requestGoogleProfile() {
                 name: profile.name || profile.given_name || '',
                 photoURL: profile.picture || '',
                 sub: profile.sub,
+                emailVerified: !!profile.email_verified
               })
             } catch (fetchErr) {
               reject(fetchErr)
@@ -178,6 +127,7 @@ export function requestGoogleProfile() {
         },
       })
 
+      // Prompt account selection dialog
       client.requestAccessToken({ prompt: 'select_account' })
     } catch (err) {
       reject(err)
