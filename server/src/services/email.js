@@ -128,14 +128,14 @@ async function sendViaGmailRestApi({ to, subject, htmlContent }) {
   const clientId = process.env.GMAIL_CLIENT_ID
   const clientSecret = process.env.GMAIL_CLIENT_SECRET
   const refreshToken = process.env.GMAIL_REFRESH_TOKEN
-  const senderEmail = process.env.GMAIL_SENDER_EMAIL || process.env.GMAIL_USER || 'me'
+  const senderEmail = (process.env.GMAIL_SENDER_EMAIL || process.env.GMAIL_USER || 'malithrajamanthri@gmail.com').trim().toLowerCase()
 
   if (!clientId || !clientSecret || !refreshToken) {
     return null
   }
 
   try {
-    // 1. Refresh access token from Google OAuth endpoint
+    // 1. Refresh access token from Google OAuth endpoint with 10s timeout
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -144,7 +144,8 @@ async function sendViaGmailRestApi({ to, subject, htmlContent }) {
         client_secret: clientSecret.trim(),
         refresh_token: refreshToken.trim(),
         grant_type: 'refresh_token'
-      })
+      }),
+      signal: AbortSignal.timeout(10000)
     })
 
     const tokenData = await tokenRes.json()
@@ -178,14 +179,15 @@ async function sendViaGmailRestApi({ to, subject, htmlContent }) {
       .replace(/\//g, '_')
       .replace(/=+$/, '')
 
-    // 3. Dispatch via Google Gmail REST API
+    // 3. Dispatch via Google Gmail REST API with 10s timeout
     const sendRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ raw: encodedMessage })
+      body: JSON.stringify({ raw: encodedMessage }),
+      signal: AbortSignal.timeout(10000)
     })
 
     const sendData = await sendRes.json()
@@ -203,7 +205,7 @@ async function sendViaGmailRestApi({ to, subject, htmlContent }) {
 }
 
 /**
- * Send OTP Email via Resend REST API, Gmail REST API, or Safe Dev Fallback
+ * Send OTP Email via Gmail REST API, Resend, Brevo, or Safe Dev Fallback
  * 
  * @param {Object} params
  * @param {string} params.email - Recipient email
@@ -222,11 +224,17 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
   const htmlContent = renderOtpEmailTemplate({ otp, purpose, email })
 
   const cleanRecipient = email.trim().toLowerCase()
-  const resendApiKey = process.env.RESEND_API_KEY
-  const senderEmail = (process.env.GMAIL_SENDER_EMAIL || process.env.GMAIL_USER || '').trim().toLowerCase()
-  const isSelfSend = senderEmail && cleanRecipient === senderEmail
 
-  // 1. If Resend is configured, try Resend first (guarantees delivery from an external domain into Primary Inbox)
+  // 1. Google Gmail REST API (Priority #1: Official HTTPS OAuth2 - sends to ANY recipient in the world)
+  if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_REFRESH_TOKEN) {
+    const gmailRestResult = await sendViaGmailRestApi({ to: cleanRecipient, subject, htmlContent })
+    if (gmailRestResult?.success) {
+      return gmailRestResult
+    }
+  }
+
+  // 2. Resend REST API (Fallback #1)
+  const resendApiKey = process.env.RESEND_API_KEY
   if (resendApiKey && resendApiKey.startsWith('re_')) {
     try {
       const fromEmail = process.env.RESEND_FROM_EMAIL || 'SoundWave Security <onboarding@resend.dev>'
@@ -242,21 +250,16 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
           to: [cleanRecipient],
           subject,
           html: htmlContent
-        })
+        }),
+        signal: AbortSignal.timeout(8000)
       })
 
       const data = await response.json()
       if (response.ok && data.id) {
         console.log(`[Email Service] ✉️ Resend email dispatched to ${cleanRecipient}. ID:`, data.id)
-
-        // If self-send, also dispatch via Gmail REST API so it's present across both channels
-        if (isSelfSend) {
-          sendViaGmailRestApi({ to: cleanRecipient, subject, htmlContent }).catch(() => {})
-        }
-
         return { success: true, provider: 'resend', messageId: data.id }
       } else if (response.status === 403 && data.message && data.message.includes('only send testing emails to your own email address')) {
-        console.warn(`[Email Service] ⚠️ Resend sandbox restriction for "${cleanRecipient}". Falling back to Google Gmail REST API.`)
+        console.warn(`[Email Service] ⚠️ Resend sandbox restriction for "${cleanRecipient}".`)
       } else {
         console.error('[Email Service] Resend API error response:', data)
       }
@@ -265,7 +268,7 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
     }
   }
 
-  // 2. Try Brevo REST API (Sendinblue) if BREVO_API_KEY is configured
+  // 3. Brevo REST API (Fallback #2)
   const brevoApiKey = process.env.BREVO_API_KEY
   if (brevoApiKey) {
     try {
@@ -283,7 +286,8 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
           to: [{ email: cleanRecipient }],
           subject,
           htmlContent
-        })
+        }),
+        signal: AbortSignal.timeout(8000)
       })
       const brevoData = await brevoRes.json()
       if (brevoRes.ok && brevoData.messageId) {
@@ -297,13 +301,7 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
     }
   }
 
-  // 3. Try Google Gmail REST API (Official HTTPS port 443 OAuth2 - sends to ANY recipient in the world)
-  const gmailRestResult = await sendViaGmailRestApi({ to: cleanRecipient, subject, htmlContent })
-  if (gmailRestResult) {
-    return gmailRestResult
-  }
-
-  // 2. Try Gmail SMTP / Nodemailer fallback
+  // 4. Gmail SMTP / Nodemailer (Fallback #3)
   const gmailUser = process.env.GMAIL_USER
   const gmailPass = process.env.GMAIL_APP_PASSWORD
   if (gmailUser && gmailPass) {
@@ -333,14 +331,14 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
     }
   }
 
-  // 3. Dev / Sandbox Fallback (Logs clearly so testing never gets blocked)
+  // 5. Dev / Sandbox Fallback (Logs clearly so testing never gets blocked)
   console.log('\n' + '='.repeat(68))
   console.log('🔐 [SOUNDWAVE SECURITY] ONE-TIME PASSCODE (DEV / CONSOLE FALLBACK)')
   console.log(`   To:       ${email}`)
   console.log(`   Purpose:  ${purpose.toUpperCase()}`)
   console.log(`   OTP CODE: [ ${otp} ] (8 DIGITS)`)
   console.log(`   Expires:  10 Minutes from now`)
-  console.log('   Note:     Configure RESEND_API_KEY or GMAIL_APP_PASSWORD in server/.env for live delivery.')
+  console.log('   Note:     Check GMAIL_REFRESH_TOKEN or RESEND_API_KEY for live delivery.')
   console.log('='.repeat(68) + '\n')
 
   return { success: true, provider: 'console-dev-fallback', otp }
