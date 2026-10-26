@@ -22,6 +22,7 @@ import AdminDashboardPage from './admin/pages/AdminDashboardPage'
 import AdminSongsPage from './admin/pages/AdminSongsPage'
 import AdminUsersPage from './admin/pages/AdminUsersPage'
 import AdminAnalyticsPage from './admin/pages/AdminAnalyticsPage'
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 
 // Full-screen spinner shown while resolving auth state
 function Spinner() {
@@ -60,6 +61,7 @@ function AppRoutes() {
       <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
       <Route path="/signup" element={<GuestRoute><SignupPage /></GuestRoute>} />
       <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
       <Route path="/onboarding" element={<OnboardingRoute><OnboardingPage /></OnboardingRoute>} />
       <Route
         path="/"
