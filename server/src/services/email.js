@@ -25,21 +25,23 @@ function renderOtpEmailContent({ otp, purpose, email }) {
   const isGoogle = purpose === 'google'
   const isSignup = purpose === 'signup'
 
-  const subject = `Your SoundWave verification code is ${otp}`
+  // Fresh high-reputation subject line to break similarity cache with previous flagged messages
+  const subject = `SoundWave: ${otp} is your verification code`
 
   const textContent = [
-    `Hi,`,
+    `SoundWave Security Verification`,
     ``,
-    `Your 8-digit SoundWave verification code is: ${otp}`,
+    `Your 8-digit verification code is: ${otp}`,
     ``,
-    `Please enter this code on the SoundWave verification screen to complete your ${isGoogle ? 'Google sign-in' : isSignup ? 'registration' : 'login'}.`,
+    `Enter this code to complete your ${isGoogle ? 'Google sign-in' : isSignup ? 'registration' : 'login'} on SoundWave.`,
     ``,
     `This code will expire in 10 minutes.`,
     ``,
-    `If you did not request this verification code, you can safely ignore this email.`,
+    `If you did not request this, you can safely ignore this email.`,
     ``,
     `Best regards,`,
-    `SoundWave Security Team`
+    `SoundWave Security Team`,
+    `https://soundwave-official.netlify.app`
   ].join('\r\n')
 
   const htmlContent = `<!DOCTYPE html>
@@ -48,36 +50,65 @@ function renderOtpEmailContent({ otp, purpose, email }) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SoundWave Security Verification</title>
+  <style>
+    body, table, td, p, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+  </style>
 </head>
-<body style="margin: 0; padding: 24px 12px; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1f2937;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 480px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+<body style="margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #0e0e12; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f3f4f6;">
+  <!-- Outer Full-Width Table to force 100% centering and prevent mobile overflow -->
+  <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" align="center" style="width: 100% !important; min-width: 100% !important; margin: 0 auto; padding: 16px 8px; background-color: #0e0e12;">
     <tr>
-      <td style="padding: 24px 28px 16px; border-bottom: 1px solid #f3f4f6;">
-        <span style="font-size: 20px; font-weight: 800; color: #1DB954; letter-spacing: -0.5px;">♫ SoundWave Security</span>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding: 24px 28px 28px;">
-        <h2 style="margin: 0 0 10px; font-size: 18px; font-weight: 700; color: #111827;">Verification Code</h2>
-        <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.5; color: #4b5563;">
-          Use the 8-digit code below to complete your ${isGoogle ? 'Google sign-in' : isSignup ? 'registration' : 'login'}:
-        </p>
-        <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; text-align: center; margin-bottom: 20px;">
-          <div style="font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #111827;">
-            ${otp}
-          </div>
-          <div style="margin-top: 6px; font-size: 12px; color: #6b7280;">
-            Valid for 10 minutes
-          </div>
-        </div>
-        <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #9ca3af;">
-          If you did not request this code for <strong>${email}</strong>, you can safely ignore this email.
-        </p>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding: 14px 28px; background-color: #f9fafb; border-top: 1px solid #f3f4f6; font-size: 11px; color: #9ca3af; text-align: center;">
-        Protected by SoundWave Security & Privacy Policy
+      <td align="center" valign="top" style="padding: 0; margin: 0;">
+        
+        <!-- Centered Card Container (Max 400px, 100% fluid on mobile screens) -->
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center" style="width: 100%; max-width: 400px; margin: 0 auto; background-color: #17171e; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 16px; overflow: hidden; box-sizing: border-box;">
+          
+          <!-- Header -->
+          <tr>
+            <td align="left" style="padding: 20px 20px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background-color: #17171e;">
+              <span style="font-size: 19px; font-weight: 800; color: #1DB954; letter-spacing: -0.5px;">♫ SoundWave Security</span>
+            </td>
+          </tr>
+
+          <!-- Main Body -->
+          <tr>
+            <td align="left" style="padding: 20px 20px 22px; background-color: #17171e;">
+              <h2 style="margin: 0 0 8px; font-size: 18px; font-weight: 700; color: #ffffff; letter-spacing: -0.2px;">Verification Code</h2>
+              <p style="margin: 0 0 16px; font-size: 14px; line-height: 1.5; color: #9ca3af;">
+                Use the 8-digit code below to complete your ${isGoogle ? 'Google sign-in' : isSignup ? 'registration' : 'login'}:
+              </p>
+
+              <!-- Responsive OTP Box -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #20202a; border: 1px solid rgba(29, 185, 84, 0.35); border-radius: 12px; margin-bottom: 16px; box-sizing: border-box;">
+                <tr>
+                  <td align="center" style="padding: 16px 8px;">
+                    <div style="font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 28px; font-weight: 800; letter-spacing: 5px; color: #ffffff; line-height: 1.2;">
+                      ${otp}
+                    </div>
+                    <div style="margin-top: 6px; font-size: 11px; color: #9ca3af;">
+                      Valid for 10 minutes
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #6b7280;">
+                If you did not request this code for <strong>${email}</strong>, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="padding: 14px 20px; background-color: #121217; border-top: 1px solid rgba(255, 255, 255, 0.06); font-size: 11px; color: #6b7280; text-align: center;">
+              Protected by SoundWave Security &amp; Privacy Policy
+            </td>
+          </tr>
+
+        </table>
+
       </td>
     </tr>
   </table>
@@ -136,6 +167,8 @@ async function sendViaGmailRestApi({ to, subject, textContent, htmlContent }) {
       'MIME-Version: 1.0',
       `Content-Type: multipart/alternative; boundary="${boundary}"`,
       `Reply-To: SoundWave Security <${senderEmail}>`,
+      'Auto-Submitted: auto-generated',
+      'X-Auto-Response-Suppress: All',
       '',
       `--${boundary}`,
       'Content-Type: text/plain; charset=utf-8',
