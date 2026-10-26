@@ -39,7 +39,7 @@ function renderOtpEmailContent({ otp, purpose, email }) {
     `If you did not request this verification code, you can safely ignore this email.`,
     ``,
     `Best regards,`,
-    `SoundWave Team`
+    `SoundWave Security Team`
   ].join('\r\n')
 
   const htmlContent = `<!DOCTYPE html>
@@ -47,13 +47,13 @@ function renderOtpEmailContent({ otp, purpose, email }) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SoundWave Verification Code</title>
+  <title>SoundWave Security Verification</title>
 </head>
 <body style="margin: 0; padding: 24px 12px; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1f2937;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 480px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
     <tr>
       <td style="padding: 24px 28px 16px; border-bottom: 1px solid #f3f4f6;">
-        <span style="font-size: 20px; font-weight: 800; color: #1DB954; letter-spacing: -0.5px;">♫ SoundWave</span>
+        <span style="font-size: 20px; font-weight: 800; color: #1DB954; letter-spacing: -0.5px;">♫ SoundWave Security</span>
       </td>
     </tr>
     <tr>
@@ -77,7 +77,7 @@ function renderOtpEmailContent({ otp, purpose, email }) {
     </tr>
     <tr>
       <td style="padding: 14px 28px; background-color: #f9fafb; border-top: 1px solid #f3f4f6; font-size: 11px; color: #9ca3af; text-align: center;">
-        © ${new Date().getFullYear()} SoundWave Music Platform
+        Protected by SoundWave Security & Privacy Policy
       </td>
     </tr>
   </table>
@@ -129,13 +129,13 @@ async function sendViaGmailRestApi({ to, subject, textContent, htmlContent }) {
     const boundary = `----=_Part_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`
 
     const messageParts = [
-      `From: SoundWave <${senderEmail}>`,
+      `From: SoundWave Security <${senderEmail}>`,
       `To: ${to.trim().toLowerCase()}`,
       `Date: ${new Date().toUTCString()}`,
       `Subject: ${utf8Subject}`,
       'MIME-Version: 1.0',
       `Content-Type: multipart/alternative; boundary="${boundary}"`,
-      `Reply-To: SoundWave <${senderEmail}>`,
+      `Reply-To: SoundWave Security <${senderEmail}>`,
       '',
       `--${boundary}`,
       'Content-Type: text/plain; charset=utf-8',
@@ -208,7 +208,7 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
   const resendApiKey = process.env.RESEND_API_KEY
   if (resendApiKey && resendApiKey.startsWith('re_')) {
     try {
-      const fromEmail = process.env.RESEND_FROM_EMAIL || 'SoundWave <onboarding@resend.dev>'
+      const fromEmail = process.env.RESEND_FROM_EMAIL || 'SoundWave Security <onboarding@resend.dev>'
 
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -245,7 +245,7 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
   if (brevoApiKey) {
     try {
       const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.GMAIL_SENDER_EMAIL || 'malithrajamanthri@gmail.com'
-      const senderName = process.env.BREVO_SENDER_NAME || 'SoundWave'
+      const senderName = process.env.BREVO_SENDER_NAME || 'SoundWave Security'
       const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: {
@@ -291,7 +291,7 @@ export async function sendOtpEmail({ email, otp, purpose = 'signup' }) {
       })
 
       const info = await transporter.sendMail({
-        from: `"SoundWave" <${gmailUser}>`,
+        from: `"SoundWave Security" <${gmailUser}>`,
         to: email.trim().toLowerCase(),
         subject,
         text: textContent,

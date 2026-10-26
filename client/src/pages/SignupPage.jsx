@@ -338,7 +338,10 @@ export default function SignupPage() {
                 </Link>
               </p>
               <p className="text-[11px] text-gray-500 mt-2">
-                Protected by SoundWave 8-Digit Email Passcode Security
+                Protected by SoundWave Security &{' '}
+                <Link to="/privacy" className="hover:text-gray-300 underline transition-colors">
+                  Privacy Policy
+                </Link>
               </p>
             </div>
           </>
